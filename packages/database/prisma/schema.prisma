@@ -1,0 +1,152 @@
+// Rabbit — hyperlocal delivery schema
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  CUSTOMER
+  MERCHANT
+  DELIVERY_PARTNER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED_BY_SHOP
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  email     String?  @unique
+  role      UserRole @default(CUSTOMER)
+  createdAt DateTime @default(now())
+
+  shops      Shop[]
+  orders     Order[] @relation("CustomerOrders")
+  deliveries Order[] @relation("DeliveryPartnerOrders")
+
+  @@index([role])
+  @@index([phone])
+}
+
+model Shop {
+  id       String  @id @default(uuid())
+  name     String
+  slug     String  @unique
+  ownerId  String
+  owner    User    @relation(fields: [ownerId], references: [id])
+  category String
+  image    String?
+  isActive Boolean @default(true)
+
+  address   String
+  latitude  Float
+  longitude Float
+
+  deliveryRadiusKm Float @default(5)
+  minOrderValue    Float @default(0)
+  baseDeliveryFee  Float @default(20)
+  avgPrepMinutes   Int   @default(15)
+
+  products  Product[]
+  orders    Order[]
+  createdAt DateTime  @default(now())
+
+  @@index([latitude, longitude])
+  @@index([category])
+  @@index([isActive])
+}
+
+model Product {
+  id          String  @id @default(uuid())
+  shopId      String
+  shop        Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Float
+  image       String?
+  isAvailable Boolean @default(true)
+  unit        String  @default("piece")
+  stock       Int     @default(10)
+
+  orderItems OrderItem[]
+  createdAt  DateTime    @default(now())
+
+  @@index([shopId, isAvailable])
+}
+
+model Order {
+  id                String  @id @default(uuid())
+  orderNumber       String  @unique
+  customerId        String
+  customer          User    @relation("CustomerOrders", fields: [customerId], references: [id])
+  shopId            String
+  shop              Shop    @relation(fields: [shopId], references: [id])
+  deliveryPartnerId String?
+  deliveryPartner   User?   @relation("DeliveryPartnerOrders", fields: [deliveryPartnerId], references: [id])
+
+  status               OrderStatus @default(PENDING)
+  totalPrice           Float
+  deliveryFee          Float
+  riderTip             Float       @default(0)
+  deliveryAddress      String
+  deliveryInstruction  String?
+  destLatitude         Float
+  destLongitude        Float
+
+  items         OrderItem[]
+  statusHistory OrderStatusEvent[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([customerId])
+  @@index([shopId, status])
+  @@index([deliveryPartnerId])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+
+  @@index([orderId])
+}
+
+model OtpChallenge {
+  id        String   @id @default(uuid())
+  phone     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone, expiresAt])
+}
+
+model OrderStatusEvent {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+}

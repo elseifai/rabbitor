@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  RABBITOR
+  ADMIN
+}
+
+enum StoreType {
+  KIRANA
+  FISH
+  VEGETABLE
+  PHARMACY
+  BAKERY
+  DAIRY
+  MEAT
+  GENERAL
+}
+
+enum DeliveryMethod {
+  SELF
+  RABBITOR
+  THIRD_PARTY
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum SubscriptionTier {
+  FREE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum Locale {
+  en
+  hi
+  mr
+  ta
+  te
+  bn
+}
+
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  passwordHash String
+  role         UserRole
+  displayName  String?
+  locale       Locale   @default(en)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vendorProfile  VendorProfile?
+  rabbitorProfile RabbitorProfile?
+  customerOrders Order[]          @relation("CustomerOrders")
+  rabbitorDeliveries Order[]      @relation("RabbitorDeliveries")
+
+  @@index([role])
+}
+
+/// Vendor business data — KYC fields never exposed on customer UI
+model VendorProfile {
+  id               String           @id @default(cuid())
+  userId           String           @unique
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName     String
+  kycStatus        KycStatus        @default(PENDING)
+  subscriptionTier SubscriptionTier @default(FREE)
+  /// Encrypted at rest in production; never returned to customers
+  aadhaarRef       String?
+  gstRef           String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  stores Store[]
+}
+
+model RabbitorProfile {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isVerified      Boolean   @default(false)
+  isAvailable     Boolean   @default(false)
+  currentLat      Float?
+  currentLng      Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Store {
+  id                String           @id @default(cuid())
+  vendorId          String
+  vendor            VendorProfile    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name              String
+  storeType         StoreType        @default(GENERAL)
+  latitude          Float
+  longitude         Float
+  /// Full address — revealed to delivery only after order confirmed delivered
+  addressEncrypted  String
+  deliveryRadiusKm  Float            @default(3)
+  minOrderValue     Float            @default(0)
+  deliveryFee       Float            @default(0)
+  isOpen            Boolean          @default(false)
+  /// JSON: { mon: { open: "09:00", close: "21:00" }, ... }
+  openingHours      Json?
+  preferredDelivery DeliveryMethod   @default(SELF)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  products Product[]
+  orders   Order[]
+
+  @@index([latitude, longitude])
+  @@index([isOpen])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Float
+  unit        String?
+  images      String[] @default([])
+  stock       Int      @default(0)
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([storeId, isAvailable])
+}
+
+model Order {
+  id                  String         @id @default(cuid())
+  customerId          String
+  customer            User           @relation("CustomerOrders", fields: [customerId], references: [id])
+  storeId             String
+  store               Store          @relation(fields: [storeId], references: [id])
+  status              OrderStatus    @default(PENDING)
+  deliveryMethod      DeliveryMethod
+  rabbitorId          String?
+  rabbitor            User?          @relation("RabbitorDeliveries", fields: [rabbitorId], references: [id])
+  totalAmount         Float
+  deliveryFee         Float          @default(0)
+  /// Customer delivery address — masked until delivery confirmed
+  deliveryAddressEnc  String
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  items OrderItem[]
+
+  @@index([customerId])
+  @@index([storeId, status])
+  @@index([rabbitorId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Float
+
+  @@index([orderId])
+}
