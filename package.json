@@ -8,7 +8,7 @@
     "web:dev": "pnpm --filter @rabbit/web dev",
     "web:dev:clean": "pnpm --filter @rabbit/web exec rm -rf .next && pnpm --filter @rabbit/web dev",
     "web:build": "pnpm --filter @rabbit/web build",
-    "dev:api": "pnpm --filter @rabbit/api dev",
+    "dev:api": "pnpm --filter @rabbit/database build && pnpm --filter @rabbit/api dev",
     "dev:all": "pnpm --parallel --filter @rabbit/web --filter @rabbit/api dev",
     "build": "pnpm -r build",
     "db:generate": "pnpm --filter @rabbit/database generate",
