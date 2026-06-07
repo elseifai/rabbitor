@@ -26,6 +26,9 @@ fi
 echo "==> Pulling latest code"
 git pull --ff-only || echo "(skipping git pull — not a clean fast-forward)"
 
+echo "==> Rebuilding API image (no cache — ensures deps like express are bundled)"
+docker compose --profile app build --no-cache api
+
 echo "==> Building and starting full stack (postgres, redis, migrate, api, web)"
 docker compose --profile app up -d --build
 
