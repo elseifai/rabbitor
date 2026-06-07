@@ -79,9 +79,10 @@ export default function DynamicCheckoutPage() {
   const [couponError, setCouponError] = useState<string | null>(null)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    'Royal Heights, Apartment 402, Sector 4, Mumbai, MH',
-  )
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [destLat, setDestLat] = useState<number | null>(null)
+  const [destLng, setDestLng] = useState<number | null>(null)
+  const [detectingAddress, setDetectingAddress] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
@@ -96,8 +97,49 @@ export default function DynamicCheckoutPage() {
   const grandTotal = Math.max(0, itemTotal - discountAmount) + deliveryFee + partnerTip
 
   const addressLine = deliveryAddress
-  const lat = location?.latitude ?? SAVED_LOCATIONS[0].latitude
-  const lng = location?.longitude ?? SAVED_LOCATIONS[0].longitude
+  const lat = destLat ?? location?.latitude ?? SAVED_LOCATIONS[0].latitude
+  const lng = destLng ?? location?.longitude ?? SAVED_LOCATIONS[0].longitude
+
+  const detectDeliveryLocation = () => {
+    if (!navigator.geolocation) return
+    setDetectingAddress(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords
+        setDestLat(latitude)
+        setDestLng(longitude)
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+            { headers: { 'Accept-Language': 'en' } },
+          )
+          const data = await res.json()
+          const addr = data.address ?? {}
+          const parts = [
+            addr.road || addr.pedestrian,
+            addr.suburb || addr.neighbourhood,
+            addr.city || addr.town,
+            addr.postcode,
+          ].filter(Boolean)
+          setDeliveryAddress(parts.join(', '))
+        } catch {
+          setDeliveryAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)
+        }
+        setDetectingAddress(false)
+      },
+      () => setDetectingAddress(false),
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
+
+  // Pre-fill address from saved location
+  useEffect(() => {
+    if (!deliveryAddress && location?.label) {
+      setDeliveryAddress(location.label)
+      if (location.latitude) setDestLat(location.latitude)
+      if (location.longitude) setDestLng(location.longitude)
+    }
+  }, [location, deliveryAddress])
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
 
   useEffect(() => {
@@ -387,15 +429,31 @@ export default function DynamicCheckoutPage() {
             <MapPin className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
-            <h3 className="text-sm font-black text-slate-900">Delivery Address</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900">Delivery Address</h3>
+              <button
+                type="button"
+                onClick={detectDeliveryLocation}
+                disabled={detectingAddress}
+                className="flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1 text-xs font-bold text-[#FF6B35]"
+              >
+                {detectingAddress
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Detecting...</>
+                  : <><MapPin className="h-3 w-3" /> Use GPS</>
+                }
+              </button>
+            </div>
             <textarea
               value={deliveryAddress}
               onChange={(e) => setDeliveryAddress(e.target.value)}
               rows={2}
               required
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
-              placeholder="Enter full delivery address"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-[#FF6B35] focus:outline-none"
+              placeholder="House no, Street, Area, City"
             />
+            {destLat && (
+              <p className="text-[10px] text-green-600">✓ GPS coordinates captured for accurate delivery</p>
+            )}
           </div>
         </div>
 

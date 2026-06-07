@@ -29,10 +29,13 @@ function normalizePhone(phone: string): string {
 
 export async function sendOtp(phone: string): Promise<{ success: boolean; devCode?: string }> {
   const normalized = normalizePhone(phone)
-  const code =
-    process.env.NODE_ENV === 'production'
-      ? randomInt(100000, 999999).toString()
-      : DEV_OTP
+  const isProd = process.env.NODE_ENV === 'production'
+  const code = isProd ? randomInt(100000, 999999).toString() : DEV_OTP
+
+  // Delete old unverified challenges for this phone
+  await prisma.otpChallenge.deleteMany({
+    where: { phone: normalized, verified: false },
+  })
 
   await prisma.otpChallenge.create({
     data: {
@@ -42,11 +45,28 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; devCod
     },
   })
 
-  // Production: integrate Firebase Auth / MSG91 / Twilio here
-  if (process.env.NODE_ENV !== 'production') {
-    return { success: true, devCode: code }
+  if (isProd) {
+    const msg91Key = process.env.MSG91_AUTH_KEY
+    const msg91Template = process.env.MSG91_TEMPLATE_ID
+    if (msg91Key && msg91Template) {
+      try {
+        const res = await fetch('https://api.msg91.com/api/v5/otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', authkey: msg91Key },
+          body: JSON.stringify({ template_id: msg91Template, mobile: `91${normalized}`, otp: code }),
+        })
+        if (!res.ok) console.warn('[OTP] MSG91 error:', await res.text().catch(() => ''))
+      } catch (err) {
+        console.warn('[OTP] MSG91 failed:', (err as Error).message)
+      }
+    } else {
+      console.warn('[OTP] MSG91 not configured — OTP will not be sent in production')
+    }
+    return { success: true }
   }
-  return { success: true }
+
+  // Dev: return the code so UI can show it
+  return { success: true, devCode: code }
 }
 
 export async function verifyOtp(

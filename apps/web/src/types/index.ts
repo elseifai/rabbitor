@@ -21,6 +21,7 @@ export interface CartItem {
 export interface LocationState {
   label: string
   area: string
+  city?: string
   pincode: string
   latitude?: number
   longitude?: number
