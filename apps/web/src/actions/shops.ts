@@ -1,6 +1,7 @@
 'use server'
 
-import { db } from '@/lib/db'
+import type { StoreType } from '@rabbit/database'
+import { prisma } from '@/lib/prisma'
 import {
   boundingBox,
   distanceKm,
@@ -27,22 +28,24 @@ export async function getNearbyShops(params: {
   lng: number
   radiusKm?: number
   categorySlug?: string
+  storeType?: string
   openOnly?: boolean
   sortBy?: 'distance' | 'eta' | 'rating'
 }): Promise<ShopListItem[]> {
   try {
-    const radius = params.radiusKm ?? 5
+    const radius = params.radiusKm ?? 15
     const box = boundingBox(params.lat, params.lng, radius)
     const categoryFilter = params.categorySlug
       ? CATEGORY_SLUG_MAP[params.categorySlug]
       : undefined
 
-    const shops = await db.shop.findMany({
+    const shops = await prisma.shop.findMany({
       where: {
         latitude: { gte: box.minLat, lte: box.maxLat },
         longitude: { gte: box.minLng, lte: box.maxLng },
         ...(params.openOnly !== false && { isActive: true }),
         ...(categoryFilter && { category: categoryFilter }),
+        ...(params.storeType && { storeType: params.storeType as StoreType }),
       },
     })
 
@@ -79,7 +82,7 @@ export async function getNearbyShops(params: {
 }
 
 export async function getShopBySlug(slug: string) {
-  return db.shop.findUnique({
+  return prisma.shop.findUnique({
     where: { slug },
     include: {
       products: {
@@ -105,7 +108,7 @@ export async function getDeliveryQuote(params: {
   }
 
   try {
-    const shop = await db.shop.findFirst({
+    const shop = await prisma.shop.findFirst({
       where: { OR: [{ id: params.shopId }, { slug: params.shopId }] },
     })
     if (!shop) return fallback

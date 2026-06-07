@@ -14,14 +14,12 @@ import type { CartItem } from '@/types'
 type CartContextValue = {
   hydrated: boolean
   items: CartItem[]
-  cartItems: CartItem[]
   shopId: string | null
   addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void
   removeItem: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   clearCart: () => void
   total: () => number
-  getCartTotal: () => number
   itemCount: () => number
 }
 
@@ -50,14 +48,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       hydrated,
       items,
-      cartItems: items,
       shopId,
       addItem,
       removeItem,
       updateQuantity,
       clearCart,
       total,
-      getCartTotal: total,
       itemCount,
     }),
     [

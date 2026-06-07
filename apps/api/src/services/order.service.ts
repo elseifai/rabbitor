@@ -1,8 +1,25 @@
-import type { DeliveryMethod } from "@prisma/client";
+import type { DeliveryMethod, OrderStatus } from "@rabbit/database";
 import { prisma } from "../lib/prisma";
 import { notFound, badRequest, forbidden } from "../lib/errors";
 import { getRedis } from "../lib/redis";
+import { haversineKm } from "../lib/geo";
+import { getIO, orderRoom } from "../socket/io";
 import { REDIS_KEYS } from "@rabbit/shared";
+import { sendPushNotification } from "../lib/fcm";
+import { applyCouponInTransaction } from "./coupon.service";
+
+function generateOrderNumber(): string {
+  return `RBT-${Date.now().toString(36).toUpperCase()}`;
+}
+
+const STATUS_MAP: Record<string, OrderStatus> = {
+  ACCEPTED: "ACCEPTED_BY_SHOP",
+  REJECTED: "CANCELLED",
+  PREPARING: "PREPARING",
+  OUT_FOR_DELIVERY: "OUT_FOR_DELIVERY",
+  DELIVERED: "DELIVERED",
+  CANCELLED: "CANCELLED",
+};
 
 export async function createOrder(
   customerId: string,
@@ -11,20 +28,21 @@ export async function createOrder(
     items: { productId: string; quantity: number }[];
     deliveryMethod: DeliveryMethod;
     deliveryAddress: string;
+    couponCode?: string;
   }
 ) {
-  const store = await prisma.store.findUnique({
+  const shop = await prisma.shop.findUnique({
     where: { id: input.storeId },
     include: { products: { where: { id: { in: input.items.map((i) => i.productId) } } } },
   });
-  if (!store) throw notFound("Store not found");
-  if (!store.isOpen) throw badRequest("Store is currently closed", "STORE_CLOSED");
+  if (!shop) throw notFound("Store not found");
+  if (!shop.isActive) throw badRequest("Store is currently closed", "STORE_CLOSED");
 
   let subtotal = 0;
-  const lineItems: { productId: string; quantity: number; unitPrice: number }[] = [];
+  const lineItems: { productId: string; quantity: number; price: number }[] = [];
 
   for (const item of input.items) {
-    const product = store.products.find((p) => p.id === item.productId);
+    const product = shop.products.find((p) => p.id === item.productId);
     if (!product || !product.isAvailable) {
       throw badRequest(`Product unavailable: ${item.productId}`, "PRODUCT_UNAVAILABLE");
     }
@@ -32,31 +50,48 @@ export async function createOrder(
       throw badRequest(`Insufficient stock for ${product.name}`, "INSUFFICIENT_STOCK");
     }
     subtotal += product.price * item.quantity;
-    lineItems.push({ productId: product.id, quantity: item.quantity, unitPrice: product.price });
+    lineItems.push({ productId: product.id, quantity: item.quantity, price: product.price });
   }
 
-  if (subtotal < store.minOrderValue) {
+  if (subtotal < shop.minOrderValue) {
     throw badRequest(
-      `Minimum order value is ₹${store.minOrderValue}`,
+      `Minimum order value is ₹${shop.minOrderValue}`,
       "MIN_ORDER_NOT_MET"
     );
   }
 
-  const totalAmount = subtotal + store.deliveryFee;
+  const totalPrice = subtotal + shop.baseDeliveryFee;
   const deliveryAddressEnc = Buffer.from(input.deliveryAddress).toString("base64");
 
   const order = await prisma.$transaction(async (tx) => {
+    let appliedCouponCode: string | undefined;
+    let discountAmount = 0;
+    let orderSubtotal = subtotal;
+
+    if (input.couponCode) {
+      const couponResult = await applyCouponInTransaction(tx, input.couponCode, subtotal);
+      appliedCouponCode = couponResult.appliedCouponCode;
+      discountAmount = couponResult.discountAmount;
+      orderSubtotal = Math.max(0, subtotal - discountAmount);
+    }
+
+    const orderTotal = orderSubtotal + shop.baseDeliveryFee;
+
     const created = await tx.order.create({
       data: {
+        orderNumber: generateOrderNumber(),
         customerId,
-        storeId: store.id,
+        shopId: shop.id,
         deliveryMethod: input.deliveryMethod,
-        totalAmount,
-        deliveryFee: store.deliveryFee,
+        totalPrice: orderTotal,
+        deliveryFee: shop.baseDeliveryFee,
+        deliveryAddress: input.deliveryAddress,
         deliveryAddressEnc,
+        appliedCouponCode,
+        discountAmount,
         items: { create: lineItems },
       },
-      include: { items: true, store: { select: { name: true } } },
+      include: { items: true, shop: { select: { name: true } } },
     });
 
     for (const item of lineItems) {
@@ -74,9 +109,9 @@ export async function createOrder(
     id: order.id,
     status: order.status,
     deliveryMethod: order.deliveryMethod,
-    totalAmount: order.totalAmount,
-    storeId: order.storeId,
-    storeName: order.store.name,
+    totalAmount: order.totalPrice,
+    storeId: order.shopId,
+    storeName: order.shop.name,
     createdAt: order.createdAt.toISOString(),
   };
 }
@@ -89,13 +124,25 @@ export async function updateOrderStatus(
 ) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: { store: { include: { vendor: true } } },
+    include: {
+      shop: {
+        select: {
+          ownerId: true,
+          latitude: true,
+          longitude: true,
+          vendor: true,
+        },
+      },
+      customer: { select: { fcmToken: true } },
+    },
   });
   if (!order) throw notFound("Order not found");
 
-  const isVendor = order.store.vendor.userId === actorUserId;
+  const mappedStatus = STATUS_MAP[status];
+  const isVendor =
+    order.shop.vendor?.userId === actorUserId || order.shop.ownerId === actorUserId;
   const isCustomer = order.customerId === actorUserId;
-  const isRabbitor = order.rabbitorId === actorUserId;
+  const isRabbitor = order.deliveryPartnerId === actorUserId;
 
   if (status === "ACCEPTED" || status === "REJECTED" || status === "PREPARING") {
     if (!isVendor) throw forbidden("Only vendor can update to this status");
@@ -110,13 +157,142 @@ export async function updateOrderStatus(
   const updated = await prisma.order.update({
     where: { id: orderId },
     data: {
-      status,
+      status: mappedStatus,
       ...(status === "DELIVERED" && { deliveredAt: new Date() }),
     },
   });
 
-  await getRedis().set(REDIS_KEYS.orderStatus(orderId), status, "EX", 86400);
+  await getRedis().set(REDIS_KEYS.orderStatus(orderId), mappedStatus, "EX", 86400);
+
+  if (mappedStatus === "ACCEPTED_BY_SHOP") {
+    await assignNearestRabbitor(orderId, order.shop.latitude, order.shop.longitude);
+  }
+
+  await notifyCustomerOrderStatus(order.customer.fcmToken, mappedStatus);
+
   return updated;
+}
+
+const STATUS_PUSH: Partial<Record<OrderStatus, { title: string; body: string }>> = {
+  ACCEPTED_BY_SHOP: {
+    title: "Order Accepted! 🎉",
+    body: "Your order is being prepared.",
+  },
+  OUT_FOR_DELIVERY: {
+    title: "Out for Delivery 🐰",
+    body: "Your Rabbitor is on the way!",
+  },
+  DELIVERED: {
+    title: "Delivered! ✅",
+    body: "Enjoy your order. Rate your experience.",
+  },
+  CANCELLED: {
+    title: "Order Cancelled",
+    body: "Your order was cancelled.",
+  },
+};
+
+async function notifyCustomerOrderStatus(
+  fcmToken: string | null | undefined,
+  status: OrderStatus
+) {
+  if (!fcmToken) return;
+  const message = STATUS_PUSH[status];
+  if (!message) return;
+  await sendPushNotification(fcmToken, message.title, message.body);
+}
+
+const RABBITOR_SEARCH_RADIUS_KM = 10;
+
+async function assignNearestRabbitor(orderId: string, shopLat: number, shopLng: number) {
+  const rabbitors = await prisma.rabbitorProfile.findMany({
+    where: {
+      isAvailable: true,
+      currentLat: { not: null },
+      currentLng: { not: null },
+    },
+    include: {
+      user: { select: { id: true, displayName: true, name: true } },
+    },
+  });
+
+  let nearest: (typeof rabbitors)[number] | null = null;
+  let nearestDist = Infinity;
+
+  for (const rabbitor of rabbitors) {
+    const dist = haversineKm(shopLat, shopLng, rabbitor.currentLat!, rabbitor.currentLng!);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = rabbitor;
+    }
+  }
+
+  const io = getIO();
+  const room = orderRoom(orderId);
+
+  if (nearest && nearestDist <= RABBITOR_SEARCH_RADIUS_KM) {
+    const displayName = nearest.user.displayName ?? nearest.user.name;
+
+    await prisma.$transaction([
+      prisma.order.update({
+        where: { id: orderId },
+        data: {
+          deliveryPartnerId: nearest.user.id,
+          deliveryMethod: "RABBITOR",
+        },
+      }),
+      prisma.rabbitorProfile.update({
+        where: { id: nearest.id },
+        data: { isAvailable: false },
+      }),
+    ]);
+
+    io.to(room).emit("rabbitor-assigned", { displayName });
+    return;
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { deliveryMethod: "SELF" },
+  });
+
+  io.to(room).emit("no-rabbitor-available", {});
+}
+
+export async function listCustomerOrders(
+  customerId: string,
+  page = 1,
+  limit = 20
+) {
+  const safePage = Math.max(1, page);
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  const skip = (safePage - 1) * safeLimit;
+
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where: { customerId },
+      include: { shop: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: safeLimit,
+    }),
+    prisma.order.count({ where: { customerId } }),
+  ]);
+
+  return {
+    orders: orders.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      storeName: o.shop.name,
+      status: o.status,
+      totalPrice: o.totalPrice,
+      paymentStatus: o.paymentStatus,
+      createdAt: o.createdAt.toISOString(),
+    })),
+    page: safePage,
+    limit: safeLimit,
+    total,
+  };
 }
 
 export async function getOrderForUser(userId: string, orderId: string) {
@@ -125,13 +301,14 @@ export async function getOrderForUser(userId: string, orderId: string) {
       id: orderId,
       OR: [
         { customerId: userId },
-        { store: { vendor: { userId } } },
-        { rabbitorId: userId },
+        { shop: { vendor: { userId } } },
+        { shop: { ownerId: userId } },
+        { deliveryPartnerId: userId },
       ],
     },
     include: {
       items: { include: { product: { select: { name: true } } } },
-      store: { select: { name: true } },
+      shop: { select: { name: true } },
     },
   });
   if (!order) throw notFound("Order not found");
@@ -142,15 +319,15 @@ export async function getOrderForUser(userId: string, orderId: string) {
     id: order.id,
     status: order.status,
     deliveryMethod: order.deliveryMethod,
-    totalAmount: order.totalAmount,
+    totalAmount: order.totalPrice,
     deliveryFee: order.deliveryFee,
-    storeName: order.store.name,
+    storeName: order.shop.name,
     items: order.items.map((i) => ({
       productName: i.product.name,
       quantity: i.quantity,
-      unitPrice: i.unitPrice,
+      unitPrice: i.price,
     })),
-    ...(showAddress && {
+    ...(showAddress && order.deliveryAddressEnc && {
       deliveryAddress: Buffer.from(order.deliveryAddressEnc, "base64").toString("utf8"),
     }),
     createdAt: order.createdAt.toISOString(),

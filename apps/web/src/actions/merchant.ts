@@ -1,13 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { db } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 
 export async function getMerchantShopAction() {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
-    const shop = await db.shop.findFirst({
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
       where: { ownerId: session.userId },
       include: {
         products: { orderBy: { createdAt: 'desc' }, take: 50 },
@@ -42,13 +42,13 @@ export async function getMerchantShopAction() {
 }
 
 export async function toggleShopOpenAction(shopId: string, isActive: boolean) {
-  const session = await requireSession(['MERCHANT', 'ADMIN'])
-  const shop = await db.shop.findFirst({
+  const session = await requireSession(['VENDOR', 'ADMIN'])
+  const shop = await prisma.shop.findFirst({
     where: { id: shopId, ownerId: session.userId },
   })
   if (!shop) return { ok: false as const, error: 'Shop not found' }
 
-  await db.shop.update({ where: { id: shopId }, data: { isActive } })
+  await prisma.shop.update({ where: { id: shopId }, data: { isActive } })
   revalidatePath('/merchant')
   revalidatePath('/merchant/products')
   revalidatePath('/shops')
@@ -62,10 +62,11 @@ export async function addProductAction(input: {
   unit?: string
   stock?: number
   imageDataUrl?: string
+  imageUrl?: string
 }) {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
-    const shop = await db.shop.findFirst({
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
       where: { id: input.shopId, ownerId: session.userId },
     })
     if (!shop) return { ok: false as const, error: 'Shop not found' }
@@ -78,14 +79,16 @@ export async function addProductAction(input: {
     }
 
     let image: string | undefined
-    if (input.imageDataUrl?.startsWith('data:image/')) {
+    if (input.imageUrl?.startsWith('http')) {
+      image = input.imageUrl
+    } else if (input.imageDataUrl?.startsWith('data:image/')) {
       if (input.imageDataUrl.length > 600_000) {
         return { ok: false as const, error: 'Image too large — use a smaller photo' }
       }
       image = input.imageDataUrl
     }
 
-    const product = await db.product.create({
+    const product = await prisma.product.create({
       data: {
         shopId: input.shopId,
         name: input.name.trim(),
@@ -111,14 +114,14 @@ export async function toggleProductAvailabilityAction(
   productId: string,
   isAvailable: boolean,
 ) {
-  const session = await requireSession(['MERCHANT', 'ADMIN'])
-  const product = await db.product.findFirst({
+  const session = await requireSession(['VENDOR', 'ADMIN'])
+  const product = await prisma.product.findFirst({
     where: { id: productId, shop: { ownerId: session.userId } },
     include: { shop: { select: { slug: true } } },
   })
   if (!product) return { ok: false as const, error: 'Product not found' }
 
-  await db.product.update({ where: { id: productId }, data: { isAvailable } })
+  await prisma.product.update({ where: { id: productId }, data: { isAvailable } })
   revalidatePath('/merchant')
   revalidatePath('/merchant/products')
   revalidatePath('/shops')
@@ -128,18 +131,18 @@ export async function toggleProductAvailabilityAction(
 
 export async function updateProductPriceAction(productId: string, price: number) {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
+    const session = await requireSession(['VENDOR', 'ADMIN'])
     if (!Number.isFinite(price) || price <= 0) {
       return { ok: false as const, error: 'Enter a valid price' }
     }
 
-    const product = await db.product.findFirst({
+    const product = await prisma.product.findFirst({
       where: { id: productId, shop: { ownerId: session.userId } },
       include: { shop: { select: { slug: true } } },
     })
     if (!product) return { ok: false as const, error: 'Product not found' }
 
-    await db.product.update({ where: { id: productId }, data: { price } })
+    await prisma.product.update({ where: { id: productId }, data: { price } })
     revalidatePath('/merchant')
     revalidatePath('/merchant/products')
     revalidatePath(`/shops/${product.shop.slug}`)
@@ -152,14 +155,14 @@ export async function updateProductPriceAction(productId: string, price: number)
 
 export async function getMerchantAnalyticsAction() {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
-    const shop = await db.shop.findFirst({
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
       where: { ownerId: session.userId },
       select: { id: true, name: true },
     })
     if (!shop) return null
 
-    const orders = await db.order.findMany({
+    const orders = await prisma.order.findMany({
       where: { shopId: shop.id },
       select: { status: true, totalPrice: true, deliveryFee: true, createdAt: true },
     })
@@ -177,8 +180,8 @@ export async function getMerchantAnalyticsAction() {
       .reduce((sum, o) => sum + o.totalPrice, 0)
 
     const [productCount, liveProductCount] = await Promise.all([
-      db.product.count({ where: { shopId: shop.id } }),
-      db.product.count({ where: { shopId: shop.id, isAvailable: true } }),
+      prisma.product.count({ where: { shopId: shop.id } }),
+      prisma.product.count({ where: { shopId: shop.id, isAvailable: true } }),
     ])
 
     return {
@@ -198,8 +201,8 @@ export async function getMerchantAnalyticsAction() {
 }
 
 export async function getMerchantSettingsAction() {
-  const session = await requireSession(['MERCHANT', 'ADMIN'])
-  const shop = await db.shop.findFirst({
+  const session = await requireSession(['VENDOR', 'ADMIN'])
+  const shop = await prisma.shop.findFirst({
     where: { ownerId: session.userId },
     select: {
       id: true,
@@ -212,10 +215,30 @@ export async function getMerchantSettingsAction() {
       baseDeliveryFee: true,
       avgPrepMinutes: true,
       deliveryRadiusKm: true,
+      vendor: {
+        select: {
+          kycStatus: true,
+          kycDocuments: {
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              docType: true,
+              fileUrl: true,
+              status: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
     },
   })
   if (!shop) return null
-  return shop
+
+  return {
+    ...shop,
+    kycStatus: shop.vendor?.kycStatus ?? 'PENDING',
+    kycDocuments: shop.vendor?.kycDocuments ?? [],
+  }
 }
 
 export async function updateMerchantSettingsAction(input: {
@@ -226,8 +249,8 @@ export async function updateMerchantSettingsAction(input: {
   deliveryRadiusKm: number
 }) {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
-    const shop = await db.shop.findFirst({
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
       where: { id: input.shopId, ownerId: session.userId },
     })
     if (!shop) return { ok: false as const, error: 'Shop not found' }
@@ -242,7 +265,7 @@ export async function updateMerchantSettingsAction(input: {
       return { ok: false as const, error: 'Delivery radius must be between 1 and 15 km' }
     }
 
-    await db.shop.update({
+    await prisma.shop.update({
       where: { id: input.shopId },
       data: {
         minOrderValue: input.minOrderValue,

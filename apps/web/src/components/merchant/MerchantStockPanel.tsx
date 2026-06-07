@@ -18,48 +18,45 @@ import {
   toggleProductAvailabilityAction,
   updateProductPriceAction,
 } from '@/actions/merchant'
-import {
-  MERCHANT_DEMO_SHOP,
-  MERCHANT_DEMO_PRODUCTS,
-  MERCHANT_DEMO_STATS,
-} from '@/lib/merchant-demo'
 import { formatCurrency } from '@/lib/utils'
 
 type ShopData = NonNullable<Awaited<ReturnType<typeof getMerchantShopAction>>>
 type ProductRow = ShopData['products'][number]
 
 export function MerchantStockPanel() {
-  const [shop, setShop] = useState<ShopData>(MERCHANT_DEMO_SHOP)
-  const [products, setProducts] = useState<ProductRow[]>(MERCHANT_DEMO_PRODUCTS)
-  const [todayOrders, setTodayOrders] = useState(MERCHANT_DEMO_STATS.todayOrders)
-  const [todayRevenue, setTodayRevenue] = useState(MERCHANT_DEMO_STATS.todayRevenue)
-  const [isLive, setIsLive] = useState(false)
+  const [shop, setShop] = useState<ShopData | null>(null)
+  const [products, setProducts] = useState<ProductRow[]>([])
+  const [todayOrders, setTodayOrders] = useState(0)
+  const [todayRevenue, setTodayRevenue] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showAvailableOnly, setShowAvailableOnly] = useState(false)
   const priceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   useEffect(() => {
     Promise.all([getMerchantShopAction(), getMerchantAnalyticsAction()])
       .then(([shopData, analytics]) => {
-        if (shopData) {
-          setShop(shopData)
-          setProducts(shopData.products)
-          setIsLive(true)
+        if (!shopData) {
+          setError('No shop found for this merchant account.')
+          return
         }
+        setShop(shopData)
+        setProducts(shopData.products)
         if (analytics) {
           setTodayOrders(analytics.todayOrders)
           setTodayRevenue(analytics.todayRevenue)
         }
       })
       .catch(() => {
-        /* keep demo data visible */
+        setError('Could not load merchant inventory.')
+      })
+      .finally(() => {
+        setLoading(false)
       })
   }, [])
 
   const toggleStoreOpen = async () => {
-    if (!isLive) {
-      window.location.href = '/merchant/login'
-      return
-    }
+    if (!shop) return
     const next = !shop.isActive
     setShop({ ...shop, isActive: next })
     const res = await toggleShopOpenAction(shop.id, next)
@@ -67,10 +64,7 @@ export function MerchantStockPanel() {
   }
 
   const toggleAvailability = async (productId: string) => {
-    if (!isLive) {
-      window.location.href = '/merchant/login'
-      return
-    }
+    if (!shop) return
     const item = products.find((p) => p.id === productId)
     if (!item) return
     const next = !item.isAvailable
@@ -93,7 +87,7 @@ export function MerchantStockPanel() {
       prev.map((p) => (p.id === productId ? { ...p, price: parsed } : p)),
     )
 
-    if (!isLive) return
+    if (!shop) return
 
     if (priceTimers.current[productId]) clearTimeout(priceTimers.current[productId])
     priceTimers.current[productId] = setTimeout(async () => {
@@ -103,6 +97,28 @@ export function MerchantStockPanel() {
         if (fresh) setProducts(fresh.products)
       }
     }, 600)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">
+        Loading inventory…
+      </div>
+    )
+  }
+
+  if (error || !shop) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 text-center">
+        <p className="text-sm text-gray-600">{error ?? 'Shop not found.'}</p>
+        <Link
+          href="/merchant/login"
+          className="mt-4 text-sm font-semibold text-orange-600 underline"
+        >
+          Log in as merchant
+        </Link>
+      </div>
+    )
   }
 
   const visibleProducts = showAvailableOnly
@@ -140,18 +156,6 @@ export function MerchantStockPanel() {
           </button>
         </div>
       </div>
-
-      {!isLive && (
-        <div className="mx-auto max-w-xl px-4 pt-3">
-          <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-center text-xs font-semibold text-orange-800">
-            Preview mode —{' '}
-            <Link href="/merchant/login" className="underline">
-              log in as merchant (9876543210)
-            </Link>{' '}
-            to sync live inventory
-          </div>
-        </div>
-      )}
 
       <div className="mx-auto max-w-xl space-y-6 px-4 pt-5">
         <div className="grid grid-cols-2 gap-3">
@@ -196,74 +200,86 @@ export function MerchantStockPanel() {
             </button>
           </div>
 
-          <div className="space-y-3">
-            {visibleProducts.map((item) => (
-              <div
-                key={item.id}
-                className={`flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm transition ${
-                  item.isAvailable
-                    ? 'border-gray-100'
-                    : 'border-gray-200 bg-gray-50/50 opacity-75'
-                }`}
+          {products.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white py-12 text-center">
+              <p className="text-sm text-gray-500">No products yet.</p>
+              <Link
+                href="/merchant/products"
+                className="mt-2 inline-block text-sm font-semibold text-orange-600"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-600">
-                      {shop.category}
-                    </span>
-                    <h3 className="mt-1 text-sm font-bold text-gray-800">{item.name}</h3>
-                    <p className="text-xs font-medium text-gray-400">
-                      Selling Unit: {item.unit}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void toggleAvailability(item.id)}
-                    className={`rounded-xl p-2 transition ${
-                      item.isAvailable
-                        ? 'bg-orange-50 text-orange-600 hover:bg-orange-100'
-                        : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
-                    }`}
-                    title={item.isAvailable ? 'Set out of stock' : 'Set in stock'}
-                  >
-                    {item.isAvailable ? (
-                      <Eye className="h-4 w-4" />
-                    ) : (
-                      <EyeOff className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-gray-50 pt-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                      Price
-                    </span>
-                    <div className="relative flex items-center">
-                      <IndianRupee className="absolute left-2 h-3.5 w-3.5 text-gray-500" />
-                      <input
-                        type="number"
-                        value={item.price}
-                        onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                        className="w-24 rounded-lg border border-gray-200 bg-gray-50 py-1 pl-6 pr-2 text-sm font-extrabold text-gray-800 transition focus:border-orange-500 focus:bg-white focus:outline-none"
-                      />
+                Add your first product →
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {visibleProducts.map((item) => (
+                <div
+                  key={item.id}
+                  className={`flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm transition ${
+                    item.isAvailable
+                      ? 'border-gray-100'
+                      : 'border-gray-200 bg-gray-50/50 opacity-75'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-600">
+                        {shop.category}
+                      </span>
+                      <h3 className="mt-1 text-sm font-bold text-gray-800">{item.name}</h3>
+                      <p className="text-xs font-medium text-gray-400">
+                        Selling Unit: {item.unit}
+                      </p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void toggleAvailability(item.id)}
+                      className={`rounded-xl p-2 transition ${
+                        item.isAvailable
+                          ? 'bg-orange-50 text-orange-600 hover:bg-orange-100'
+                          : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
+                      }`}
+                      title={item.isAvailable ? 'Set out of stock' : 'Set in stock'}
+                    >
+                      {item.isAvailable ? (
+                        <Eye className="h-4 w-4" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
 
-                  <span
-                    className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold ${
-                      item.isAvailable
-                        ? 'bg-green-50 text-green-700'
-                        : 'bg-rose-50 text-rose-700'
-                    }`}
-                  >
-                    {item.isAvailable ? '● Active in App' : '○ Hidden'}
-                  </span>
+                  <div className="flex items-center justify-between border-t border-gray-50 pt-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        Price
+                      </span>
+                      <div className="relative flex items-center">
+                        <IndianRupee className="absolute left-2 h-3.5 w-3.5 text-gray-500" />
+                        <input
+                          type="number"
+                          value={item.price}
+                          onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                          className="w-24 rounded-lg border border-gray-200 bg-gray-50 py-1 pl-6 pr-2 text-sm font-extrabold text-gray-800 transition focus:border-orange-500 focus:bg-white focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <span
+                      className={`rounded-lg px-2.5 py-1 text-[10px] font-extrabold ${
+                        item.isAvailable
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      {item.isAvailable ? '● Active in App' : '○ Hidden'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

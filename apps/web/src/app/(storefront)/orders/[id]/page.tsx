@@ -40,8 +40,8 @@ export default async function OrderPage({ params }: Props) {
           <TrackingMap
             orderId={order.id}
             initialStatus={order.status}
-            destLat={order.destLatitude}
-            destLng={order.destLongitude}
+            destLat={order.destLatitude ?? order.shop.latitude}
+            destLng={order.destLongitude ?? order.shop.longitude}
             shopLat={order.shop.latitude}
             shopLng={order.shop.longitude}
           />

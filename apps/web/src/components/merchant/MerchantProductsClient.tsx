@@ -8,7 +8,6 @@ import {
   addProductAction,
   toggleProductAvailabilityAction,
 } from '@/actions/merchant'
-import { compressImageFile } from '@/lib/image-client'
 import { formatCurrency } from '@/lib/utils'
 
 type ShopData = NonNullable<Awaited<ReturnType<typeof getMerchantShopAction>>>
@@ -19,8 +18,8 @@ export function MerchantProductsClient() {
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [unit, setUnit] = useState('')
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [compressing, setCompressing] = useState(false)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -38,15 +37,27 @@ export function MerchantProductsClient() {
 
   const onPhoto = async (file: File) => {
     setError(null)
-    setCompressing(true)
+    setUploading(true)
     try {
-      const compressed = await compressImageFile(file)
-      setImagePreview(compressed)
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const res = await fetch('/api/products/upload-image', {
+        method: 'POST',
+        body: formData,
+      })
+      const json = await res.json()
+      if (!json.success) {
+        setError(json.error ?? 'Could not upload image.')
+        setImageUrl(null)
+        return
+      }
+      setImageUrl(json.data.url as string)
     } catch {
-      setError('Could not process that image. Try a smaller JPG or PNG.')
-      setImagePreview(null)
+      setError('Could not upload image. Try a smaller JPG, PNG, or WebP.')
+      setImageUrl(null)
     } finally {
-      setCompressing(false)
+      setUploading(false)
       if (fileRef.current) fileRef.current.value = ''
     }
   }
@@ -67,7 +78,7 @@ export function MerchantProductsClient() {
         name: name.trim(),
         price: parsedPrice,
         unit: unit.trim() || undefined,
-        imageDataUrl: imagePreview ?? undefined,
+        imageUrl: imageUrl ?? undefined,
       })
       if (!res.ok) {
         setError(res.error ?? 'Could not add product.')
@@ -76,7 +87,7 @@ export function MerchantProductsClient() {
       setName('')
       setPrice('')
       setUnit('')
-      setImagePreview(null)
+      setImageUrl(null)
       load()
     } catch {
       setError('Upload failed. If you added a photo, try a smaller image.')
@@ -115,14 +126,14 @@ export function MerchantProductsClient() {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            disabled={compressing}
+            disabled={uploading}
             className="relative flex h-32 w-full items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 disabled:opacity-60"
           >
-            {compressing ? (
+            {uploading ? (
               <Loader2 className="h-6 w-6 animate-spin text-rabbit-600" />
-            ) : imagePreview ? (
+            ) : imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={imagePreview} alt="" className="h-full w-full rounded-xl object-cover" />
+              <img src={imageUrl} alt="" className="h-full w-full rounded-xl object-cover" />
             ) : (
               <span className="text-sm text-gray-500">Tap to take / upload photo</span>
             )}
@@ -130,8 +141,7 @@ export function MerchantProductsClient() {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
-            capture="environment"
+            accept="image/jpeg,image/png,image/webp"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
@@ -164,7 +174,7 @@ export function MerchantProductsClient() {
           )}
           <button
             type="button"
-            disabled={saving || compressing || !name || !price}
+            disabled={saving || uploading || !name || !price}
             onClick={() => void addProduct()}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-rabbit-600 py-3 font-semibold text-white disabled:opacity-40"
           >

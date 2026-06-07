@@ -14,11 +14,15 @@ export async function requestOtpAction(phone: string) {
 export async function verifyOtpAction(
   phone: string,
   code: string,
-  role?: 'CUSTOMER' | 'MERCHANT' | 'DELIVERY_PARTNER',
+  role?: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
 ) {
-  const result = await verifyOtp(phone, code, role)
+  const result = await verifyOtp(phone, code, role === 'ADMIN' ? undefined : role)
   if (!result.success) return { ok: false as const, error: result.error }
-  return { ok: true as const }
+  return {
+    ok: true as const,
+    token: result.token!,
+    user: result.user!,
+  }
 }
 
 export async function logoutAction() {

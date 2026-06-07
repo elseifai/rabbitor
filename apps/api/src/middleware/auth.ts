@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import type { UserRole } from "@prisma/client";
+import type { UserRole } from "@rabbit/database";
 import { config } from "../config";
 import { unauthorized, forbidden } from "../lib/errors";
 

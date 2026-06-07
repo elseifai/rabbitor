@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Upload, FileText } from 'lucide-react'
 import {
   getMerchantSettingsAction,
   updateMerchantSettingsAction,
@@ -11,6 +11,18 @@ import {
 import { formatCurrency } from '@/lib/utils'
 
 type Settings = NonNullable<Awaited<ReturnType<typeof getMerchantSettingsAction>>>
+
+const KYC_BADGE: Record<string, string> = {
+  PENDING: 'bg-yellow-100 text-yellow-800',
+  VERIFIED: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+}
+
+const KYC_DOCS = [
+  { type: 'AADHAAR', label: 'Aadhaar card' },
+  { type: 'GST', label: 'GST certificate' },
+  { type: 'SHOP_PHOTO', label: 'Shop photo' },
+] as const
 
 export function MerchantSettingsClient() {
   const [shop, setShop] = useState<Settings | null>(null)
@@ -23,6 +35,8 @@ export function MerchantSettingsClient() {
   const [baseDeliveryFee, setBaseDeliveryFee] = useState('')
   const [avgPrepMinutes, setAvgPrepMinutes] = useState('')
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState('')
+  const [kycUploading, setKycUploading] = useState<string | null>(null)
+  const kycFileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const load = () => {
     getMerchantSettingsAction()
@@ -42,6 +56,29 @@ export function MerchantSettingsClient() {
   useEffect(() => {
     load()
   }, [])
+
+  const uploadKyc = async (docType: string, file: File) => {
+    setKycUploading(docType)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append('docType', docType)
+      formData.append('file', file)
+
+      const res = await fetch('/api/vendor/kyc/upload', { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!json.success) {
+        setError(json.error ?? 'Could not upload document')
+        return
+      }
+      load()
+    } catch {
+      setError('Document upload failed')
+    } finally {
+      setKycUploading(null)
+      if (kycFileRefs.current[docType]) kycFileRefs.current[docType]!.value = ''
+    }
+  }
 
   const toggleOpen = async () => {
     if (!shop) return
@@ -120,6 +157,78 @@ export function MerchantSettingsClient() {
         <p className="mt-2 text-xs text-gray-500">
           Shop is {shop.isActive ? 'open and accepting orders' : 'closed'}
         </p>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">KYC Documents</h3>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${
+              KYC_BADGE[shop.kycStatus] ?? KYC_BADGE.PENDING
+            }`}
+          >
+            {shop.kycStatus}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">
+          Upload verification documents for admin review
+        </p>
+
+        <div className="mt-4 space-y-3">
+          {KYC_DOCS.map((doc) => {
+            const existing = shop.kycDocuments.find((d) => d.docType === doc.type)
+            return (
+              <div
+                key={doc.type}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-gray-400" />
+                  <div>
+                    <p className="text-sm font-medium">{doc.label}</p>
+                    {existing && (
+                      <a
+                        href={existing.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-rabbit-600 underline"
+                      >
+                        View uploaded file
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <input
+                    ref={(el) => {
+                      kycFileRefs.current[doc.type] = el
+                    }}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) void uploadKyc(doc.type, f)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={kycUploading === doc.type}
+                    onClick={() => kycFileRefs.current[doc.type]?.click()}
+                    className="flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-rabbit-700 ring-1 ring-rabbit-200 disabled:opacity-50"
+                  >
+                    {kycUploading === doc.type ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Upload className="h-3 w-3" />
+                    )}
+                    {existing ? 'Replace' : 'Upload'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4">

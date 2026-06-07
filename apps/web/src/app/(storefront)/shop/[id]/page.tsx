@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { db } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { SHOP_ID_TO_SLUG } from '@/lib/shop-catalog'
 
 interface Props {
@@ -12,7 +12,7 @@ export default async function LegacyShopRedirectPage({ params }: Props) {
   const staticSlug = SHOP_ID_TO_SLUG[id]
   if (staticSlug) redirect(`/shops/${staticSlug}`)
 
-  const shop = await db.shop.findFirst({
+  const shop = await prisma.shop.findFirst({
     where: { OR: [{ id }, { slug: id }] },
     select: { slug: true },
   })

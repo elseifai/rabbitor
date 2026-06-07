@@ -1,12 +1,121 @@
+import { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import type { UserRole } from "@prisma/client";
+import type { UserRole } from "@rabbit/database";
 import { prisma } from "../lib/prisma";
 import { config } from "../config";
 import type { JwtPayload } from "../middleware/auth";
 import { conflict, unauthorized, badRequest } from "../lib/errors";
+import { sendSms } from "../lib/sms";
 
 const SALT_ROUNDS = 10;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const MAX_ACTIVE_CHALLENGES = 3;
+const MAX_OTP_ATTEMPTS = 5;
+
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+  throw badRequest("Enter a valid 10-digit mobile number");
+}
+
+function generateOtpCode(): string {
+  return randomInt(100000, 999999).toString();
+}
+
+export async function sendOtp(phone: string) {
+  const normalized = normalizePhone(phone);
+
+  const activeCount = await prisma.otpChallenge.count({
+    where: {
+      phone: normalized,
+      verified: false,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
+  if (activeCount >= MAX_ACTIVE_CHALLENGES) {
+    throw badRequest("Too many active OTP requests. Try again later.", "OTP_RATE_LIMITED");
+  }
+
+  const code = generateOtpCode();
+  const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
+
+  await prisma.otpChallenge.create({
+    data: {
+      phone: normalized,
+      codeHash,
+      expiresAt: new Date(Date.now() + OTP_TTL_MS),
+    },
+  });
+
+  await sendSms(
+    normalized,
+    `Your Rabbit OTP is ${code}. Valid for 10 minutes. Do not share.`
+  );
+
+  return { phone: normalized, expiresInMinutes: 10 };
+}
+
+export async function verifyOtp(phone: string, code: string) {
+  const normalized = normalizePhone(phone);
+
+  const challenge = await prisma.otpChallenge.findFirst({
+    where: {
+      phone: normalized,
+      verified: false,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!challenge) {
+    throw unauthorized("OTP expired. Request a new one.");
+  }
+
+  if (challenge.expiresAt <= new Date()) {
+    throw unauthorized("OTP expired. Request a new one.");
+  }
+
+  if (challenge.attempts >= MAX_OTP_ATTEMPTS) {
+    throw unauthorized("Too many attempts. Request a new OTP.");
+  }
+
+  const valid = await bcrypt.compare(code.trim(), challenge.codeHash);
+  if (!valid) {
+    await prisma.otpChallenge.update({
+      where: { id: challenge.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw unauthorized("Invalid OTP.");
+  }
+
+  await prisma.otpChallenge.update({
+    where: { id: challenge.id },
+    data: { verified: true },
+  });
+
+  const user = await prisma.user.upsert({
+    where: { phone: normalized },
+    update: {},
+    create: {
+      phone: normalized,
+      name: `User ${normalized.slice(-4)}`,
+      role: "CUSTOMER",
+    },
+    select: {
+      id: true,
+      phone: true,
+      role: true,
+      displayName: true,
+    },
+  });
+
+  return {
+    user,
+    ...issueTokens(user),
+  };
+}
 
 export async function registerUser(input: {
   phone: string;
@@ -29,6 +138,7 @@ export async function registerUser(input: {
   const user = await prisma.user.create({
     data: {
       phone: input.phone,
+      name: input.displayName ?? input.phone,
       passwordHash,
       role: input.role,
       displayName: input.displayName,
@@ -58,7 +168,7 @@ export async function loginUser(phone: string, password: string) {
     throw unauthorized("Invalid phone or password");
   }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  const valid = await bcrypt.compare(password, user.passwordHash ?? "");
   if (!valid) {
     throw unauthorized("Invalid phone or password");
   }
@@ -80,4 +190,12 @@ function issueTokens(user: { id: string; role: UserRole; phone: string }) {
     expiresIn: config.jwtExpiresIn,
   } as jwt.SignOptions);
   return { accessToken, expiresIn: config.jwtExpiresIn };
+}
+
+export async function saveFcmToken(userId: string, fcmToken: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { fcmToken },
+  });
+  return { saved: true };
 }

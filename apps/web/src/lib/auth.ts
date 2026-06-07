@@ -1,7 +1,7 @@
 import { createHash, randomInt } from 'crypto'
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
-import { db } from './db'
+import { prisma } from './prisma'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ?? 'rabbit-dev-secret-change-in-production',
@@ -34,7 +34,7 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; devCod
       ? randomInt(100000, 999999).toString()
       : DEV_OTP
 
-  await db.otpChallenge.create({
+  await prisma.otpChallenge.create({
     data: {
       phone: normalized,
       codeHash: hashOtp(code),
@@ -52,10 +52,15 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; devCod
 export async function verifyOtp(
   phone: string,
   code: string,
-  role?: 'CUSTOMER' | 'MERCHANT' | 'DELIVERY_PARTNER',
-): Promise<{ success: boolean; error?: string }> {
+  role?: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+): Promise<{
+  success: boolean
+  error?: string
+  token?: string
+  user?: { id: string; name: string; phone: string; role: string; displayName: string | null }
+}> {
   const normalized = normalizePhone(phone)
-  const challenge = await db.otpChallenge.findFirst({
+  const challenge = await prisma.otpChallenge.findFirst({
     where: {
       phone: normalized,
       verified: false,
@@ -69,21 +74,21 @@ export async function verifyOtp(
 
   const valid = challenge.codeHash === hashOtp(code.trim())
   if (!valid) {
-    await db.otpChallenge.update({
+    await prisma.otpChallenge.update({
       where: { id: challenge.id },
       data: { attempts: { increment: 1 } },
     })
     return { success: false, error: 'Invalid OTP.' }
   }
 
-  await db.otpChallenge.update({
+  await prisma.otpChallenge.update({
     where: { id: challenge.id },
     data: { verified: true },
   })
 
-  let user = await db.user.findUnique({ where: { phone: normalized } })
+  let user = await prisma.user.findUnique({ where: { phone: normalized } })
   if (!user) {
-    user = await db.user.create({
+    user = await prisma.user.create({
       data: {
         phone: normalized,
         name: `User ${normalized.slice(-4)}`,
@@ -110,7 +115,17 @@ export async function verifyOtp(
     path: '/',
   })
 
-  return { success: true }
+  return {
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      displayName: user.displayName,
+    },
+  }
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -125,6 +140,39 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 }
 
+/** Resolve session to a live DB user (handles stale JWT after db:seed). */
+export async function resolveSessionUser(session: SessionPayload) {
+  let user = await prisma.user.findUnique({ where: { id: session.userId } })
+  if (user) return user
+
+  if (session.phone) {
+    user = await prisma.user.findUnique({ where: { phone: session.phone } })
+    if (user) {
+      const token = await new SignJWT({
+        userId: user.id,
+        phone: user.phone,
+        role: user.role,
+      })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setExpirationTime('7d')
+        .sign(JWT_SECRET)
+
+      const cookieStore = await cookies()
+      cookieStore.set(SESSION_COOKIE, token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7,
+        path: '/',
+      })
+      return user
+    }
+  }
+
+  await clearSession()
+  return null
+}
+
 export async function clearSession(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.delete(SESSION_COOKIE)
@@ -134,11 +182,8 @@ export async function requireSession(roles?: string[]): Promise<SessionPayload> 
   const session = await getSession()
   if (!session) throw new Error('Please log in to continue')
 
-  const user = await db.user.findUnique({ where: { id: session.userId } })
-  if (!user) {
-    await clearSession()
-    throw new Error('Your session expired. Please log in again.')
-  }
+  const user = await resolveSessionUser(session)
+  if (!user) throw new Error('Your session expired. Please log in again.')
 
   const payload: SessionPayload = {
     userId: user.id,

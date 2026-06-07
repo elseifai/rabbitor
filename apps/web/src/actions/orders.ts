@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@rabbit/database'
-import { db } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { clearSession, requireSession } from '@/lib/auth'
 import { canTransition, generateOrderNumber, ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
@@ -57,9 +57,9 @@ async function placeOrder(input: {
   riderTip?: number
   deliveryInstruction?: string
 }) {
-  const session = await requireSession(['CUSTOMER', 'ADMIN', 'MERCHANT'])
+  const session = await requireSession(['CUSTOMER', 'ADMIN', 'VENDOR'])
 
-  const shop = await db.shop.findFirst({
+  const shop = await prisma.shop.findFirst({
     where: { OR: [{ id: input.shopId }, { slug: input.shopId }] },
     include: { products: true },
   })
@@ -102,8 +102,9 @@ async function placeOrder(input: {
   const addressStr = [input.address.line1, input.address.line2, input.address.city, input.address.pincode]
     .filter(Boolean)
     .join(', ')
+  const riderTip = input.riderTip ?? 0
 
-  const order = await db.$transaction(async (tx) => {
+  const order = await prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
       data: {
         orderNumber: generateOrderNumber(),
@@ -143,7 +144,7 @@ export async function getOrderAction(orderId: string) {
     return null
   }
 
-  const order = await db.order.findFirst({
+  const order = await prisma.order.findFirst({
     where: {
       id: orderId,
       OR: [
@@ -169,15 +170,15 @@ export async function getOrderAction(orderId: string) {
 }
 
 export async function updateOrderStatusAction(orderId: string, status: OrderStatus) {
-  const session = await requireSession(['MERCHANT', 'ADMIN', 'DELIVERY_PARTNER'])
+  const session = await requireSession(['VENDOR', 'ADMIN', 'RABBITOR'])
 
-  const order = await db.order.findUnique({
+  const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { shop: true },
   })
   if (!order) return { ok: false as const, error: 'Order not found' }
 
-  if (session.role === 'MERCHANT' && order.shop.ownerId !== session.userId) {
+  if (session.role === 'VENDOR' && order.shop.ownerId !== session.userId) {
     return { ok: false as const, error: 'Access denied' }
   }
 
@@ -185,7 +186,7 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
     return { ok: false as const, error: `Cannot move from ${order.status} to ${status}` }
   }
 
-  await db.order.update({
+  await prisma.order.update({
     where: { id: orderId },
     data: {
       status,
@@ -201,14 +202,14 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
 }
 
 export async function getMerchantOrdersAction() {
-  const session = await requireSession(['MERCHANT', 'ADMIN'])
-  const shops = await db.shop.findMany({
+  const session = await requireSession(['VENDOR', 'ADMIN'])
+  const shops = await prisma.shop.findMany({
     where: { ownerId: session.userId },
     select: { id: true },
   })
   if (shops.length === 0) return []
 
-  const orders = await db.order.findMany({
+  const orders = await prisma.order.findMany({
     where: { shopId: { in: shops.map((s) => s.id) } },
     include: {
       items: true,

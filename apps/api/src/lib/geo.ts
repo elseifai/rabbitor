@@ -1,6 +1,16 @@
 const EARTH_RADIUS_KM = 6371;
 
 /** Haversine distance between two coordinates in km */
+export function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  return distanceKm(lat1, lng1, lat2, lng2);
+}
+
+/** Haversine distance between two coordinates in km */
 export function distanceKm(
   lat1: number,
   lng1: number,

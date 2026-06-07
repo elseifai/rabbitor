@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Phone, Loader2 } from 'lucide-react'
 import { requestOtpAction, verifyOtpAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
 
 export default function MerchantLoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
-  const [phone, setPhone] = useState('9876543210')
+  const [phone, setPhone] = useState('9111111111')
   const [otp, setOtp] = useState('')
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -26,9 +28,14 @@ export default function MerchantLoginPage() {
 
   const verify = async () => {
     setLoading(true)
-    const res = await verifyOtpAction(phone, otp, 'MERCHANT')
+    const res = await verifyOtpAction(phone, otp, 'VENDOR')
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed')
+    if (res.user.role !== 'VENDOR') {
+      setError('This phone is not registered as a merchant.')
+      return
+    }
+    login(res.token, res.user)
     router.push('/merchant')
     router.refresh()
   }
@@ -48,9 +55,9 @@ export default function MerchantLoginPage() {
           />
           <button
             type="button"
-            onClick={sendOtp}
+            onClick={() => void sendOtp()}
             disabled={loading}
-            className="w-full rounded-xl bg-rabbit-600 py-3 text-white font-semibold"
+            className="w-full rounded-xl bg-rabbit-600 py-3 font-semibold text-white"
           >
             Send OTP
           </button>
@@ -69,15 +76,15 @@ export default function MerchantLoginPage() {
           />
           <button
             type="button"
-            onClick={verify}
+            onClick={() => void verify()}
             disabled={loading}
-            className="w-full rounded-xl bg-rabbit-600 py-3 text-white font-semibold"
+            className="w-full rounded-xl bg-rabbit-600 py-3 font-semibold text-white"
           >
             Enter dashboard
           </button>
         </div>
       )}
-      {error && <p className="mt-4 text-red-600 text-sm">{error}</p>}
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       <Link href="/" className="mt-6 block text-center text-sm text-gray-500">
         ← Customer app
       </Link>

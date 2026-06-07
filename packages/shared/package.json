@@ -12,7 +12,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "echo \"No shared tests yet\""
   },
   "devDependencies": {
     "typescript": "^5.7.2"

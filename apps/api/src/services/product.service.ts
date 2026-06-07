@@ -4,29 +4,29 @@ import { notFound, forbidden } from "../lib/errors";
 async function assertVendorOwnsStore(vendorUserId: string, storeId: string) {
   const vendor = await prisma.vendorProfile.findUnique({ where: { userId: vendorUserId } });
   if (!vendor) throw forbidden();
-  const store = await prisma.store.findFirst({ where: { id: storeId, vendorId: vendor.id } });
-  if (!store) throw notFound("Store not found");
-  return store;
+  const shop = await prisma.shop.findFirst({ where: { id: storeId, vendorId: vendor.id } });
+  if (!shop) throw notFound("Store not found");
+  return shop;
 }
 
 export async function listProductsByStore(storeId: string, availableOnly = true) {
-  const store = await prisma.store.findUnique({ where: { id: storeId } });
-  if (!store) throw notFound("Store not found");
+  const shop = await prisma.shop.findUnique({ where: { id: storeId } });
+  if (!shop) throw notFound("Store not found");
 
   return prisma.product.findMany({
     where: {
-      storeId,
+      shopId: storeId,
       ...(availableOnly && { isAvailable: true }),
     },
     orderBy: { name: "asc" },
     select: {
       id: true,
-      storeId: true,
+      shopId: true,
       name: true,
       description: true,
       price: true,
       unit: true,
-      images: true,
+      image: true,
       isAvailable: true,
     },
   });
@@ -47,12 +47,12 @@ export async function createProduct(
   await assertVendorOwnsStore(vendorUserId, storeId);
   return prisma.product.create({
     data: {
-      storeId,
+      shopId: storeId,
       name: data.name,
       description: data.description,
       price: data.price,
       unit: data.unit,
-      images: data.images ?? [],
+      image: data.images?.[0],
       stock: data.stock ?? 0,
     },
   });
@@ -67,7 +67,7 @@ export async function toggleProductAvailability(
   if (!vendor) throw forbidden();
 
   const product = await prisma.product.findFirst({
-    where: { id: productId, store: { vendorId: vendor.id } },
+    where: { id: productId, shop: { vendorId: vendor.id } },
   });
   if (!product) throw notFound("Product not found");
 

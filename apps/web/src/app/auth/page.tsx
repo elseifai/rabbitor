@@ -4,15 +4,32 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Smartphone, Lock, ArrowRight, Zap, Loader2 } from 'lucide-react'
 import { requestOtpAction, verifyOtpAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
+
+const WELCOME: Record<string, string> = {
+  CUSTOMER: 'Welcome back! Ready to shop? 🛒',
+  VENDOR: 'Welcome back! Manage your store 🏪',
+  RABBITOR: 'Ready to deliver? 🐰',
+  ADMIN: 'Welcome back, Admin 👑',
+}
+
+const REDIRECT: Record<string, string> = {
+  CUSTOMER: '/',
+  VENDOR: '/merchant',
+  RABBITOR: '/delivery',
+  ADMIN: '/admin',
+}
 
 export default function MobileAuthPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [step, setStep] = useState(1)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [welcome, setWelcome] = useState<string | null>(null)
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +55,7 @@ export default function MobileAuthPage() {
 
     setLoading(true)
     setError(null)
-    const res = await verifyOtpAction(phone, otp, 'CUSTOMER')
+    const res = await verifyOtpAction(phone, otp)
     setLoading(false)
 
     if (!res.ok) {
@@ -46,8 +63,13 @@ export default function MobileAuthPage() {
       return
     }
 
-    router.push('/')
-    router.refresh()
+    login(res.token, res.user)
+    const role = res.user.role
+    setWelcome(WELCOME[role] ?? WELCOME.CUSTOMER)
+    setTimeout(() => {
+      router.push(REDIRECT[role] ?? '/')
+      router.refresh()
+    }, 800)
   }
 
   return (
@@ -61,6 +83,12 @@ export default function MobileAuthPage() {
           Hyperlocal kiranas, fish, and shops delivered in minutes
         </p>
       </div>
+
+      {welcome && (
+        <p className="rounded-xl bg-green-50 py-3 text-center text-sm font-bold text-green-700">
+          {welcome}
+        </p>
+      )}
 
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
         {step === 1 ? (
@@ -124,12 +152,6 @@ export default function MobileAuthPage() {
                   Dev OTP: <strong>{devCode}</strong>
                 </p>
               )}
-              <p className="mt-2 text-center text-[11px] font-medium text-gray-400">
-                Didn&apos;t receive code?{' '}
-                <span className="cursor-pointer font-bold text-orange-600 hover:underline">
-                  Resend OTP
-                </span>
-              </p>
             </div>
             <button
               type="submit"

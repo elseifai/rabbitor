@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Outfit } from 'next/font/google'
 import { CartProvider } from '@/context/CartContext'
+import { AuthProvider } from '@/context/AuthContext'
+import { FcmInit } from '@/components/FcmInit'
+import { SplashGate } from '@/components/SplashGate'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -35,7 +38,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${dmSans.variable} ${outfit.variable}`}>
       <body className="min-h-screen font-sans">
-        <CartProvider>{children}</CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            <SplashGate>
+              <FcmInit />
+              {children}
+            </SplashGate>
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   )

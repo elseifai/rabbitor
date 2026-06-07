@@ -1,10 +1,39 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import type { StoreType } from '@rabbit/database'
 
-export async function GET() {
+const VALID_STORE_TYPES = new Set([
+  'KIRANA',
+  'FISH',
+  'VEGETABLE',
+  'PHARMACY',
+  'BAKERY',
+  'DAIRY',
+  'MEAT',
+  'GENERAL',
+])
+
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = request.nextUrl
+    const category = searchParams.get('category')
+    const storeTypeParam = searchParams.get('storeType')
+
+    const where: { isActive: boolean; storeType?: StoreType; category?: string } = {
+      isActive: true,
+    }
+
+    if (storeTypeParam && VALID_STORE_TYPES.has(storeTypeParam.toUpperCase())) {
+      where.storeType = storeTypeParam.toUpperCase() as StoreType
+    } else if (category && category !== 'all') {
+      const tab = category.toUpperCase()
+      if (VALID_STORE_TYPES.has(tab)) {
+        where.storeType = tab as StoreType
+      }
+    }
+
     const shops = await prisma.shop.findMany({
-      where: { isActive: true },
+      where,
       include: {
         products: {
           where: { isAvailable: true },
@@ -18,10 +47,16 @@ export async function GET() {
       id: shop.id,
       name: shop.name,
       slug: shop.slug,
+      storeType: shop.storeType,
+      latitude: shop.latitude,
+      longitude: shop.longitude,
       rating: '4.4',
       time: `${shop.avgPrepMinutes}-${shop.avgPrepMinutes + 5} mins`,
       cuisine: shop.category,
+      category: shop.category,
       location: shop.address,
+      deliveryFee: shop.baseDeliveryFee,
+      etaMinutes: shop.avgPrepMinutes,
       image:
         shop.image ??
         'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=500&q=80',
@@ -31,6 +66,9 @@ export async function GET() {
         desc: p.description,
         price: p.price,
         weight: p.unit,
+        unit: p.unit,
+        image: p.image,
+        stock: p.stock,
         isAvailable: p.isAvailable,
         shopId: p.shopId,
       })),

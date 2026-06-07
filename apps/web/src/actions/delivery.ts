@@ -1,14 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { db } from '@/lib/db'
+import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 import type { OrderStatus } from '@rabbit/database'
 
 export async function getAvailableDeliveryOrdersAction() {
-  const session = await requireSession(['DELIVERY_PARTNER', 'ADMIN'])
+  const session = await requireSession(['RABBITOR', 'ADMIN'])
 
-  const orders = await db.order.findMany({
+  const orders = await prisma.order.findMany({
     where: {
       status: { in: ['PREPARING', 'OUT_FOR_DELIVERY'] },
       OR: [{ deliveryPartnerId: null }, { deliveryPartnerId: session.userId }],
@@ -35,9 +35,9 @@ export async function getAvailableDeliveryOrdersAction() {
 }
 
 export async function acceptDeliveryOrderAction(orderId: string) {
-  const session = await requireSession(['DELIVERY_PARTNER', 'ADMIN'])
+  const session = await requireSession(['RABBITOR', 'ADMIN'])
 
-  const order = await db.order.findUnique({ where: { id: orderId } })
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
   if (!order) return { ok: false as const, error: 'Order not found' }
 
   if (order.deliveryPartnerId && order.deliveryPartnerId !== session.userId) {
@@ -48,7 +48,7 @@ export async function acceptDeliveryOrderAction(orderId: string) {
     return { ok: false as const, error: 'Order is not available for delivery' }
   }
 
-  await db.order.update({
+  await prisma.order.update({
     where: { id: orderId },
     data: { deliveryPartnerId: session.userId },
   })
@@ -59,9 +59,9 @@ export async function acceptDeliveryOrderAction(orderId: string) {
 }
 
 export async function getActiveDeliveryAction() {
-  const session = await requireSession(['DELIVERY_PARTNER', 'ADMIN'])
+  const session = await requireSession(['RABBITOR', 'ADMIN'])
 
-  const order = await db.order.findFirst({
+  const order = await prisma.order.findFirst({
     where: {
       deliveryPartnerId: session.userId,
       status: { in: ['PREPARING', 'OUT_FOR_DELIVERY'] as OrderStatus[] },

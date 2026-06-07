@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Rabbit Delivery",
+    "slug": "rabbit-delivery",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "rabbit-delivery",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rabbit.delivery",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Rabbit Delivery needs your location to navigate and broadcast live tracking.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Rabbit Delivery tracks your location during active deliveries.",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "android": {
+      "package": "com.rabbit.delivery",
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B35",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Rabbit Delivery to use your location for live tracking during deliveries.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isIosBackgroundLocationEnabled": true
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:4000",
+      "socketUrl": "http://localhost:4000",
+      "router": { "origin": false }
+    }
+  }
+}

@@ -17,6 +17,7 @@ export async function POST(request: Request) {
       items,
       destLatitude = 19.076,
       destLongitude = 72.8777,
+      couponCode,
     } = body as {
       shopId: string
       itemTotal?: number
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
       items: { productId: string; quantity: number; price: number }[]
       destLatitude?: number
       destLongitude?: number
+      couponCode?: string
     }
 
     if (!shopId || !items?.length || !address) {
@@ -37,22 +39,14 @@ export async function POST(request: Request) {
     }
 
     const session = await getSession()
-    let customerId = session?.userId
-
-    if (!customerId) {
-      const demoCustomer = await prisma.user.findFirst({
-        where: { phone: '9123456789' },
-        select: { id: true },
-      })
-      customerId = demoCustomer?.id
-    }
-
-    if (!customerId) {
+    if (!session) {
       return NextResponse.json(
-        { success: false, error: 'Customer session required. Please log in.' },
+        { success: false, error: 'Please log in to place an order.' },
         { status: 401 },
       )
     }
+
+    const customerId = session.userId
 
     const shop = await prisma.shop.findFirst({
       where: { OR: [{ id: shopId }, { slug: shopId }] },
@@ -109,18 +103,57 @@ export async function POST(request: Request) {
     const resolvedTip = Math.max(0, riderTip ?? 0)
 
     const newOrder = await prisma.$transaction(async (tx) => {
+      let appliedCouponCode: string | undefined
+      let discountAmount = 0
+      let orderItemTotal = verifiedTotal
+
+      if (couponCode) {
+        const coupon = await tx.coupon.findUnique({
+          where: { code: couponCode.trim().toUpperCase() },
+        })
+
+        if (!coupon || !coupon.isActive) {
+          throw new Error('Invalid or inactive coupon code')
+        }
+        if (coupon.expiresAt && coupon.expiresAt <= new Date()) {
+          throw new Error('This coupon has expired')
+        }
+        if (coupon.usedCount >= coupon.maxUses) {
+          throw new Error('This coupon has reached its usage limit')
+        }
+        if (verifiedTotal < coupon.minOrderValue) {
+          throw new Error(`Minimum order value of ₹${coupon.minOrderValue} required for this coupon`)
+        }
+
+        if (coupon.discountType === 'FLAT') {
+          discountAmount = Math.min(coupon.discountValue, verifiedTotal)
+        } else {
+          discountAmount = Math.min(verifiedTotal, (verifiedTotal * coupon.discountValue) / 100)
+        }
+
+        appliedCouponCode = coupon.code
+        orderItemTotal = Math.max(0, verifiedTotal - discountAmount)
+
+        await tx.coupon.update({
+          where: { id: coupon.id },
+          data: { usedCount: { increment: 1 } },
+        })
+      }
+
       const created = await tx.order.create({
         data: {
           orderNumber: generateOrderNumber(),
           customerId,
           shopId: shop.id,
-          totalPrice: verifiedTotal,
+          totalPrice: orderItemTotal,
           deliveryFee: resolvedDeliveryFee,
           riderTip: resolvedTip,
           deliveryAddress: address,
           deliveryInstruction: instruction?.trim() || null,
           destLatitude,
           destLongitude,
+          appliedCouponCode,
+          discountAmount,
           status: 'PENDING',
           items: { create: lineItems },
           statusHistory: {

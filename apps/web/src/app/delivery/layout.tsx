@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { MapPin, Package, Navigation, Wallet } from 'lucide-react'
+import { RoleGate } from '@/components/auth/RoleGate'
 
 export default function DeliveryLayout({
   children,
@@ -7,7 +8,8 @@ export default function DeliveryLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <RoleGate role="RABBITOR" redirectTo="/auth">
+      <div className="min-h-screen bg-gray-950 text-white">
       <header className="border-b border-gray-800">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-4">
           <div>
@@ -41,5 +43,6 @@ export default function DeliveryLayout({
         </div>
       </nav>
     </div>
+    </RoleGate>
   )
 }

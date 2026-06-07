@@ -47,8 +47,8 @@ export default async function DeliveryNavigatePage({ searchParams }: Props) {
 
       <LiveLocationBroadcaster
         orderId={orderId}
-        destLat={activeOrder.destLat}
-        destLng={activeOrder.destLng}
+        destLat={activeOrder.destLat ?? activeOrder.shopLat}
+        destLng={activeOrder.destLng ?? activeOrder.shopLng}
       />
 
       <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 text-sm">

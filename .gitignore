@@ -4,6 +4,10 @@ build/
 .next/
 .env
 .env.local
+.env.production
+.env.docker
+!.env.example
+!.env.production.example
 *.log
 .DS_Store
 coverage/

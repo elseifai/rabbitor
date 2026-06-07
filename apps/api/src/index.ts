@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { config, validateConfig } from "./config";
@@ -11,12 +12,35 @@ import { setupTrackingSocket } from "./socket/tracking";
 
 validateConfig();
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({ success: false, error: "Too many requests" });
+  },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({ success: false, error: "Too many requests" });
+  },
+});
+
 const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigins, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 
+app.use("/api/v1/auth", authLimiter);
+app.use("/api/v1/otp", authLimiter);
+app.use("/api/v1", apiLimiter);
 app.use("/api/v1", routes);
 
 app.use(errorHandler);

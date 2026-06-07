@@ -122,10 +122,10 @@ export function ShopSwiggyClient({
 
   const [activeCategory, setActiveCategory] = useState(meta.categories[0])
 
-  const { cartItems, addItem, updateQuantity } = useCart()
+  const { items, addItem, updateQuantity } = useCart()
 
   const getQty = (productId: string) =>
-    cartItems.find((i) => i.productId === productId)?.quantity ?? 0
+    items.find((i) => i.productId === productId)?.quantity ?? 0
 
   const updateQty = (product: CatalogShop['products'][number], delta: number) => {
     const current = getQty(product.id)
@@ -139,7 +139,7 @@ export function ShopSwiggyClient({
     if (current === 0) {
       addItem({
         productId: product.id,
-        shopId: shop.slug,
+        shopId: shop.id,
         shopName: shop.name,
         shopSlug: shop.slug,
         name: product.name,
@@ -158,7 +158,7 @@ export function ShopSwiggyClient({
     return extra.category === activeCategory
   })
 
-  const totalCartItems = cartItems.reduce((n, i) => n + i.quantity, 0)
+  const totalCartItems = items.reduce((n, i) => n + i.quantity, 0)
 
   return (
     <div className="relative mx-auto min-h-screen max-w-xl bg-white pb-32 font-sans text-slate-900 antialiased shadow-2xl">

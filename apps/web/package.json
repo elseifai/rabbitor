@@ -6,15 +6,18 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "echo \"No web tests yet\""
   },
   "dependencies": {
     "@rabbit/database": "workspace:*",
     "clsx": "^2.1.1",
+    "firebase": "^12.14.0",
     "jose": "^5.9.6",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
+    "razorpay": "^2.9.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",

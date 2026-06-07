@@ -1,356 +1,539 @@
-import { PrismaClient, UserRole } from '@prisma/client'
+/**
+ * Rabbit — comprehensive dev seed
+ *
+ * Test login: OTP `123456` for all seeded phones (API uses bcrypt OtpChallenge).
+ * Web dev mode also accepts `123456` after Send OTP (fixed DEV_OTP in web auth).
+ * Password login (vendor/rabbitor): `rabbit123`
+ */
+import { createHash } from 'crypto'
+import bcrypt from 'bcryptjs'
+import {
+  PrismaClient,
+  UserRole,
+  StoreType,
+  DiscountType,
+  KycStatus,
+} from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-const BASE_LAT = 19.1364
-const BASE_LNG = 72.8296
+const TEST_OTP = '123456'
+const PASSWORD = 'rabbit123'
+const SALT_ROUNDS = 10
 
-type SeedProduct = {
-  name: string
-  description: string
-  price: number
-  unit: string
-  stock?: number
+const passwordHash = bcrypt.hashSync(PASSWORD, SALT_ROUNDS)
+const otpHashBcrypt = bcrypt.hashSync(TEST_OTP, SALT_ROUNDS)
+const otpHashSha256 = createHash('sha256').update(TEST_OTP).digest('hex')
+
+const WEEKLY_HOURS = {
+  mon: { open: '07:00', close: '22:00' },
+  tue: { open: '07:00', close: '22:00' },
+  wed: { open: '07:00', close: '22:00' },
+  thu: { open: '07:00', close: '22:00' },
+  fri: { open: '07:00', close: '22:00' },
+  sat: { open: '07:00', close: '22:00' },
+  sun: { open: '07:00', close: '22:00' },
 }
 
-type SeedShop = {
+type ProductSeed = { name: string; price: number; unit: string; description?: string; image?: string }
+
+type ShopSeed = {
   slug: string
   name: string
+  storeType: StoreType
   category: string
   address: string
+  latitude: number
+  longitude: number
   image: string
-  lat: number
-  lng: number
-  fee: number
-  prep: number
-  minOrder?: number
-  products: SeedProduct[]
+  deliveryRadiusKm: number
+  minOrderValue: number
+  baseDeliveryFee: number
+  avgPrepMinutes: number
+  products: ProductSeed[]
 }
 
-const MARKETPLACE: SeedShop[] = [
-  {
-    slug: 'masoli-house',
-    name: 'Masoli House',
-    category: 'Premium Malvani Catch, Fresh Sea Fish, De-veined Prawns',
-    address: 'Royal Heights Galleria, Block C, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.006,
-    lng: BASE_LNG - 0.002,
-    fee: 40,
-    prep: 22,
-    products: [
-      {
-        name: 'Premium Surmai (Seer Fish) Steaks',
-        description:
-          'Meticulously scaled, lateral slit-cut ocean steaks, perfect for authentic fish fry.',
-        price: 490,
-        unit: '500g',
-      },
-      {
-        name: 'Fresh Cleaned Tiger Prawns',
-        description: 'Tail-on, completely de-veined crisp coastal medium prawns.',
-        price: 380,
-        unit: '250g',
-      },
-      {
-        name: 'White Pomfret Whole',
-        description: 'Premium grade whole white pomfret, completely gutted and pristine.',
-        price: 680,
-        unit: '1 kg',
-      },
-    ],
-  },
-  {
-    slug: '99-corner-cloud-kitchen',
-    name: '99 Corner Cloud Kitchen',
-    category: 'Gourmet Fast Food, Smashed Burgers, Peri Peri Rolls',
-    address: 'Arcade Junction, Basement Level 2, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.003,
-    lng: BASE_LNG + 0.004,
-    fee: 25,
-    prep: 18,
-    products: [
-      {
-        name: 'OG Smashed Double Cheese Burger',
-        description:
-          'Two juicy handmade patties, melted cheddar, signature house sauce, toasted brioche.',
-        price: 249,
-        unit: '1 unit',
-      },
-      {
-        name: 'Crispy Peri Peri Chicken Roll',
-        description:
-          'Flaky rumali flatbread loaded with hot pepper chicken tenders and spicy cream.',
-        price: 189,
-        unit: '1 unit',
-      },
-      {
-        name: 'Loaded Truffle Parmesan Fries',
-        description:
-          'Golden-fried potato batons laced with rich white truffle oil and shavings of cheese.',
-        price: 149,
-        unit: '1 box',
-      },
-    ],
-  },
-  {
-    slug: 'crown-warriors-organic-mart',
-    name: 'Crown Warriors Organic Mart',
-    category: 'Fresh Farm Staples, Cold-Pressed Oils, Premium Grains',
-    address: 'Sector 4 High Street Plaza, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.001,
-    lng: BASE_LNG - 0.006,
-    fee: 20,
-    prep: 30,
-    products: [
-      {
-        name: 'Cold-Pressed Mustard Oil (Kachi Ghani)',
-        description:
-          'Pure extract processed mechanically at low temperatures to lock natural sharpness.',
-        price: 210,
-        unit: '1 litre',
-      },
-      {
-        name: 'Organic Unpolished Basmati Rice',
-        description: 'Long-grain, premium aged aroma rice perfect for daily structural meals.',
-        price: 135,
-        unit: '1 kg',
-      },
-      {
-        name: 'Pure Himalayan Rock Salt Crystals',
-        description:
-          'Mineral-rich pink salt granules, pristine and naturally ground without synthetic processing.',
-        price: 85,
-        unit: '500g',
-      },
-    ],
-  },
-  {
-    slug: 'royal-coastal-seafood',
-    name: 'Royal Coastal Seafood Stall',
-    category: 'Sea Fish, Cleaned Shrimp, Marinated Fry',
-    address: 'Sector 4 Arcade, Main Market Block, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.008,
-    lng: BASE_LNG - 0.004,
-    fee: 35,
-    prep: 18,
-    products: [
-      {
-        name: 'Marinated Fish Fry Tikka',
-        description: 'Coated in authentic spices, ready to shallow fry instantly.',
-        price: 290,
-        unit: '400g',
-      },
-      {
-        name: 'Fresh Tiger Prawns (Medium)',
-        description: 'De-veined, deshelled, and tail-on crisp coastal medium prawns.',
-        price: 380,
-        unit: '250g',
-      },
-      {
-        name: 'Bombil (Bombay Duck) - Sun Dried',
-        description: 'Classic Konkan delicacy, lightly salted and air-dried for crispy fry.',
-        price: 220,
-        unit: '250g',
-      },
-    ],
-  },
+const SHOPS: ShopSeed[] = [
   {
     slug: 'sharma-kirana',
     name: 'Sharma Kirana Store',
-    category: 'Kirana, Staples, Household Essentials',
-    address: 'Sector 4 Arcade, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.002,
-    lng: BASE_LNG + 0.001,
-    fee: 20,
-    prep: 12,
+    storeType: StoreType.KIRANA,
+    category: 'Kirana & Daily Essentials',
+    address: 'Shop 12, SV Road, Andheri West, Mumbai',
+    latitude: 19.1196,
+    longitude: 72.8465,
+    image: 'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 100,
+    baseDeliveryFee: 20,
+    avgPrepMinutes: 10,
     products: [
-      {
-        name: 'Basmati Rice 1kg',
-        description: 'Premium long-grain basmati for daily meals.',
-        price: 120,
-        unit: 'kg',
-      },
-      {
-        name: 'Toor Dal 500g',
-        description: 'Farm-sourced protein staple.',
-        price: 85,
-        unit: 'gm',
-      },
-      {
-        name: 'Sunflower Oil 1L',
-        description: 'Refined oil for everyday cooking.',
-        price: 165,
-        unit: 'piece',
-      },
+      { name: 'Tata Salt 1kg', price: 22, unit: '1 kg', image: 'https://images.unsplash.com/photo-1518110925495-5fe2fda0442c?w=300&q=80' },
+      { name: 'Aashirvaad Atta 5kg', price: 260, unit: '5 kg', image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=300&q=80' },
+      { name: 'Amul Butter 500g', price: 280, unit: '500 g', image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=300&q=80' },
+      { name: 'Fortune Sunflower Oil 1L', price: 140, unit: '1 L', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=300&q=80' },
+      { name: 'Parle-G Biscuits', price: 10, unit: '1 pack', image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=300&q=80' },
+      { name: 'Maggi Noodles 4pack', price: 68, unit: '4 pack', image: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=300&q=80' },
+      { name: 'Ariel Detergent 1kg', price: 185, unit: '1 kg', image: 'https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=300&q=80' },
+      { name: 'Colgate Toothpaste', price: 65, unit: '1 tube', image: 'https://images.unsplash.com/photo-1559591937-abc2e768b6e5?w=300&q=80' },
+      { name: 'Lays Chips', price: 20, unit: '1 pack', image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=300&q=80' },
+      { name: 'Red Label Tea 250g', price: 115, unit: '250 g', image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&q=80' },
     ],
   },
   {
-    slug: 'walkwell-footwear',
-    name: 'WalkWell Footwear',
-    category: 'Footwear, Sandals, Sports Shoes',
-    address: 'Colaba Runway Store, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT - 0.015,
-    lng: BASE_LNG + 0.012,
-    fee: 25,
-    prep: 25,
+    slug: 'masoli-fish',
+    name: 'Masoli Fish Centre',
+    storeType: StoreType.FISH,
+    category: 'Fresh Fish & Seafood',
+    address: 'Fish Market Lane, Versova, Mumbai',
+    latitude: 19.121,
+    longitude: 72.848,
+    image: 'https://images.unsplash.com/photo-1534482421-64566f976cfa?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 200,
+    baseDeliveryFee: 30,
+    avgPrepMinutes: 15,
     products: [
-      {
-        name: 'Running Shoes',
-        description: 'Lightweight runners for Mumbai streets.',
-        price: 1299,
-        unit: 'pair',
-      },
-      {
-        name: 'Leather Sandals',
-        description: 'Handcrafted neighbourhood cobbler sandals.',
-        price: 699,
-        unit: 'pair',
-      },
+      { name: 'Rohu Fish 1kg', price: 220, unit: '1 kg', image: 'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=300&q=80' },
+      { name: 'Pomfret 500g', price: 320, unit: '500 g', image: 'https://images.unsplash.com/photo-1534482421-64566f976cfa?w=300&q=80' },
+      { name: 'Prawns 500g', price: 380, unit: '500 g', image: 'https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?w=300&q=80' },
+      { name: 'Surmai 1kg', price: 480, unit: '1 kg', image: 'https://images.unsplash.com/photo-1559847844-5315695dadae?w=300&q=80' },
+      { name: 'Bangda 1kg', price: 180, unit: '1 kg', image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=300&q=80' },
+      { name: 'Hilsa 500g', price: 420, unit: '500 g', image: 'https://images.unsplash.com/photo-1510130387422-82bed34b37e9?w=300&q=80' },
+      { name: 'Crab 1kg', price: 550, unit: '1 kg', image: 'https://images.unsplash.com/photo-1550950158-d0d960dff596?w=300&q=80' },
+      { name: 'Squid 500g', price: 280, unit: '500 g', image: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=300&q=80' },
     ],
   },
   {
-    slug: 'patel-vegetables',
-    name: 'Patel Sabzi Mandi',
-    category: 'Vegetables, Leafy Greens, Local Produce',
-    address: 'Sabzi Mandi Lane, Andheri West, Mumbai',
-    image:
-      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80',
-    lat: BASE_LAT + 0.004,
-    lng: BASE_LNG - 0.008,
-    fee: 15,
-    prep: 10,
+    slug: 'priya-veggies',
+    name: 'Priya Fresh Vegetables',
+    storeType: StoreType.VEGETABLE,
+    category: 'Fresh Vegetables',
+    address: 'Vegetable Mandi, Lokhandwala, Mumbai',
+    latitude: 19.118,
+    longitude: 72.845,
+    image: 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 80,
+    baseDeliveryFee: 15,
+    avgPrepMinutes: 8,
     products: [
-      {
-        name: 'Tomatoes',
-        description: 'Farm-fresh red tomatoes.',
-        price: 40,
-        unit: 'kg',
-      },
-      {
-        name: 'Palak Bunch',
-        description: 'Crisp leafy spinach bundle.',
-        price: 25,
-        unit: 'piece',
-      },
-      {
-        name: 'Bhindi (Okra)',
-        description: 'Tender green okra pods, sorted and washed.',
-        price: 55,
-        unit: 'kg',
-      },
+      { name: 'Tomato 1kg', price: 40, unit: '1 kg', image: 'https://images.unsplash.com/photo-1546470427-e26264be0b0d?w=300&q=80' },
+      { name: 'Potato 1kg', price: 35, unit: '1 kg', image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=300&q=80' },
+      { name: 'Onion 1kg', price: 50, unit: '1 kg', image: 'https://images.unsplash.com/photo-1580201092675-a0a6a6cafbb1?w=300&q=80' },
+      { name: 'Spinach 500g', price: 25, unit: '500 g', image: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=300&q=80' },
+      { name: 'Capsicum 500g', price: 60, unit: '500 g', image: 'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=300&q=80' },
+      { name: 'Carrot 1kg', price: 55, unit: '1 kg', image: 'https://images.unsplash.com/photo-1447175008436-054170c2e979?w=300&q=80' },
+      { name: 'Cucumber 1kg', price: 30, unit: '1 kg', image: 'https://images.unsplash.com/photo-1449300079323-02e209d9d3a6?w=300&q=80' },
+      { name: 'Bitter Gourd 500g', price: 45, unit: '500 g', image: 'https://images.unsplash.com/photo-1503023345310-bd7c1de61c7d?w=300&q=80' },
+      { name: 'Lemon 6pcs', price: 20, unit: '6 pcs', image: 'https://images.unsplash.com/photo-1587486913049-53fc88980cfc?w=300&q=80' },
+    ],
+  },
+  {
+    slug: 'city-pharmacy',
+    name: 'City Pharmacy Plus',
+    storeType: StoreType.PHARMACY,
+    category: 'Pharmacy & Wellness',
+    address: 'Near Station, Andheri West, Mumbai',
+    latitude: 19.117,
+    longitude: 72.844,
+    image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 50,
+    baseDeliveryFee: 10,
+    avgPrepMinutes: 5,
+    products: [
+      { name: 'Paracetamol 500mg strip', price: 25, unit: '1 strip', image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80' },
+      { name: 'Dettol 250ml', price: 115, unit: '250 ml', image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=300&q=80' },
+      { name: 'Band-Aid box', price: 85, unit: '1 box', image: 'https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=300&q=80' },
+      { name: 'ORS Sachet 5pcs', price: 45, unit: '5 pcs', image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80' },
+      { name: 'Vitamin C tablets', price: 180, unit: '1 bottle', image: 'https://images.unsplash.com/photo-1550572017-edd951b55104?w=300&q=80' },
+      { name: 'Glucon-D 200g', price: 95, unit: '200 g', image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300&q=80' },
+    ],
+  },
+  {
+    slug: 'mumbai-bakery',
+    name: 'Mumbai Bakery House',
+    storeType: StoreType.BAKERY,
+    category: 'Bakery & Sweets',
+    address: 'Linking Road, Bandra, Mumbai',
+    latitude: 19.1188,
+    longitude: 72.846,
+    image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 100,
+    baseDeliveryFee: 20,
+    avgPrepMinutes: 12,
+    products: [
+      { name: 'Bread Loaf', price: 45, unit: '1 loaf', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=300&q=80' },
+      { name: 'Butter Croissant', price: 35, unit: '1 pc', image: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=300&q=80' },
+      { name: 'Chocolate Cake', price: 380, unit: '500 g', image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=300&q=80' },
+      { name: 'Pav (6pcs)', price: 25, unit: '6 pcs', image: 'https://images.unsplash.com/photo-1586444248902-2f64eddc13df?w=300&q=80' },
+      { name: 'Cookies Box', price: 120, unit: '1 box', image: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=300&q=80' },
+      { name: 'Muffin', price: 40, unit: '1 pc', image: 'https://images.unsplash.com/photo-1558303237-9bdc6c1f1edd?w=300&q=80' },
+    ],
+  },
+  {
+    slug: 'om-dairy',
+    name: 'Om Dairy Fresh',
+    storeType: StoreType.DAIRY,
+    category: 'Dairy & Milk Products',
+    address: 'DN Nagar, Andheri West, Mumbai',
+    latitude: 19.12,
+    longitude: 72.847,
+    image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 80,
+    baseDeliveryFee: 15,
+    avgPrepMinutes: 10,
+    products: [
+      { name: 'Full Cream Milk 1L', price: 68, unit: '1 L', image: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=300&q=80' },
+      { name: 'Paneer 200g', price: 89, unit: '200 g', image: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?w=300&q=80' },
+      { name: 'Dahi 400g', price: 45, unit: '400 g', image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=300&q=80' },
+      { name: 'Ghee 500ml', price: 320, unit: '500 ml', image: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=300&q=80' },
+      { name: 'Curd 1kg', price: 95, unit: '1 kg', image: 'https://images.unsplash.com/photo-1571212515416-fef01fc43637?w=300&q=80' },
+      { name: 'Lassi 200ml', price: 30, unit: '200 ml', image: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=300&q=80' },
+    ],
+  },
+  {
+    slug: 'quick-mart',
+    name: 'Quick Mart General',
+    storeType: StoreType.GENERAL,
+    category: 'General Store',
+    address: 'Versova, Andheri, Mumbai',
+    latitude: 19.1215,
+    longitude: 72.849,
+    image: 'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=400',
+    deliveryRadiusKm: 15,
+    minOrderValue: 50,
+    baseDeliveryFee: 20,
+    avgPrepMinutes: 8,
+    products: [
+      { name: 'Mineral Water 1L', price: 20, unit: '1 L', image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=300&q=80' },
+      { name: 'Notebook', price: 45, unit: '1 pc', image: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=300&q=80' },
+      { name: 'Pen Set', price: 30, unit: '1 set', image: 'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?w=300&q=80' },
+      { name: 'Matchbox', price: 5, unit: '1 box', image: 'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=300&q=80' },
+      { name: 'Candles 10pcs', price: 35, unit: '10 pcs', image: 'https://images.unsplash.com/photo-1602607767773-a73c903a3d7b?w=300&q=80' },
+      { name: 'Tissue Box', price: 99, unit: '1 box', image: 'https://images.unsplash.com/photo-1584556812952-905ffd0c611a?w=300&q=80' },
     ],
   },
 ]
 
+const TEST_PHONES = [
+  '9000000000',
+  '9111111111',
+  '9222222222',
+  '9333333333',
+  '9444444444',
+  '9555555555',
+  '9666666666',
+  '9777777777',
+  '9888888888',
+]
+
+async function purge() {
+  await prisma.orderStatusEvent.deleteMany()
+  await prisma.orderItem.deleteMany()
+  await prisma.order.deleteMany()
+  await prisma.kycDocument.deleteMany()
+  await prisma.coupon.deleteMany()
+  await prisma.otpChallenge.deleteMany()
+  await prisma.product.deleteMany()
+  await prisma.shop.deleteMany()
+  await prisma.vendorProfile.deleteMany()
+  await prisma.rabbitorProfile.deleteMany()
+  await prisma.user.deleteMany()
+}
+
+async function seedOtpChallenges() {
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+  for (const phone of TEST_PHONES) {
+    await prisma.otpChallenge.create({
+      data: { phone, codeHash: otpHashBcrypt, expiresAt, verified: false },
+    })
+    await prisma.otpChallenge.create({
+      data: { phone, codeHash: otpHashSha256, expiresAt, verified: false },
+    })
+  }
+}
+
 async function main() {
-  console.log('🧹 Purging obsolete database rows cleanly...')
-  await prisma.orderStatusEvent.deleteMany({})
-  await prisma.orderItem.deleteMany({})
-  await prisma.order.deleteMany({})
-  await prisma.product.deleteMany({})
-  await prisma.shop.deleteMany({})
+  console.log('🧹 Clearing existing data…')
+  await purge()
 
-  console.log('👤 Provisioning platform users...')
-  const merchant = await prisma.user.upsert({
-    where: { phone: '9876543210' },
-    update: { name: 'Raj Sharma', role: UserRole.MERCHANT },
-    create: {
-      name: 'Raj Sharma',
-      phone: '9876543210',
-      role: UserRole.MERCHANT,
-    },
-  })
-
-  await prisma.user.upsert({
-    where: { phone: '9123456789' },
-    update: { name: 'Demo Customer' },
-    create: {
-      name: 'Demo Customer',
-      phone: '9123456789',
-      role: UserRole.CUSTOMER,
-    },
-  })
-
-  await prisma.user.upsert({
-    where: { phone: '9988776655' },
-    update: { name: 'Rahul Kumar', role: UserRole.DELIVERY_PARTNER },
-    create: {
-      name: 'Rahul Kumar',
-      phone: '9988776655',
-      role: UserRole.DELIVERY_PARTNER,
-    },
-  })
-
-  await prisma.user.upsert({
-    where: { phone: '9111111111' },
-    update: { name: 'Platform Admin', role: UserRole.ADMIN },
-    create: {
-      name: 'Platform Admin',
-      phone: '9111111111',
+  console.log('👤 Creating users…')
+  const admin = await prisma.user.create({
+    data: {
+      name: 'Rahul Admin',
+      phone: '9000000000',
       role: UserRole.ADMIN,
+      passwordHash,
+      displayName: 'Rahul Admin',
     },
   })
 
-  console.log('🚀 Spawning production-tier marketplace assets...')
-
-  let skuCount = 0
-  for (const vendor of MARKETPLACE) {
-    const shop = await prisma.shop.create({
-      data: {
-        name: vendor.name,
-        slug: vendor.slug,
-        ownerId: merchant.id,
-        category: vendor.category,
-        address: vendor.address,
-        image: vendor.image,
-        latitude: vendor.lat,
-        longitude: vendor.lng,
-        isActive: true,
-        minOrderValue: vendor.minOrder ?? 99,
-        baseDeliveryFee: vendor.fee,
-        avgPrepMinutes: vendor.prep,
+  const vendorRamesh = await prisma.user.create({
+    data: {
+      name: 'Ramesh Sharma',
+      phone: '9111111111',
+      role: UserRole.VENDOR,
+      passwordHash,
+      displayName: 'Ramesh Sharma',
+      vendorProfile: {
+        create: {
+          businessName: 'Sharma Kirana Store',
+          kycStatus: KycStatus.VERIFIED,
+          subscriptionTier: 'SILVER',
+        },
       },
-    })
+    },
+    include: { vendorProfile: true },
+  })
 
-    await prisma.product.createMany({
-      data: vendor.products.map((p) => ({
-        shopId: shop.id,
-        name: p.name,
-        description: p.description,
-        price: p.price,
-        unit: p.unit,
-        stock: p.stock ?? 80,
-        isAvailable: true,
-      })),
-    })
+  const vendorAbdul = await prisma.user.create({
+    data: {
+      name: 'Abdul Fish',
+      phone: '9222222222',
+      role: UserRole.VENDOR,
+      passwordHash,
+      displayName: 'Abdul Fish',
+      vendorProfile: {
+        create: {
+          businessName: 'Masoli Fish Centre',
+          kycStatus: KycStatus.VERIFIED,
+        },
+      },
+    },
+    include: { vendorProfile: true },
+  })
 
-    skuCount += vendor.products.length
+  const vendorPriya = await prisma.user.create({
+    data: {
+      name: 'Priya Veggies',
+      phone: '9333333333',
+      role: UserRole.VENDOR,
+      passwordHash,
+      displayName: 'Priya Veggies',
+      vendorProfile: {
+        create: {
+          businessName: 'Priya Fresh Vegetables',
+          kycStatus: KycStatus.VERIFIED,
+        },
+      },
+    },
+    include: { vendorProfile: true },
+  })
+
+  await prisma.user.create({
+    data: {
+      name: 'Suresh Kumar',
+      phone: '9444444444',
+      role: UserRole.RABBITOR,
+      passwordHash,
+      displayName: 'Suresh Kumar',
+      rabbitorProfile: {
+        create: {
+          isAvailable: true,
+          isVerified: true,
+          currentLat: 19.076,
+          currentLng: 72.877,
+        },
+      },
+    },
+  })
+
+  await prisma.user.create({
+    data: {
+      name: 'Mohan Delivery',
+      phone: '9555555555',
+      role: UserRole.RABBITOR,
+      passwordHash,
+      displayName: 'Mohan Delivery',
+      rabbitorProfile: {
+        create: {
+          isAvailable: true,
+          isVerified: true,
+          currentLat: 19.079,
+          currentLng: 72.88,
+        },
+      },
+    },
+  })
+
+  await prisma.user.create({
+    data: {
+      name: 'Aarav Patel',
+      phone: '9666666666',
+      role: UserRole.CUSTOMER,
+      displayName: 'Aarav Patel',
+    },
+  })
+
+  await prisma.user.create({
+    data: {
+      name: 'Sneha Joshi',
+      phone: '9777777777',
+      role: UserRole.CUSTOMER,
+      displayName: 'Sneha Joshi',
+    },
+  })
+
+  await prisma.user.create({
+    data: {
+      name: 'Kiran Mehta',
+      phone: '9888888888',
+      role: UserRole.CUSTOMER,
+      displayName: 'Kiran Mehta',
+    },
+  })
+
+  console.log('🏪 Creating shops & products…')
+  const vendorMap: Record<string, { userId: string; vendorId: string }> = {
+    'sharma-kirana': {
+      userId: vendorRamesh.id,
+      vendorId: vendorRamesh.vendorProfile!.id,
+    },
+    'masoli-fish': {
+      userId: vendorAbdul.id,
+      vendorId: vendorAbdul.vendorProfile!.id,
+    },
+    'priya-veggies': {
+      userId: vendorPriya.id,
+      vendorId: vendorPriya.vendorProfile!.id,
+    },
+    'city-pharmacy': {
+      userId: vendorRamesh.id,
+      vendorId: vendorRamesh.vendorProfile!.id,
+    },
+    'mumbai-bakery': {
+      userId: vendorRamesh.id,
+      vendorId: vendorRamesh.vendorProfile!.id,
+    },
+    'om-dairy': {
+      userId: vendorPriya.id,
+      vendorId: vendorPriya.vendorProfile!.id,
+    },
+    'quick-mart': {
+      userId: vendorRamesh.id,
+      vendorId: vendorRamesh.vendorProfile!.id,
+    },
   }
 
-  console.log('📦 Mapping stock item matrices (SKUs) into tables...')
-  console.log(
-    `✨ Datastore matrix provisioned beautifully — ${MARKETPLACE.length} vendors, ${skuCount} SKUs.`,
-  )
-  console.log(
-    '  Merchant: 9876543210 | Customer: 9123456789 | Rider: 9988776655 | Admin: 9111111111 | Dev OTP: 123456',
-  )
+  let productCount = 0
+  for (const shop of SHOPS) {
+    const owner = vendorMap[shop.slug]
+    await prisma.shop.create({
+      data: {
+        name: shop.name,
+        slug: shop.slug,
+        storeType: shop.storeType,
+        category: shop.category,
+        address: shop.address,
+        latitude: shop.latitude,
+        longitude: shop.longitude,
+        image: shop.image,
+        isActive: true,
+        deliveryRadiusKm: shop.deliveryRadiusKm,
+        minOrderValue: shop.minOrderValue,
+        baseDeliveryFee: shop.baseDeliveryFee,
+        avgPrepMinutes: shop.avgPrepMinutes,
+        openingHours: WEEKLY_HOURS,
+        ownerId: owner.userId,
+        vendorId: owner.vendorId,
+        products: {
+          create: shop.products.map((p) => ({
+            name: p.name,
+            description: p.description ?? `${p.name} — fresh from ${shop.name}`,
+            price: p.price,
+            unit: p.unit,
+            image: p.image,
+            stock: 100,
+            isAvailable: true,
+          })),
+        },
+      },
+    })
+    productCount += shop.products.length
+  }
+
+  console.log('🎟️ Creating coupons…')
+  await prisma.coupon.createMany({
+    data: [
+      {
+        code: 'WELCOME50',
+        discountType: DiscountType.FLAT,
+        discountValue: 50,
+        minOrderValue: 199,
+        maxUses: 1000,
+        isActive: true,
+      },
+      {
+        code: 'RABBIT20',
+        discountType: DiscountType.PERCENT,
+        discountValue: 20,
+        minOrderValue: 299,
+        maxUses: 500,
+        isActive: true,
+      },
+      {
+        code: 'FISH100',
+        discountType: DiscountType.FLAT,
+        discountValue: 100,
+        minOrderValue: 400,
+        maxUses: 200,
+        isActive: true,
+      },
+    ],
+  })
+
+  console.log('📢 Creating ads…')
+  await prisma.ad.deleteMany()
+  await prisma.ad.createMany({
+    data: [
+      {
+        title: 'Welcome Offer',
+        placement: 'HOME_BANNER',
+        imageUrl:
+          'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80',
+        linkUrl: '/shops',
+        isActive: true,
+      },
+      {
+        title: 'Fresh Fish Today',
+        placement: 'SHOP_PAGE',
+        imageUrl:
+          'https://images.unsplash.com/photo-1534482421-64566f976cfa?w=800&q=80',
+        linkUrl: '/shops?category=fish',
+        isActive: true,
+      },
+      {
+        title: 'Free Delivery',
+        placement: 'HOME_STRIP',
+        imageUrl:
+          'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=800&q=80',
+        linkUrl: '/shops',
+        isActive: true,
+      },
+    ],
+  })
+
+  console.log('🔐 Seeding OTP challenges (123456)…')
+  await seedOtpChallenges()
+
+  console.log('')
+  console.log('✅ Seed complete!')
+  console.log(`   Admin:     ${admin.phone}`)
+  console.log(`   Shops:     ${SHOPS.length} | Products: ${productCount} | Coupons: 3`)
+  console.log('   OTP:       123456 (all test phones)')
+  console.log('   Password:  rabbit123 (admin, vendors, rabbitors)')
+  console.log('')
+  console.log('   Customer:  9666666666 | Merchant (Kirana): 9111111111')
+  console.log('   Merchant (Fish): 9222222222 | Rabbitor: 9444444444')
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Crash triggered during database hydration execution sequence:', e)
+    console.error('❌ Seed failed:', e)
     process.exit(1)
   })
   .finally(async () => {

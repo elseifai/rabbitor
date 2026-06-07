@@ -1,13 +1,20 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Rabbit, ShoppingBag, MapPin, Menu } from 'lucide-react'
+import { Rabbit, ShoppingBag, MapPin, Menu, ClipboardList } from 'lucide-react'
 import { useLocationStore, useCartStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { getSessionAction } from '@/actions/auth'
 
 export function SiteHeader() {
   const location = useLocationStore((s) => s.location)
   const itemCount = useCartStore((s) => s.itemCount())
+  const [loggedIn, setLoggedIn] = useState(false)
+
+  useEffect(() => {
+    getSessionAction().then((session) => setLoggedIn(Boolean(session)))
+  }, [])
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/90 backdrop-blur-md">
@@ -33,6 +40,15 @@ export function SiteHeader() {
         </button>
 
         <nav className="flex items-center gap-1 sm:gap-2">
+          {loggedIn && (
+            <Link
+              href="/orders"
+              className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 md:inline-flex"
+            >
+              <ClipboardList className="h-4 w-4" />
+              My Orders
+            </Link>
+          )}
           <Link
             href="/merchant"
             className="hidden rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 md:inline-block"

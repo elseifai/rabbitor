@@ -13,13 +13,49 @@ import {
   BellOff,
   Milestone,
   ShoppingBag,
+  Banknote,
+  Smartphone,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react'
 import { useLocationStore } from '@/store'
 import { getDeliveryQuote } from '@/actions/shops'
+import { getSessionAction } from '@/actions/auth'
 import { SAVED_LOCATIONS } from '@/lib/constants'
+import { loadRazorpayScript } from '@/lib/razorpay'
+import { AdBanner } from '@/components/ads/AdBanner'
 
 const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
+const RAZORPAY_ENABLED = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
+
+type PaymentMethod = 'cod' | 'upi' | 'card'
+
+const PAYMENT_OPTIONS: {
+  id: PaymentMethod
+  label: string
+  description: string
+  icon: typeof Banknote
+}[] = [
+  {
+    id: 'cod',
+    label: 'Cash on Delivery',
+    description: 'Pay when your order arrives',
+    icon: Banknote,
+  },
+  {
+    id: 'upi',
+    label: 'UPI',
+    description: 'Pay instantly via UPI',
+    icon: Smartphone,
+  },
+  {
+    id: 'card',
+    label: 'Card',
+    description: 'Debit or credit card',
+    icon: CreditCard,
+  },
+]
 
 function instructionLabel(key: string | null): string | undefined {
   if (key === 'gate') return 'Leave at Gate'
@@ -29,7 +65,7 @@ function instructionLabel(key: string | null): string | undefined {
 
 export default function DynamicCheckoutPage() {
   const router = useRouter()
-  const { cartItems, shopId, getCartTotal, clearCart, hydrated } = useCart()
+  const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
   const location = useLocationStore((s) => s.location)
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
@@ -37,79 +73,286 @@ export default function DynamicCheckoutPage() {
   const [isPlacing, setIsPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deliveryFee, setDeliveryFee] = useState(DEFAULT_DELIVERY_FEE)
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
+  const [discountAmount, setDiscountAmount] = useState(0)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [applyingCoupon, setApplyingCoupon] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
+  const [deliveryAddress, setDeliveryAddress] = useState(
+    'Royal Heights, Apartment 402, Sector 4, Mumbai, MH',
+  )
+  const [toast, setToast] = useState<string | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
+  const [orderNumber, setOrderNumber] = useState<string | null>(null)
 
-  const itemTotal = getCartTotal()
+  const visiblePaymentOptions = PAYMENT_OPTIONS.filter(
+    (o) => o.id === 'cod' || RAZORPAY_ENABLED,
+  )
+
+  const itemTotal = total()
   const partnerTip = selectedTip ?? 0
-  const grandTotal = itemTotal + deliveryFee + partnerTip
+  const grandTotal = Math.max(0, itemTotal - discountAmount) + deliveryFee + partnerTip
 
-  const addressLine = 'Royal Heights, Apartment 402, Sector 4, Mumbai, MH'
+  const addressLine = deliveryAddress
   const lat = location?.latitude ?? SAVED_LOCATIONS[0].latitude
   const lng = location?.longitude ?? SAVED_LOCATIONS[0].longitude
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
 
   useEffect(() => {
-    if (!shopId || cartItems.length === 0) return
+    getSessionAction().then((session) => {
+      setAuthChecked(true)
+      if (!session) router.push('/auth?redirect=/checkout')
+    })
+  }, [router])
+
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    if (!shopId || items.length === 0) return
     getDeliveryQuote({ shopId, lat, lng, subtotal: itemTotal })
       .then((q) => setDeliveryFee(q.deliveryFee))
       .catch(() => setDeliveryFee(DEFAULT_DELIVERY_FEE))
-  }, [shopId, lat, lng, itemTotal, cartItems.length])
+  }, [shopId, lat, lng, itemTotal, items.length])
+
+  useEffect(() => {
+    if (!hydrated || !shopId || items.length === 0) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`)
+        const json = await res.json()
+        if (!json.success || cancelled) return
+
+        const validIds = new Set(
+          (json.data as Array<{ id: string; isAvailable: boolean }>)
+            .filter((p) => p.isAvailable)
+            .map((p) => p.id),
+        )
+
+        const stale = items.filter((item) => !validIds.has(item.productId))
+        if (stale.length > 0 && !cancelled) {
+          stale.forEach((item) => removeItem(item.productId))
+          setError(
+            'Some items in your cart are no longer available and were removed. Add items again from the shop.',
+          )
+        }
+      } catch {
+        // ignore validation errors — order API will validate again
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hydrated, shopId, items, removeItem])
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return
+    setApplyingCoupon(true)
+    setCouponError(null)
+    try {
+      const res = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode.trim(), cartTotal: itemTotal }),
+      })
+      const json = await res.json()
+      if (!json.success) {
+        setAppliedCoupon(null)
+        setDiscountAmount(0)
+        setCouponError(json.error ?? 'Invalid coupon')
+        return
+      }
+      setAppliedCoupon(json.data.code as string)
+      setDiscountAmount(json.data.discountAmount as number)
+    } catch {
+      setCouponError('Could not validate coupon')
+    } finally {
+      setApplyingCoupon(false)
+    }
+  }
+
+  const finishOrder = (orderId: string, placedOrderNumber?: string) => {
+    setOrderPlacedId(orderId)
+    if (placedOrderNumber) setOrderNumber(placedOrderNumber)
+    router.replace(`/track/${orderId}`)
+  }
+
+  const orderPayload = {
+    shopId,
+    deliveryFee,
+    riderTip: partnerTip,
+    address: addressLine,
+    instruction: instructionLabel(selectedInstruction),
+    destLatitude: lat,
+    destLongitude: lng,
+    couponCode: appliedCoupon ?? undefined,
+    paymentMethod,
+    items: items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  }
 
   const handlePlaceOrder = async () => {
-    if (cartItems.length === 0 || !shopId) return
+    if (items.length === 0 || !shopId) return
+    if (!deliveryAddress.trim()) {
+      setError('Please enter a delivery address.')
+      return
+    }
     setIsPlacing(true)
     setError(null)
 
+    let method = paymentMethod
+    if ((method === 'upi' || method === 'card') && !RAZORPAY_ENABLED) {
+      setToast('Online payment not available. Defaulting to Cash on Delivery.')
+      method = 'cod'
+    }
+
+    const payload = { ...orderPayload, address: deliveryAddress.trim(), paymentMethod: method }
+
     try {
-      const response = await fetch('/api/checkout', {
+      const response = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopId,
-          itemTotal,
-          deliveryFee,
-          riderTip: partnerTip,
-          grandTotal,
-          address: addressLine,
-          instruction: instructionLabel(selectedInstruction),
-          destLatitude: lat,
-          destLongitude: lng,
-          items: cartItems.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: item.price,
-          })),
-        }),
+        body: JSON.stringify(payload),
       })
 
       const json = await response.json()
       if (!json.success) {
         if (response.status === 401) {
-          router.push('/login?redirect=/checkout')
+          setError(json.error ?? 'Please log in again.')
+          router.push('/auth?redirect=/checkout')
           return
         }
         setError(json.error ?? 'Order failed. Please try again.')
         return
       }
 
-      clearCart()
-      router.push(`/track/${json.orderId}`)
+      const orderId = json.orderId as string
+      const placedNum = json.orderNumber as string | undefined
+
+      if (method === 'cod') {
+        finishOrder(orderId, placedNum)
+        return
+      }
+
+      try {
+        const paymentRes = await fetch('/api/payments/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId }),
+        })
+        const paymentJson = await paymentRes.json()
+
+        if (!paymentJson.success) {
+          finishOrder(orderId, placedNum)
+          return
+        }
+
+        const paymentData = paymentJson.data as {
+          razorpayOrderId: string
+          amount: number
+          currency: string
+          key: string
+        }
+
+        const razorpayKey =
+          paymentData.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
+        if (!razorpayKey) {
+          finishOrder(orderId, placedNum)
+          return
+        }
+
+        const scriptLoaded = await loadRazorpayScript()
+        if (!scriptLoaded) {
+          finishOrder(orderId, placedNum)
+          return
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          const rzp = new window.Razorpay({
+            key: razorpayKey,
+            amount: paymentData.amount,
+            currency: paymentData.currency,
+            name: 'Rabbit',
+            description: 'Order payment',
+            order_id: paymentData.razorpayOrderId,
+            theme: { color: '#FF6B35' },
+            handler: async (razorpayResponse) => {
+              try {
+                const verifyRes = await fetch('/api/payments/verify', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpayOrderId: razorpayResponse.razorpay_order_id,
+                    razorpayPaymentId: razorpayResponse.razorpay_payment_id,
+                    razorpaySignature: razorpayResponse.razorpay_signature,
+                  }),
+                })
+                const verifyJson = await verifyRes.json()
+                if (!verifyJson.success) {
+                  reject(new Error(verifyJson.error?.message ?? verifyJson.error ?? 'Payment verification failed'))
+                  return
+                }
+                finishOrder(orderId, placedNum)
+                resolve()
+              } catch (err) {
+                reject(err)
+              }
+            },
+            modal: {
+              ondismiss: () => reject(new Error('Payment cancelled')),
+            },
+          })
+          rzp.open()
+        })
+      } catch {
+        finishOrder(orderId, placedNum)
+      }
     } catch (err) {
       console.error('Order processing failed:', err)
-      setError('Something went wrong. Please try again.')
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setIsPlacing(false)
     }
   }
 
-  if (!hydrated) {
+  if (!hydrated || !authChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] text-sm font-bold text-slate-400">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
         Loading basket…
       </div>
     )
   }
 
-  if (cartItems.length === 0) {
+  if (orderPlacedId) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] px-6 font-sans text-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
+          <CheckCircle2 className="h-12 w-12 text-[#0C831F]" />
+        </div>
+        <h1 className="mt-6 text-2xl font-black text-slate-900">Order Placed! 🐰</h1>
+        {orderNumber && (
+          <p className="mt-2 text-sm font-semibold text-[#FF6B35]">#{orderNumber}</p>
+        )}
+        <p className="mt-2 text-sm text-slate-500">Taking you to live order tracking…</p>
+        <Loader2 className="mt-6 h-6 w-6 animate-spin text-[#FF6B35]" />
+      </div>
+    )
+  }
+
+  if (items.length === 0 && !isPlacing) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] px-4 font-sans">
         <ShoppingBag className="h-12 w-12 text-slate-300" />
@@ -143,9 +386,16 @@ export default function DynamicCheckoutPage() {
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#FF6B35]/10 bg-[#FFF8F5] text-[#FF6B35]">
             <MapPin className="h-5 w-5" />
           </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-black text-slate-900">Delivering to Home</h3>
-            <p className="text-xs font-semibold leading-relaxed text-slate-500">{addressLine}</p>
+          <div className="min-w-0 flex-1 space-y-2">
+            <h3 className="text-sm font-black text-slate-900">Delivery Address</h3>
+            <textarea
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              rows={2}
+              required
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+              placeholder="Enter full delivery address"
+            />
           </div>
         </div>
 
@@ -154,7 +404,7 @@ export default function DynamicCheckoutPage() {
             Your Basket
           </h3>
           <div className="divide-y divide-slate-50">
-            {cartItems.map((item) => (
+            {items.map((item) => (
               <div
                 key={item.productId}
                 className="flex justify-between py-2.5 text-xs font-bold"
@@ -236,6 +486,77 @@ export default function DynamicCheckoutPage() {
 
         <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
+            Coupon Code
+          </h3>
+          <div className="flex gap-2">
+            <input
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              placeholder="Enter code"
+              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold uppercase"
+            />
+            <button
+              type="button"
+              onClick={() => void handleApplyCoupon()}
+              disabled={applyingCoupon || !couponCode.trim()}
+              className="rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black uppercase text-white disabled:opacity-40"
+            >
+              {applyingCoupon ? '…' : 'Apply'}
+            </button>
+          </div>
+          {couponError && (
+            <p className="text-xs font-semibold text-red-600">{couponError}</p>
+          )}
+          {appliedCoupon && discountAmount > 0 && (
+            <p className="text-xs font-bold text-emerald-700">
+              {appliedCoupon} applied — you save ₹{discountAmount}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
+          <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
+            Payment Method
+          </h3>
+          <div className="space-y-2">
+            {visiblePaymentOptions.map((option) => {
+              const Icon = option.icon
+              const selected = paymentMethod === option.id
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setPaymentMethod(option.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all ${
+                    selected
+                      ? 'border-[#FF6B35] bg-[#FFF8F5]'
+                      : 'border-slate-100 bg-slate-50/50'
+                  }`}
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                      selected ? 'bg-[#FF6B35] text-white' : 'bg-white text-slate-500'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-900">{option.label}</p>
+                    <p className="text-[11px] font-semibold text-slate-500">{option.description}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {paymentMethod === 'cod' && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+              Pay on Delivery — you&apos;ll pay ₹{grandTotal} in cash when your order arrives.
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
+          <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
             Bill Details
           </h3>
           <div className="space-y-2.5 text-xs font-bold text-slate-600">
@@ -243,6 +564,12 @@ export default function DynamicCheckoutPage() {
               <span>Item Total</span>
               <span className="font-extrabold text-slate-900">₹{itemTotal}</span>
             </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span>Coupon Discount</span>
+                <span className="font-extrabold">-₹{discountAmount}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Delivery Partner Fee</span>
               <span className="font-extrabold text-slate-900">₹{deliveryFee}</span>
@@ -268,18 +595,37 @@ export default function DynamicCheckoutPage() {
         {error && (
           <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-600">{error}</p>
         )}
+        {toast && (
+          <p className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-xl rounded-xl bg-[#0C831F] px-4 py-3 text-center text-sm font-bold text-white shadow-lg">
+            {toast}
+          </p>
+        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-xl border-t bg-white p-4 shadow-md">
+        <AdBanner placement="CHECKOUT_PAGE" className="mb-3 h-20 w-full" />
         <button
           type="button"
           onClick={() => void handlePlaceOrder()}
-          disabled={isPlacing || cartItems.length === 0}
+          disabled={isPlacing || items.length === 0 || !deliveryAddress.trim()}
           className="flex w-full items-center justify-between rounded-2xl bg-[#FF6B35] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-base font-black">₹{grandTotal}</span>
           <span className="flex items-center gap-1.5">
-            {isPlacing ? 'Processing...' : 'Place Order'} <CreditCard className="h-4 w-4" />
+            {isPlacing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : paymentMethod === 'cod' ? (
+              <>
+                Place Order · Pay on Delivery <Banknote className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Pay Now <CreditCard className="h-4 w-4" />
+              </>
+            )}
           </span>
         </button>
       </div>

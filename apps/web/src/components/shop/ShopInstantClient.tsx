@@ -26,7 +26,7 @@ export function ShopInstantClient({ shop }: { shop: CatalogShop }) {
     if (current === 0) {
       addItem({
         productId: product.id,
-        shopId: shop.slug,
+        shopId: shop.id,
         shopName: shop.name,
         shopSlug: shop.slug,
         name: product.name,

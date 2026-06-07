@@ -16,10 +16,24 @@
     "db:push": "pnpm --filter @rabbit/database push",
     "db:studio": "pnpm --filter @rabbit/database studio",
     "db:seed": "pnpm --filter @rabbit/database seed",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "test": "pnpm -r test",
+    "mobile:dev": "pnpm --filter @rabbit/mobile start",
+    "mobile-delivery:dev": "pnpm --filter @rabbit/mobile-delivery start",
+    "docker:up": "docker compose up -d postgres redis",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose --profile app build",
+    "docker:deploy": "docker compose --profile app up -d --build",
+    "docker:deploy:down": "docker compose --profile app down",
+    "docker:logs": "docker compose --profile app logs -f",
+    "docker:ps": "docker compose --profile app ps"
   },
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19.0.1",
+      "@types/react-dom": "^19.0.2"
+    }
   }
 }

@@ -11,9 +11,26 @@ generator client {
 
 enum UserRole {
   CUSTOMER
-  MERCHANT
-  DELIVERY_PARTNER
+  VENDOR
+  RABBITOR
   ADMIN
+}
+
+enum StoreType {
+  KIRANA
+  FISH
+  VEGETABLE
+  PHARMACY
+  BAKERY
+  DAIRY
+  MEAT
+  GENERAL
+}
+
+enum DeliveryMethod {
+  SELF
+  RABBITOR
+  THIRD_PARTY
 }
 
 enum OrderStatus {
@@ -25,20 +42,120 @@ enum OrderStatus {
   CANCELLED
 }
 
-model User {
-  id        String   @id @default(uuid())
-  name      String
-  phone     String   @unique
-  email     String?  @unique
-  role      UserRole @default(CUSTOMER)
-  createdAt DateTime @default(now())
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
 
-  shops      Shop[]
-  orders     Order[] @relation("CustomerOrders")
-  deliveries Order[] @relation("DeliveryPartnerOrders")
+enum SubscriptionTier {
+  FREE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum KycDocType {
+  AADHAAR
+  GST
+  PAN
+  SHOP_PHOTO
+}
+
+enum DiscountType {
+  FLAT
+  PERCENT
+}
+
+enum Locale {
+  en
+  hi
+  mr
+  ta
+  te
+  bn
+}
+
+enum AdPlacement {
+  HOME_BANNER
+  HOME_STRIP
+  SHOP_PAGE
+  CART_PAGE
+  CHECKOUT_PAGE
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  phone        String   @unique
+  email        String?  @unique
+  passwordHash String?
+  role         UserRole @default(CUSTOMER)
+  displayName  String?
+  locale       Locale   @default(en)
+  fcmToken     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vendorProfile   VendorProfile?
+  rabbitorProfile RabbitorProfile?
+  shops           Shop[]
+  orders          Order[] @relation("CustomerOrders")
+  deliveries      Order[] @relation("DeliveryPartnerOrders")
 
   @@index([role])
   @@index([phone])
+}
+
+/// Vendor business data — KYC fields never exposed on customer UI
+model VendorProfile {
+  id               String           @id @default(uuid())
+  userId           String           @unique
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName     String
+  kycStatus        KycStatus        @default(PENDING)
+  subscriptionTier SubscriptionTier @default(FREE)
+  /// Encrypted at rest in production; never returned to customers
+  aadhaarRef       String?
+  gstRef           String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  shops Shop[]
+  kycDocuments KycDocument[]
+}
+
+model KycDocument {
+  id              String        @id @default(uuid())
+  vendorProfileId String
+  vendorProfile   VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  docType         KycDocType
+  fileUrl         String
+  status          KycStatus     @default(PENDING)
+  reviewNote      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([vendorProfileId, status])
+}
+
+model RabbitorProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isVerified  Boolean  @default(false)
+  isAvailable Boolean  @default(false)
+  currentLat  Float?
+  currentLng  Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Shop {
@@ -47,22 +164,31 @@ model Shop {
   slug     String  @unique
   ownerId  String
   owner    User    @relation(fields: [ownerId], references: [id])
+  vendorId String?
+  vendor   VendorProfile? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
   category String
+  storeType StoreType @default(GENERAL)
   image    String?
   isActive Boolean @default(true)
 
-  address   String
-  latitude  Float
-  longitude Float
+  address          String
+  /// Full address — revealed to delivery only after order confirmed delivered
+  addressEncrypted String?
+  latitude         Float
+  longitude        Float
 
-  deliveryRadiusKm Float @default(5)
-  minOrderValue    Float @default(0)
-  baseDeliveryFee  Float @default(20)
-  avgPrepMinutes   Int   @default(15)
+  deliveryRadiusKm  Float          @default(5)
+  minOrderValue     Float          @default(0)
+  baseDeliveryFee   Float          @default(20)
+  avgPrepMinutes    Int            @default(15)
+  /// JSON: { mon: { open: "09:00", close: "21:00" }, ... }
+  openingHours      Json?
+  preferredDelivery DeliveryMethod @default(SELF)
 
   products  Product[]
   orders    Order[]
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([latitude, longitude])
   @@index([category])
@@ -83,6 +209,7 @@ model Product {
 
   orderItems OrderItem[]
   createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   @@index([shopId, isAvailable])
 }
@@ -97,14 +224,25 @@ model Order {
   deliveryPartnerId String?
   deliveryPartner   User?   @relation("DeliveryPartnerOrders", fields: [deliveryPartnerId], references: [id])
 
-  status               OrderStatus @default(PENDING)
-  totalPrice           Float
-  deliveryFee          Float
-  riderTip             Float       @default(0)
-  deliveryAddress      String
-  deliveryInstruction  String?
-  destLatitude         Float
-  destLongitude        Float
+  status              OrderStatus     @default(PENDING)
+  deliveryMethod      DeliveryMethod?
+  totalPrice          Float
+  deliveryFee         Float
+  riderTip            Float           @default(0)
+  deliveryAddress     String
+  /// Customer delivery address — masked until delivery confirmed
+  deliveryAddressEnc  String?
+  deliveryInstruction String?
+  destLatitude        Float?
+  destLongitude       Float?
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+
+  paymentStatus      PaymentStatus @default(PENDING)
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  appliedCouponCode  String?
+  discountAmount     Float         @default(0)
 
   items         OrderItem[]
   statusHistory OrderStatusEvent[]
@@ -128,6 +266,19 @@ model OrderItem {
   @@index([orderId])
 }
 
+model Coupon {
+  id            String       @id @default(uuid())
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Float
+  minOrderValue Float        @default(0)
+  maxUses       Int          @default(100)
+  usedCount     Int          @default(0)
+  expiresAt     DateTime?
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+}
+
 model OtpChallenge {
   id        String   @id @default(uuid())
   phone     String
@@ -149,4 +300,20 @@ model OrderStatusEvent {
   createdAt DateTime    @default(now())
 
   @@index([orderId])
+}
+
+model Ad {
+  id          String      @id @default(uuid())
+  title       String
+  imageUrl    String
+  linkUrl     String?
+  placement   AdPlacement
+  isActive    Boolean     @default(true)
+  startDate   DateTime    @default(now())
+  endDate     DateTime?
+  impressions Int         @default(0)
+  clicks      Int         @default(0)
+  createdAt   DateTime    @default(now())
+
+  @@index([placement, isActive])
 }

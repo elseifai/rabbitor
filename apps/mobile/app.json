@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Rabbit",
+    "slug": "rabbit-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "rabbit",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.rabbit.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Rabbit uses your location to show nearby shops.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Rabbit uses your location to show nearby shops."
+      }
+    },
+    "android": {
+      "package": "com.rabbit.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#16a34a",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-location"],
+    "extra": {
+      "apiUrl": "http://localhost:4000",
+      "router": { "origin": false }
+    }
+  }
+}

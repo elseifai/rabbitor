@@ -16,28 +16,70 @@ export async function GET() {
   try {
     await requireSession(['ADMIN'])
 
-    const [deliveredOrders, activeOrdersCount, totalShops, activeShops, totalProducts, recentOrders] =
-      await Promise.all([
-        prisma.order.findMany({
-          where: { status: 'DELIVERED' },
-          select: { totalPrice: true, deliveryFee: true, riderTip: true },
-        }),
-        prisma.order.count({
-          where: { status: { in: ACTIVE_STATUSES } },
-        }),
-        prisma.shop.count(),
-        prisma.shop.count({ where: { isActive: true } }),
-        prisma.product.count(),
-        prisma.order.findMany({
-          take: 5,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            shop: { select: { name: true, slug: true } },
-          },
-        }),
-      ])
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const weekAgo = new Date(Date.now() - 7 * 86400000)
+
+    const [
+      deliveredOrders,
+      activeOrdersCount,
+      totalShops,
+      activeShops,
+      totalProducts,
+      totalCustomers,
+      ordersToday,
+      revenueTodayOrders,
+      recentOrders,
+      weekOrders,
+      shopsByType,
+    ] = await Promise.all([
+      prisma.order.findMany({
+        where: { status: 'DELIVERED' },
+        select: { totalPrice: true, deliveryFee: true, riderTip: true, discountAmount: true },
+      }),
+      prisma.order.count({
+        where: { status: { in: ACTIVE_STATUSES } },
+      }),
+      prisma.shop.count(),
+      prisma.shop.count({ where: { isActive: true } }),
+      prisma.product.count(),
+      prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      prisma.order.count({ where: { createdAt: { gte: todayStart } } }),
+      prisma.order.findMany({
+        where: { status: 'DELIVERED', deliveredAt: { gte: todayStart } },
+        select: { totalPrice: true, deliveryFee: true, riderTip: true, discountAmount: true },
+      }),
+      prisma.order.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          shop: { select: { name: true, slug: true } },
+          customer: { select: { name: true } },
+        },
+      }),
+      prisma.order.findMany({
+        where: { createdAt: { gte: weekAgo } },
+        select: { createdAt: true },
+      }),
+      prisma.shop.groupBy({
+        by: ['storeType'],
+        _count: { id: true },
+      }),
+    ])
 
     const totalGTV = deliveredOrders.reduce((sum, o) => sum + orderGrandTotal(o), 0)
+    const revenueToday = revenueTodayOrders.reduce((sum, o) => sum + orderGrandTotal(o), 0)
+
+    const ordersByDay: Record<string, number> = {}
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      ordersByDay[d.toISOString().slice(0, 10)] = 0
+    }
+    for (const o of weekOrders) {
+      const key = o.createdAt.toISOString().slice(0, 10)
+      if (key in ordersByDay) ordersByDay[key]++
+    }
 
     return NextResponse.json({
       success: true,
@@ -48,7 +90,15 @@ export async function GET() {
         activeShops,
         productCount: totalProducts,
         deliveredOrders: deliveredOrders.length,
+        totalCustomers,
+        ordersToday,
+        revenueToday: Math.round(revenueToday),
       },
+      ordersLast7Days: Object.entries(ordersByDay).map(([date, count]) => ({ date, count })),
+      ordersByStoreType: shopsByType.map((s) => ({
+        type: s.storeType,
+        count: s._count.id,
+      })),
       systemHealth: {
         status: totalShops > 0 && totalProducts > 0 ? 'operational' : 'degraded',
         database: 'connected',
@@ -57,6 +107,7 @@ export async function GET() {
         id: o.id,
         orderNumber: o.orderNumber,
         shopName: o.shop.name,
+        customerName: o.customer.name,
         shopSlug: o.shop.slug,
         status: o.status,
         statusLabel: ORDER_STATUS_LABELS[o.status],

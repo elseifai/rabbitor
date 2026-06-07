@@ -3,15 +3,77 @@ import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 import { canTransition, ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 import { broadcastOrderEvent } from '@/lib/order-events'
+import { orderGrandTotal } from '@/lib/order-totals'
 import type { OrderStatus } from '@rabbit/database'
 
+const PLATFORM_FEE = 5
+
 const ORDER_INCLUDE = {
-  shop: { select: { name: true, address: true, category: true } },
+  shop: {
+    select: {
+      name: true,
+      address: true,
+      category: true,
+      latitude: true,
+      longitude: true,
+      slug: true,
+    },
+  },
   deliveryPartner: { select: { id: true, name: true, phone: true } },
   items: {
-    include: { product: { select: { name: true, unit: true } } },
+    include: {
+      product: { select: { name: true, unit: true, image: true } },
+    },
   },
   statusHistory: { orderBy: { createdAt: 'asc' as const } },
+} as const
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+type OrderWithDetails = NonNullable<
+  Awaited<
+    ReturnType<
+      typeof prisma.order.findUnique<{ where: { id: string }; include: typeof ORDER_INCLUDE }>
+    >
+  >
+>
+
+function formatOrderResponse(order: OrderWithDetails) {
+  const shopLat = order.shop.latitude
+  const shopLng = order.shop.longitude
+  const destLat = order.destLatitude ?? shopLat
+  const destLng = order.destLongitude ?? shopLng
+  const distanceKm = haversineKm(shopLat, shopLng, destLat, destLng)
+
+  return {
+    ...order,
+    shopLat,
+    shopLng,
+    rabbitorName: order.deliveryPartner?.name ?? null,
+    rabbitorPhone: order.deliveryPartner?.phone ?? null,
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    platformFee: PLATFORM_FEE,
+    grandTotal: orderGrandTotal(order) + PLATFORM_FEE,
+    subtotal: order.totalPrice,
+    items: order.items.map((item) => ({
+      ...item,
+      product: {
+        name: item.product.name,
+        unit: item.product.unit,
+        image: item.product.image,
+      },
+    })),
+  }
 }
 
 export async function GET(
@@ -32,7 +94,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ success: true, data: order })
+    return NextResponse.json({ success: true, data: formatOrderResponse(order) })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch order'
     return NextResponse.json({ success: false, error: message }, { status: 500 })
@@ -45,7 +107,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
-    const session = await requireSession(['MERCHANT', 'ADMIN', 'DELIVERY_PARTNER'])
+    const session = await requireSession(['VENDOR', 'ADMIN', 'RABBITOR'])
     const body = await request.json()
     const { status } = body as { status?: OrderStatus }
 
@@ -64,7 +126,7 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Order target destroyed or missing' }, { status: 404 })
     }
 
-    if (session.role === 'MERCHANT' && preflight.shop.ownerId !== session.userId) {
+    if (session.role === 'VENDOR' && preflight.shop.ownerId !== session.userId) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
     }
 
@@ -92,7 +154,7 @@ export async function PATCH(
       let deliveryPartnerId = targetOrder.deliveryPartnerId
       if (status === 'OUT_FOR_DELIVERY' && !deliveryPartnerId) {
         const rider = await tx.user.findFirst({
-          where: { role: 'DELIVERY_PARTNER' },
+          where: { role: 'RABBITOR' },
           orderBy: { createdAt: 'asc' },
         })
         if (rider) deliveryPartnerId = rider.id
@@ -117,7 +179,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      data: updatedOrder,
+      data: formatOrderResponse(updatedOrder),
       status: ORDER_STATUS_LABELS[status],
     })
   } catch (error) {

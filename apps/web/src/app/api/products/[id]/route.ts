@@ -8,7 +8,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
+    const session = await requireSession(['VENDOR', 'ADMIN'])
     const body = await request.json()
     const { isAvailable, price } = body
 
@@ -21,7 +21,7 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 })
     }
 
-    if (session.role === 'MERCHANT' && product.shop.ownerId !== session.userId) {
+    if (session.role === 'VENDOR' && product.shop.ownerId !== session.userId) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 })
     }
 

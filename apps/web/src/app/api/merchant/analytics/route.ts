@@ -5,7 +5,7 @@ import { orderGrandTotal } from '@/lib/order-totals'
 
 export async function GET() {
   try {
-    const session = await requireSession(['MERCHANT', 'ADMIN'])
+    const session = await requireSession(['VENDOR', 'ADMIN'])
 
     const shop = await prisma.shop.findFirst({
       where: { ownerId: session.userId },

@@ -1,10 +1,21 @@
 import { Router } from "express";
 import { z } from "zod";
-import { DeliveryMethod } from "@prisma/client";
+import { DeliveryMethod } from "@rabbit/database";
 import * as orderService from "../services/order.service";
 import { authenticate, requireRoles, type AuthRequest } from "../middleware/auth";
 
 const router = Router();
+
+router.get("/", authenticate, requireRoles("CUSTOMER"), async (req: AuthRequest, res, next) => {
+  try {
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const result = await orderService.listCustomerOrders(req.user!.sub, page, limit);
+    res.json({ success: true, data: result });
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.post("/", authenticate, requireRoles("CUSTOMER"), async (req: AuthRequest, res, next) => {
   try {
@@ -18,6 +29,7 @@ router.post("/", authenticate, requireRoles("CUSTOMER"), async (req: AuthRequest
       ).min(1),
       deliveryMethod: z.nativeEnum(DeliveryMethod),
       deliveryAddress: z.string().min(1),
+      couponCode: z.string().optional(),
     });
     const body = schema.parse(req.body);
     const order = await orderService.createOrder(req.user!.sub, body);

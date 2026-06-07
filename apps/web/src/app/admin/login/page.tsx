@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Phone, Loader2, Shield } from 'lucide-react'
 import { requestOtpAction, verifyOtpAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
 
 export default function AdminLoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
-  const [phone, setPhone] = useState('9111111111')
+  const [phone, setPhone] = useState('9000000000')
   const [otp, setOtp] = useState('')
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -31,6 +33,11 @@ export default function AdminLoginPage() {
     const res = await verifyOtpAction(phone, otp)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Invalid OTP')
+    if (res.user.role !== 'ADMIN') {
+      setError('This phone is not registered as admin.')
+      return
+    }
+    login(res.token, res.user)
     router.push('/admin')
     router.refresh()
   }
@@ -57,7 +64,7 @@ export default function AdminLoginPage() {
             <input
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm font-semibold focus:border-[#FF6B35] focus:outline-none"
             />
           </div>
@@ -81,7 +88,7 @@ export default function AdminLoginPage() {
             type="text"
             inputMode="numeric"
             value={otp}
-            onChange={(e) => setOtp(e.target.value)}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="6-digit OTP"
             className="w-full rounded-xl border border-slate-200 px-4 py-3 text-center text-lg font-black tracking-[0.3em] focus:border-[#FF6B35] focus:outline-none"
           />

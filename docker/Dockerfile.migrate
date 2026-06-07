@@ -1,0 +1,18 @@
+# DB init — run once before api/web start
+# docker build -f docker/Dockerfile.migrate -t rabbit-migrate .
+
+FROM node:20-alpine
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN apk add --no-cache openssl libc6-compat
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages packages
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm db:generate
+
+ENV RUN_SEED=true
+
+CMD ["sh", "-c", "pnpm db:push && if [ \"$RUN_SEED\" = \"true\" ]; then pnpm db:seed; fi"]

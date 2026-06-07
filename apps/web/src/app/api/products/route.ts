@@ -6,8 +6,17 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const shopId = searchParams.get('shopId')
 
+    let resolvedShopId = shopId ?? undefined
+    if (shopId) {
+      const shop = await prisma.shop.findFirst({
+        where: { OR: [{ id: shopId }, { slug: shopId }] },
+        select: { id: true },
+      })
+      resolvedShopId = shop?.id
+    }
+
     const products = await prisma.product.findMany({
-      where: shopId ? { shopId } : undefined,
+      where: resolvedShopId ? { shopId: resolvedShopId } : undefined,
       include: {
         shop: { select: { id: true, name: true, category: true } },
       },
