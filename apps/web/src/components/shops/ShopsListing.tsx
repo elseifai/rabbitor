@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/store'
 import { HOME_CATEGORY_TABS } from '@/lib/categories'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -68,9 +68,22 @@ function ShopSkeletonCard() {
 }
 
 export function ShopsListing() {
-  const [activeCategory, setActiveCategory] = useState('all')
+  const searchParams = useSearchParams()
+  const categoryParam = searchParams.get('category')
+  const initialCategory = HOME_CATEGORY_TABS.some((t) => t.id === categoryParam)
+    ? (categoryParam as string)
+    : 'all'
+
+  const [activeCategory, setActiveCategory] = useState(initialCategory)
   const [shops, setShops] = useState<ApiShop[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Keep filter in sync if the URL category changes (e.g. navigating between tabs)
+  useEffect(() => {
+    if (HOME_CATEGORY_TABS.some((t) => t.id === categoryParam)) {
+      setActiveCategory(categoryParam as string)
+    }
+  }, [categoryParam])
 
   useEffect(() => {
     let cancelled = false

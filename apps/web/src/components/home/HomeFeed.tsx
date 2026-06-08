@@ -434,7 +434,8 @@ export function HomeFeed() {
   }, [lat, lng, storeType])
 
   useEffect(() => {
-    fetch('/api/shops')
+    const url = storeType ? `/api/shops?storeType=${storeType}` : '/api/shops'
+    fetch(url)
       .then((r) => r.json())
       .then((json) => {
         if (!json.success) return
@@ -455,10 +456,11 @@ export function HomeFeed() {
             })
           }
         }
-        setDeals(shuffle(all).slice(0, 8))
+        // Show more items when a category is selected (it's the focus of the page)
+        setDeals(shuffle(all).slice(0, storeType ? 12 : 8))
       })
       .catch(() => {})
-  }, [])
+  }, [storeType])
 
   useEffect(() => {
     getSessionAction().then((s) => setLoggedIn(!!s))
@@ -555,7 +557,31 @@ export function HomeFeed() {
 
       {/* SECTION C: Main scrollable content */}
       <div className="py-2">
-        {/* Grocery & Kitchen */}
+        {/* Active category banner — shown when a specific category is selected */}
+        {activeCategory !== 'all' && (
+          <section className="mb-2 bg-white px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-[#1C1C1C]">{tab?.label}</h2>
+                <p className="text-xs text-[#878787]">
+                  {loadingShops
+                    ? 'Finding stores near you…'
+                    : `${shops.length} store${shops.length !== 1 ? 's' : ''} · ${deals.length} item${deals.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveCategory('all')}
+                className="rounded-full border border-[#F0F0F0] px-3 py-1 text-xs font-semibold text-[#878787]"
+              >
+                Clear ✕
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Grocery & Kitchen (only on All) */}
+        {activeCategory === 'all' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Grocery & Kitchen</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -574,8 +600,10 @@ export function HomeFeed() {
             ))}
           </div>
         </section>
+        )}
 
-        {/* Snacks & Drinks */}
+        {/* Snacks & Drinks (only on All) */}
+        {activeCategory === 'all' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Snacks & Drinks</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -594,6 +622,7 @@ export function HomeFeed() {
             ))}
           </div>
         </section>
+        )}
 
         {/* Promo banner ad */}
         <section className="mb-2 px-4">
@@ -631,13 +660,21 @@ export function HomeFeed() {
 
         {/* Flash Deals */}
         <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Flash Deals: All Time Low</h2>
+          <h2 className="text-lg font-bold text-[#1C1C1C]">
+            {activeCategory === 'all' ? 'Flash Deals: All Time Low' : `${tab?.label} — Top Picks`}
+          </h2>
           <p className="text-xs text-[#878787]">Fresh Essentials Every Day</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {deals.map((p) => (
-              <ProductDealCard key={p.id} product={p} />
-            ))}
-          </div>
+          {deals.length === 0 ? (
+            <p className="mt-4 text-sm text-[#878787]">
+              No items available in this category yet.
+            </p>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {deals.map((p) => (
+                <ProductDealCard key={p.id} product={p} />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Coupons */}
