@@ -1,5 +1,6 @@
 import { DeliveryJobsList, DeliveryZoneBanner } from '@/components/delivery/DeliveryJobsList'
 import { getAvailableDeliveryOrdersAction } from '@/actions/delivery'
+import { RoleGate } from '@/components/auth/RoleGate'
 
 export default async function DeliveryHomePage() {
   let jobs: Awaited<ReturnType<typeof getAvailableDeliveryOrdersAction>> = []
@@ -11,6 +12,7 @@ export default async function DeliveryHomePage() {
   }
 
   return (
+    <RoleGate role="RABBITOR" redirectTo="/auth">
     <div className="space-y-6 pb-24">
       <div className="flex items-center justify-between">
         <div>
@@ -29,5 +31,6 @@ export default async function DeliveryHomePage() {
         <DeliveryJobsList jobs={jobs} />
       </div>
     </div>
+    </RoleGate>
   )
 }
