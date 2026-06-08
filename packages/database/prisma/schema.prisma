@@ -181,6 +181,8 @@ model Shop {
   minOrderValue     Float          @default(0)
   baseDeliveryFee   Float          @default(20)
   avgPrepMinutes    Int            @default(15)
+  ratingAvg         Float          @default(0)
+  ratingCount       Int            @default(0)
   /// JSON: { mon: { open: "09:00", close: "21:00" }, ... }
   openingHours      Json?
   preferredDelivery DeliveryMethod @default(SELF)
@@ -202,6 +204,8 @@ model Product {
   name        String
   description String?
   price       Float
+  /// Original / MRP price (before discount). Null = no discount shown.
+  mrp         Float?
   image       String?
   isAvailable Boolean @default(true)
   unit        String  @default("piece")
@@ -212,6 +216,20 @@ model Product {
   updatedAt  DateTime    @updatedAt
 
   @@index([shopId, isAvailable])
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  shopId     String
+  customerId String
+  riderId    String?
+  shopRating Int
+  riderRating Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@index([shopId])
 }
 
 model Order {

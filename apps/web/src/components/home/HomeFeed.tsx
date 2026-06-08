@@ -17,6 +17,7 @@ type DealProduct = {
   name: string
   unit: string
   price: number
+  mrp?: number | null
   image: string | null
   shopId: string
   shopName: string
@@ -198,8 +199,10 @@ function ProductDealCard({ product }: { product: DealProduct }) {
   const addItem = useCartStore((s) => s.addItem)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const inCart = useCartStore((s) => s.items.find((i) => i.productId === product.id))
-  const original = Math.round(product.price * 1.35)
-  const discount = Math.round(((original - product.price) / original) * 100)
+  const original = product.mrp && product.mrp > product.price ? product.mrp : null
+  const discount = original
+    ? Math.round(((original - product.price) / original) * 100)
+    : 0
   const outOfStock = product.stock === 0
   const placeholder = STORE_PLACEHOLDERS[product.storeType ?? ''] ?? { emoji: '📦', bg: 'bg-gray-100' }
 
@@ -214,7 +217,7 @@ function ProductDealCard({ product }: { product: DealProduct }) {
             {placeholder.emoji}
           </div>
         )}
-        {!outOfStock && (
+        {!outOfStock && discount > 0 && (
           <span className="absolute right-1 top-1 rounded bg-[#0C831F] px-1.5 py-0.5 text-[9px] font-bold text-white">
             {discount}% OFF
           </span>
@@ -234,7 +237,9 @@ function ProductDealCard({ product }: { product: DealProduct }) {
       <div className="mt-2 flex items-end justify-between">
         <div className="flex items-baseline gap-1">
           <span className="text-sm font-bold text-[#1C1C1C]">{formatCurrency(product.price)}</span>
-          <span className="text-xs text-[#878787] line-through">{formatCurrency(original)}</span>
+          {original && (
+            <span className="text-xs text-[#878787] line-through">{formatCurrency(original)}</span>
+          )}
         </div>
 
         {!outOfStock &&
@@ -447,6 +452,7 @@ export function HomeFeed() {
               name: p.name,
               unit: p.weight ?? p.unit ?? '',
               price: p.price,
+              mrp: p.mrp ?? null,
               image: p.image ?? null,
               shopId: shop.id,
               shopName: shop.name,

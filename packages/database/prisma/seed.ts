@@ -420,8 +420,11 @@ async function main() {
   }
 
   let productCount = 0
-  for (const shop of SHOPS) {
+  for (const [shopIndex, shop] of SHOPS.entries()) {
     const owner = vendorMap[shop.slug]
+    // Deterministic but varied rating between 3.9 and 4.8, and a realistic count
+    const ratingAvg = Math.round((3.9 + ((shopIndex * 37) % 10) / 11) * 10) / 10
+    const ratingCount = 40 + ((shopIndex * 53) % 260)
     await prisma.shop.create({
       data: {
         name: shop.name,
@@ -437,19 +440,27 @@ async function main() {
         minOrderValue: shop.minOrderValue,
         baseDeliveryFee: shop.baseDeliveryFee,
         avgPrepMinutes: shop.avgPrepMinutes,
+        ratingAvg,
+        ratingCount,
         openingHours: WEEKLY_HOURS,
         ownerId: owner.userId,
         vendorId: owner.vendorId,
         products: {
-          create: shop.products.map((p) => ({
-            name: p.name,
-            description: p.description ?? `${p.name} — fresh from ${shop.name}`,
-            price: p.price,
-            unit: p.unit,
-            image: p.image,
-            stock: 100,
-            isAvailable: true,
-          })),
+          create: shop.products.map((p, i) => {
+            // MRP 12–35% above selling price, deterministic per product
+            const markup = 1.12 + (((i * 17) % 24) / 100)
+            const mrp = Math.round(p.price * markup)
+            return {
+              name: p.name,
+              description: p.description ?? `${p.name} — fresh from ${shop.name}`,
+              price: p.price,
+              mrp: mrp > p.price ? mrp : null,
+              unit: p.unit,
+              image: p.image,
+              stock: 100,
+              isAvailable: true,
+            }
+          }),
         },
       },
     })
