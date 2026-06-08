@@ -40,56 +40,6 @@ type OrderRow = {
   rawStatus: OrderStatus
 }
 
-const DEMO_INVENTORY: InventoryItem[] = [
-  {
-    id: 'p1',
-    name: 'Premium Surmai (Seer Fish) - Steaks',
-    category: 'Fresh Catch',
-    price: 490,
-    available: true,
-  },
-  {
-    id: 'p2',
-    name: 'Fresh Tiger Prawns (Medium)',
-    category: 'Fresh Catch',
-    price: 380,
-    available: true,
-  },
-  {
-    id: 'p3',
-    name: 'Pomfret Whole (Cleaned)',
-    category: 'Fresh Catch',
-    price: 650,
-    available: false,
-  },
-  {
-    id: 'p4',
-    name: 'Marinated Fish Fry Tikka',
-    category: 'Marinated',
-    price: 290,
-    available: true,
-  },
-]
-
-const DEMO_ORDERS: OrderRow[] = [
-  {
-    id: 'demo-o1',
-    orderNumber: 'RBT-7749',
-    items: 'Surmai Steaks x1, Tiger Prawns x2',
-    total: 1250,
-    status: 'Packing items',
-    rawStatus: 'PREPARING',
-  },
-  {
-    id: 'demo-o2',
-    orderNumber: 'RBT-8921',
-    items: 'Marinated Tikka x1',
-    total: 290,
-    status: 'Pending',
-    rawStatus: 'PENDING',
-  },
-]
-
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   PENDING: 'ACCEPTED_BY_SHOP',
   ACCEPTED_BY_SHOP: 'PREPARING',
@@ -118,97 +68,95 @@ export function MerchantDashboard() {
   const [shopId, setShopId] = useState<string | null>(null)
   const [shopName, setShopName] = useState('Royal Coastal Seafood')
   const [shopOpen, setShopOpen] = useState(true)
-  const [inventory, setInventory] = useState<InventoryItem[]>(DEMO_INVENTORY)
-  const [orders, setOrders] = useState<OrderRow[]>(DEMO_ORDERS)
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [orders, setOrders] = useState<OrderRow[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsMetrics>(DEMO_ANALYTICS)
   const [chartData, setChartData] = useState<ChartPoint[]>(DEMO_CHART)
   const [analyticsLive, setAnalyticsLive] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
   const [isLive, setIsLive] = useState(false)
+  const [hasShop, setHasShop] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const loadData = useCallback(async () => {
     setRefreshing(true)
     try {
-      const [inventoryRes, analyticsRes] = await Promise.all([
-        fetch('/api/products'),
-        fetch('/api/merchant/analytics'),
-      ])
+      // Source the vendor's OWN shop + products (scoped to their session)
+      const merchantShop = await getMerchantShopAction()
 
-      const inventoryJson = await inventoryRes.json()
-      const analyticsJson = await analyticsRes.json()
-
-      if (inventoryJson.success && inventoryJson.data?.length > 0) {
+      if (merchantShop) {
+        // Real, logged-in vendor — show their data (may be empty)
         setIsLive(true)
-        setShopName(inventoryJson.data[0].shopName ?? 'Store Command Center')
+        setHasShop(true)
+        setShopId(merchantShop.id)
+        setShopName(merchantShop.name)
+        setShopOpen(merchantShop.isActive)
         setInventory(
-          inventoryJson.data.map((item: {
-            id: string
-            name: string
-            price: number
-            isAvailable: boolean
-            category?: string
-          }) => ({
-            id: item.id,
-            name: item.name,
-            category: item.category ?? 'Fresh Catch',
-            price: item.price,
-            available: item.isAvailable,
+          merchantShop.products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            category: merchantShop.category ?? 'General',
+            price: p.price,
+            available: p.isAvailable,
           })),
         )
 
         try {
-          const merchantShop = await getMerchantShopAction()
-          if (merchantShop) {
-            setShopId(merchantShop.id)
-            setShopName(merchantShop.name)
-            setShopOpen(merchantShop.isActive)
-          }
-
           const orderData = await getMerchantOrdersAction()
-          if (orderData?.length > 0) {
-            setOrders(
-              orderData
-                .filter((o) => !['DELIVERED', 'CANCELLED'].includes(o.status))
-                .slice(0, 10)
-                .map((o) => ({
-                  id: o.id,
-                  orderNumber: o.orderNumber,
-                  items: `${o.itemCount} item${o.itemCount === 1 ? '' : 's'}`,
-                  total: Math.round(o.totalPrice),
-                  status: statusLabel(o.status),
-                  rawStatus: o.status,
-                })),
-            )
+          setOrders(
+            (orderData ?? [])
+              .filter((o) => !['DELIVERED', 'CANCELLED'].includes(o.status))
+              .slice(0, 10)
+              .map((o) => ({
+                id: o.id,
+                orderNumber: o.orderNumber,
+                items: `${o.itemCount} item${o.itemCount === 1 ? '' : 's'}`,
+                total: Math.round(o.totalPrice),
+                status: statusLabel(o.status),
+                rawStatus: o.status,
+              })),
+          )
+        } catch {
+          setOrders([])
+        }
+
+        // Live analytics for this vendor
+        try {
+          const analyticsRes = await fetch('/api/merchant/analytics')
+          const analyticsJson = await analyticsRes.json()
+          if (analyticsJson.success) {
+            setAnalytics(analyticsJson.metrics)
+            setChartData(analyticsJson.chartData ?? [])
+            setAnalyticsLive(true)
           } else {
-            setOrders([])
+            setAnalytics(DEMO_ANALYTICS)
+            setChartData(DEMO_CHART)
+            setAnalyticsLive(false)
           }
         } catch {
-          /* orders require merchant login */
+          setAnalytics(DEMO_ANALYTICS)
+          setChartData(DEMO_CHART)
+          setAnalyticsLive(false)
         }
       } else {
+        // Logged-in user with no shop yet — show real empty/onboarding state
         setIsLive(false)
-        setShopName('Royal Coastal Seafood')
-        setInventory(DEMO_INVENTORY)
-        setOrders(DEMO_ORDERS)
-      }
-
-      if (analyticsJson.success) {
-        setAnalytics(analyticsJson.metrics)
-        setChartData(analyticsJson.chartData ?? [])
-        setAnalyticsLive(true)
-      } else {
+        setHasShop(false)
+        setShopName('Your Store')
+        setInventory([])
+        setOrders([])
         setAnalytics(DEMO_ANALYTICS)
         setChartData(DEMO_CHART)
         setAnalyticsLive(false)
       }
     } catch (err) {
-      console.error('Dashboard engine sync broken:', err)
+      console.error('Dashboard sync failed:', err)
       setIsLive(false)
-      setOrders(DEMO_ORDERS)
-      setInventory(DEMO_INVENTORY)
+      setHasShop(false)
+      setInventory([])
+      setOrders([])
       setAnalytics(DEMO_ANALYTICS)
       setChartData(DEMO_CHART)
       setAnalyticsLive(false)
@@ -343,14 +291,19 @@ export function MerchantDashboard() {
       </div>
 
       <div className="space-y-6 p-5">
-        {!isLive && (
-          <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-center text-xs font-semibold text-amber-800">
-            Demo mode —{' '}
-            <Link href="/merchant/login" className="font-bold text-[#FF6B35] underline">
-              log in
-            </Link>{' '}
-            to sync live stock with the customer menu.
-          </p>
+        {!hasShop && (
+          <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-center">
+            <p className="text-sm font-bold text-amber-900">No store set up yet</p>
+            <p className="mt-1 text-xs font-medium text-amber-800">
+              Complete onboarding to start selling on Rabbit.
+            </p>
+            <Link
+              href="/merchant/onboarding"
+              className="mt-2 inline-block rounded-lg bg-[#FF6B35] px-4 py-1.5 text-xs font-bold text-white"
+            >
+              Set up my store →
+            </Link>
+          </div>
         )}
 
         <MerchantSalesAnalytics
@@ -415,6 +368,24 @@ export function MerchantDashboard() {
             <Package className="h-3.5 w-3.5 text-[#FF6B35]" /> Core Operational Grid
           </h3>
 
+          {inventory.length === 0 ? (
+            <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center">
+              <p className="text-sm font-bold text-slate-600">No products yet</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {hasShop
+                  ? 'Add your first product so customers can order it.'
+                  : 'Set up your store first, then add products.'}
+              </p>
+              {hasShop && (
+                <Link
+                  href="/merchant/products"
+                  className="mt-3 inline-block rounded-lg bg-[#FF6B35] px-4 py-1.5 text-xs font-bold text-white"
+                >
+                  Add product →
+                </Link>
+              )}
+            </div>
+          ) : (
           <div className="divide-y divide-slate-50 overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-sm">
             {inventory.map((item) => (
               <div
@@ -482,6 +453,7 @@ export function MerchantDashboard() {
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
     </div>
