@@ -11,7 +11,6 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
   transpilePackages: ['@rabbit/database', 'leaflet', 'react-leaflet'],
   experimental: {
     serverActions: {

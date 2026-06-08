@@ -281,7 +281,9 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
             <p className="text-base font-bold text-slate-900">
               {order.rabbitorName ?? 'Assigning rider…'}
             </p>
-            <p className="text-[11px] text-slate-400">⭐ 4.8 · 234 deliveries</p>
+            <p className="text-[11px] text-slate-400">
+              {order.rabbitorPhone ? 'On the way to you' : 'Your delivery partner'}
+            </p>
           </div>
           {order.rabbitorPhone && (
             <a
