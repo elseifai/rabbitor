@@ -26,6 +26,7 @@ ENV JWT_SECRET=build-time-placeholder
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm db:generate
+RUN pnpm --filter @rabbit/database build
 RUN pnpm --filter @rabbit/web build
 
 FROM node:20-alpine AS runner
