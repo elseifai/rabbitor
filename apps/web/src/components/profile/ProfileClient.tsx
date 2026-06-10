@@ -7,10 +7,16 @@ import { ChevronRight, Loader2, Phone } from 'lucide-react'
 import { requestOtpAction, verifyOtpAction, logoutAction } from '@/actions/auth'
 
 type Props = {
-  user: { name: string | null; phone: string; displayName: string | null } | null
+  user: {
+    name: string | null
+    phone: string | null
+    email?: string | null
+    displayName: string | null
+  } | null
 }
 
-function maskPhone(phone: string) {
+function maskPhone(phone: string | null | undefined) {
+  if (!phone) return ''
   if (phone.length < 10) return phone
   return `+91 ${phone.slice(0, 2)}XXXX${phone.slice(-4)}`
 }
@@ -147,7 +153,7 @@ export function ProfileClient({ user: serverUser }: Props) {
           {initials}
         </div>
         <h1 className="mt-3 text-lg font-bold">{user.displayName ?? user.name}</h1>
-        <p className="text-sm text-gray-500">{maskPhone(user.phone)}</p>
+        <p className="text-sm text-gray-500">{maskPhone(user.phone) || user.email}</p>
       </div>
 
       <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white">

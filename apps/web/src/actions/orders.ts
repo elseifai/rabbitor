@@ -225,7 +225,7 @@ export async function getMerchantOrdersAction() {
     orderNumber: o.orderNumber,
     status: o.status,
     shopName: o.shop.name,
-    customerPhone: o.customer.phone.replace(/\d(?=\d{4})/g, '•'),
+    customerPhone: o.customer.phone?.replace(/\d(?=\d{4})/g, '•') ?? '',
     totalPrice: o.totalPrice + o.deliveryFee,
     itemCount: o.items.length,
     createdAt: o.createdAt.toISOString(),

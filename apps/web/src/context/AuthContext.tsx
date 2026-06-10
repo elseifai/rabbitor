@@ -16,7 +16,7 @@ import {
   saveSession,
   type SessionUser,
 } from '@/lib/session'
-import { logoutAction } from '@/actions/auth'
+import { logoutAction, getCurrentUserAction } from '@/actions/auth'
 
 type AuthContextValue = {
   user: SessionUser | null
@@ -39,8 +39,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (session) {
       setUser(session.user)
       setToken(session.token)
+      setHydrated(true)
+    } else {
+      // No local session — may have just logged in via Google/magic-link (cookie only).
+      getCurrentUserAction()
+        .then((current) => {
+          if (current) {
+            saveSession(current.token, current.user)
+            setUser(current.user)
+            setToken(current.token)
+          }
+        })
+        .finally(() => setHydrated(true))
     }
-    setHydrated(true)
 
     const onLogout = () => {
       setUser(null)

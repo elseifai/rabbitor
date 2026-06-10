@@ -92,17 +92,19 @@ enum AdPlacement {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  phone        String   @unique
-  email        String?  @unique
-  passwordHash String?
-  role         UserRole @default(CUSTOMER)
-  displayName  String?
-  locale       Locale   @default(en)
-  fcmToken     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(uuid())
+  name          String
+  phone         String?   @unique
+  email         String?   @unique
+  emailVerified DateTime?
+  googleId      String?   @unique
+  passwordHash  String?
+  role          UserRole  @default(CUSTOMER)
+  displayName   String?
+  locale        Locale    @default(en)
+  fcmToken      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   vendorProfile   VendorProfile?
   rabbitorProfile RabbitorProfile?
@@ -307,6 +309,22 @@ model OtpChallenge {
   createdAt DateTime @default(now())
 
   @@index([phone, expiresAt])
+}
+
+/// Email OTP + magic-link challenge. codeHash backs the 6-digit OTP,
+/// token backs the verification link; one row serves both.
+model EmailVerification {
+  id        String   @id @default(uuid())
+  email     String
+  codeHash  String
+  token     String   @unique
+  role      String?
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, expiresAt])
 }
 
 model OrderStatusEvent {

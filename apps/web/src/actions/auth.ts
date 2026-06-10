@@ -1,6 +1,17 @@
 'use server'
 
-import { sendOtp, verifyOtp, clearSession, getSession } from '@/lib/auth'
+import {
+  sendOtp,
+  verifyOtp,
+  sendEmailOtp,
+  verifyEmailOtp,
+  verifyEmailToken,
+  getCurrentAuth,
+  clearSession,
+  getSession,
+} from '@/lib/auth'
+
+type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
 export async function requestOtpAction(phone: string) {
   try {
@@ -9,6 +20,21 @@ export async function requestOtpAction(phone: string) {
   } catch (e) {
     return { ok: false as const, error: (e as Error).message }
   }
+}
+
+export async function requestEmailOtpAction(email: string, role?: Role) {
+  try {
+    const result = await sendEmailOtp(email, role === 'ADMIN' ? undefined : role)
+    return { ok: true as const, devCode: result.devCode }
+  } catch (e) {
+    return { ok: false as const, error: (e as Error).message }
+  }
+}
+
+export async function verifyEmailOtpAction(email: string, code: string, role?: Role) {
+  const result = await verifyEmailOtp(email, code, role === 'ADMIN' ? undefined : role)
+  if (!result.success) return { ok: false as const, error: result.error }
+  return { ok: true as const, token: result.token!, user: result.user! }
 }
 
 export async function verifyOtpAction(
@@ -23,6 +49,16 @@ export async function verifyOtpAction(
     token: result.token!,
     user: result.user!,
   }
+}
+
+export async function verifyEmailTokenAction(token: string) {
+  const result = await verifyEmailToken(token)
+  if (!result.success) return { ok: false as const, error: result.error }
+  return { ok: true as const, token: result.token!, user: result.user! }
+}
+
+export async function getCurrentUserAction() {
+  return getCurrentAuth()
 }
 
 export async function logoutAction() {

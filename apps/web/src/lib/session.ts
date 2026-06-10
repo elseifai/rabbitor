@@ -1,7 +1,8 @@
 export type SessionUser = {
   id: string
   name: string
-  phone: string
+  phone?: string | null
+  email?: string | null
   role: string
   displayName?: string | null
 }
