@@ -19,7 +19,7 @@ export default async function DeliveryNavigatePage({ searchParams }: Props) {
     return (
       <div className="space-y-4 pb-24 text-center">
         <p className="text-gray-400">Log in as a delivery partner to start navigating.</p>
-        <Link href="/login" className="text-rabbit-400">
+        <Link href="/auth" className="text-rabbit-400">
           Log in
         </Link>
       </div>
