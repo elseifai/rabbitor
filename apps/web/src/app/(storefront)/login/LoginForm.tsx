@@ -3,25 +3,29 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Phone, ArrowLeft, Loader2 } from 'lucide-react'
-import { requestOtpAction, verifyOtpAction } from '@/actions/auth'
+import { Mail, ArrowLeft, Loader2 } from 'lucide-react'
+import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
 
 export default function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { login } = useAuth()
   const redirect = searchParams.get('redirect') ?? '/'
 
-  const [step, setStep] = useState<'phone' | 'otp'>('phone')
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState<'email' | 'otp'>('email')
+  const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
   const sendOtp = async () => {
     setLoading(true)
     setError(null)
-    const res = await requestOtpAction(phone)
+    const res = await requestEmailOtpAction(email, 'CUSTOMER')
     setLoading(false)
     if (!res.ok) {
       setError(res.error)
@@ -34,12 +38,13 @@ export default function LoginForm() {
   const verify = async () => {
     setLoading(true)
     setError(null)
-    const res = await verifyOtpAction(phone, otp, 'CUSTOMER')
+    const res = await verifyEmailOtpAction(email, otp, 'CUSTOMER')
     setLoading(false)
     if (!res.ok) {
       setError(res.error ?? 'Verification failed')
       return
     }
+    login(res.token, res.user)
     router.push(redirect)
     router.refresh()
   }
@@ -50,40 +55,59 @@ export default function LoginForm() {
         <ArrowLeft className="h-4 w-4" /> Home
       </Link>
 
-      <h1 className="mt-6 font-display text-2xl font-bold">Login with OTP</h1>
+      <h1 className="mt-6 font-display text-2xl font-bold">Sign in to Rabbit</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Enter your mobile number. We&apos;ll send a one-time password.
+        Use your email or continue with Google.
       </p>
 
-      {step === 'phone' ? (
-        <div className="mt-8 space-y-4">
+      <a
+        href={`/api/auth/google/start?role=CUSTOMER&redirect=${encodeURIComponent(redirect)}`}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 py-3 font-semibold text-gray-800 hover:bg-gray-50"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.65l-3.57-2.77c-.99.66-2.26 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+          <path fill="#FBBC05" d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.05l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+        </svg>
+        Continue with Google
+      </a>
+
+      <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
+        <span className="h-px flex-1 bg-gray-200" />
+        OR
+        <span className="h-px flex-1 bg-gray-200" />
+      </div>
+
+      {step === 'email' ? (
+        <div className="space-y-4">
           <div className="relative">
-            <Phone className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="10-digit mobile number"
-              className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-lg tracking-wide"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-xl border border-gray-200 py-3 pl-11 pr-4 text-lg"
             />
           </div>
           <button
             type="button"
-            disabled={phone.length !== 10 || loading}
+            disabled={!emailValid || loading}
             onClick={sendOtp}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-rabbit-600 py-3 font-semibold text-white disabled:opacity-40"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Send OTP
+            Send code
           </button>
         </div>
       ) : (
-        <div className="mt-8 space-y-4">
+        <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            OTP sent to +91 {phone}
+            We sent a 6-digit code and a sign-in link to {email}
             {devCode && (
               <span className="mt-1 block rounded-lg bg-amber-50 px-3 py-2 text-amber-800">
-                Dev OTP: <strong>{devCode}</strong>
+                Dev code: <strong>{devCode}</strong>
               </span>
             )}
           </p>
@@ -93,7 +117,7 @@ export default function LoginForm() {
             maxLength={6}
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-            placeholder="6-digit OTP"
+            placeholder="6-digit code"
             className="w-full rounded-xl border border-gray-200 py-3 px-4 text-center text-2xl tracking-[0.5em]"
           />
           <button
@@ -107,22 +131,15 @@ export default function LoginForm() {
           </button>
           <button
             type="button"
-            onClick={() => setStep('phone')}
+            onClick={() => setStep('email')}
             className="w-full text-sm text-gray-500"
           >
-            Change number
+            Use a different email
           </button>
         </div>
       )}
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-
-      <p className="mt-8 text-xs text-gray-400">
-        Merchant demo: use <strong>9876543210</strong> at{' '}
-        <Link href="/merchant/login" className="text-rabbit-600">
-          merchant login
-        </Link>
-      </p>
     </div>
   )
 }
