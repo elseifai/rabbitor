@@ -28,6 +28,7 @@ export default function DeliveryLayout({
         <div className="mx-auto flex max-w-lg justify-around py-3">
           {[
             { href: '/delivery', icon: Package, label: 'Jobs' },
+            { href: '/delivery/orders', icon: MapPin, label: 'Active' },
             { href: '/delivery/navigate', icon: Navigation, label: 'Navigate' },
             { href: '/delivery/earnings', icon: Wallet, label: 'Earnings' },
           ].map(({ href, icon: Icon, label }) => (

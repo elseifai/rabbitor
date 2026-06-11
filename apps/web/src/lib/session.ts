@@ -50,6 +50,9 @@ export function clearSession(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  void import('@/lib/socket-client').then(({ socketClient }) => {
+    socketClient.disconnectAndPurge()
+  })
 }
 
 export function getAuthHeader(): Record<string, string> {

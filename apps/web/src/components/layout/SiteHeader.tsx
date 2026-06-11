@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { getSessionAction } from '@/actions/auth'
 
 export function SiteHeader() {
-  const location = useLocationStore((s) => s.location)
+  const formattedAddress = useLocationStore((s) => s.formattedAddress)
   const itemCount = useCartStore((s) => s.itemCount())
   const [loggedIn, setLoggedIn] = useState(false)
 
@@ -35,7 +35,7 @@ export function SiteHeader() {
         >
           <MapPin className="h-4 w-4 shrink-0 text-rabbit-600" />
           <span className="truncate text-gray-600">
-            {location ? `${location.area}` : 'Set delivery location'}
+            {formattedAddress ?? 'Set delivery location'}
           </span>
         </button>
 

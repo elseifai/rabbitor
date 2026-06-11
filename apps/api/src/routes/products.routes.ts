@@ -11,7 +11,12 @@ router.get("/", async (req, res, next) => {
   try {
     const { storeId } = req.params as StoreParams;
     const availableOnly = req.query.availableOnly !== "false";
-    const products = await productService.listProductsByStore(storeId, availableOnly);
+    const category =
+      typeof req.query.category === "string" ? req.query.category : undefined;
+    const products = await productService.listProductsByStore(storeId, {
+      availableOnly,
+      category,
+    });
     res.json({ success: true, data: products });
   } catch (e) {
     next(e);
@@ -28,10 +33,46 @@ router.post("/", authenticate, requireRoles("VENDOR"), async (req: AuthRequest, 
       unit: z.string().optional(),
       images: z.array(z.string().url()).optional(),
       stock: z.number().int().nonnegative().optional(),
+      category: z.string().min(1).optional(),
     });
     const body = schema.parse(req.body);
     const product = await productService.createProduct(req.user!.sub, storeId, body);
     res.status(201).json({ success: true, data: product });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch("/:productId", authenticate, requireRoles("VENDOR"), async (req: AuthRequest, res, next) => {
+  try {
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      description: z.string().optional(),
+      price: z.number().positive().optional(),
+      unit: z.string().optional(),
+      stock: z.number().int().nonnegative().optional(),
+      category: z.string().min(1).optional(),
+      isAvailable: z.boolean().optional(),
+    });
+    const body = schema.parse(req.body);
+    const product = await productService.updateProduct(
+      req.user!.sub,
+      req.params.productId as string,
+      body,
+    );
+    res.json({ success: true, data: product });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete("/:productId", authenticate, requireRoles("VENDOR"), async (req: AuthRequest, res, next) => {
+  try {
+    const result = await productService.deleteProduct(
+      req.user!.sub,
+      req.params.productId as string,
+    );
+    res.json({ success: true, data: result });
   } catch (e) {
     next(e);
   }

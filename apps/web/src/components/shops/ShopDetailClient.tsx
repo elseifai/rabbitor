@@ -56,7 +56,7 @@ export function ShopDetailClient({ shop }: { shop: ShopData }) {
   const cartItems = useCartStore((s) => s.items)
   const total = useCartStore((s) => s.total())
   const itemCount = useCartStore((s) => s.itemCount())
-  const shopCartItems = cartItems.filter((i) => i.shopId === shop.id)
+  const shopCartItems = cartItems.filter((i) => i.storeId === shop.id)
 
   const [activeCat, setActiveCat] = useState('All')
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
@@ -166,7 +166,7 @@ export function ShopDetailClient({ shop }: { shop: ShopData }) {
                         key={product.id}
                         product={product}
                         shop={shop}
-                        inCart={cartItems.find((i) => i.productId === product.id)}
+                        inCart={cartItems.find((i) => i.id === product.id)}
                         addItem={addItem}
                         updateQuantity={updateQuantity}
                       />
@@ -181,7 +181,7 @@ export function ShopDetailClient({ shop }: { shop: ShopData }) {
                       key={product.id}
                       product={product}
                       shop={shop}
-                      inCart={cartItems.find((i) => i.productId === product.id)}
+                      inCart={cartItems.find((i) => i.id === product.id)}
                       addItem={addItem}
                       updateQuantity={updateQuantity}
                     />
@@ -198,7 +198,7 @@ export function ShopDetailClient({ shop }: { shop: ShopData }) {
                     key={product.id}
                     product={product}
                     shop={shop}
-                    inCart={cartItems.find((i) => i.productId === product.id)}
+                    inCart={cartItems.find((i) => i.id === product.id)}
                     addItem={addItem}
                     updateQuantity={updateQuantity}
                   />
@@ -284,13 +284,11 @@ function ProductRow({
             disabled={!shop.isActive || !product.isAvailable}
             onClick={() =>
               addItem({
-                productId: product.id,
-                shopId: shop.id,
-                shopName: shop.name,
-                shopSlug: shop.slug,
+                id: product.id,
+                storeId: shop.id,
+                storeName: shop.name,
                 name: product.name,
                 price: product.price,
-                unit: product.unit,
                 image: product.image ?? undefined,
               })
             }

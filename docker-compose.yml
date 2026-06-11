@@ -1,51 +1,53 @@
-# Rabbit — Docker Compose
+# Rabbit — production-oriented Docker Compose
 #
-# Local dev (Postgres + Redis only):
+# Infrastructure only (Postgres + Redis):
 #   pnpm docker:up
 #
-# Full containerised stack (Postgres + Redis + API + Web):
+# Full stack (migrate + API + Web):
 #   cp .env.docker.example .env.docker
 #   pnpm docker:deploy
 #
-# Custom domain (rebuild web with public URLs baked in):
-#   PUBLIC_API_URL=https://api.yourdomain.com PUBLIC_APP_URL=https://yourdomain.com pnpm docker:deploy
+# API is exposed on host port 5000. Postgres on 5432, Redis on 6379.
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     container_name: rabbit-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-rabbit}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rabbit}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-rabbit}
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - rabbit_pg_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-rabbit} -d ${POSTGRES_DB:-rabbit}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-rabbit}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
+    networks:
+      - rabbit-network
 
   redis:
     image: redis:7-alpine
     container_name: rabbit-redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - rabbit_redis_data:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 5s
+    networks:
+      - rabbit-network
 
   migrate:
     profiles: [app]
@@ -53,14 +55,18 @@ services:
       context: .
       dockerfile: docker/Dockerfile.migrate
     container_name: rabbit-migrate
-    env_file: .env.docker
+    env_file:
+      - path: .env.docker
+        required: false
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-rabbit}:${POSTGRES_PASSWORD:-rabbit}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
       RUN_SEED: ${RUN_SEED:-true}
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
+    networks:
+      - rabbit-network
 
   api:
     profiles: [app]
@@ -69,11 +75,13 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: rabbit-api
     restart: unless-stopped
-    env_file: .env.docker
+    env_file:
+      - path: .env.docker
+        required: false
     environment:
       NODE_ENV: production
-      PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-rabbit}:${POSTGRES_PASSWORD:-rabbit}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
+      PORT: 5000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-rabbit-super-secret-jwt-change-me}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -87,18 +95,22 @@ services:
       MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
     ports:
-      - "${API_PORT:-4000}:4000"
+      - "${API_PORT:-5000}:5000"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/v1/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5000/api/v1/health"]
       interval: 15s
       timeout: 5s
       retries: 8
-      start_period: 20s
+      start_period: 25s
+    networks:
+      - rabbit-network
 
   web:
     profiles: [app]
@@ -106,24 +118,26 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
-        NEXT_PUBLIC_SOCKET_SERVER_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:5000}
+        NEXT_PUBLIC_SOCKET_SERVER_URL: ${PUBLIC_API_URL:-http://localhost:5000}
         NEXT_PUBLIC_RAZORPAY_KEY_ID: ${NEXT_PUBLIC_RAZORPAY_KEY_ID:-}
     container_name: rabbit-web
     restart: unless-stopped
-    env_file: .env.docker
+    env_file:
+      - path: .env.docker
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: 0.0.0.0
-      DATABASE_URL: postgresql://${POSTGRES_USER:-rabbit}:${POSTGRES_PASSWORD:-rabbit}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-rabbit}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-rabbit-super-secret-jwt-change-me}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      API_URL: http://api:4000
-      SOCKET_BROADCAST_URL: http://api:4000
-      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:4000}
-      NEXT_PUBLIC_SOCKET_SERVER_URL: ${PUBLIC_API_URL:-http://localhost:4000}
+      API_URL: http://api:5000
+      SOCKET_BROADCAST_URL: http://api:5000
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:5000}
+      NEXT_PUBLIC_SOCKET_SERVER_URL: ${PUBLIC_API_URL:-http://localhost:5000}
       NEXT_PUBLIC_RAZORPAY_KEY_ID: ${NEXT_PUBLIC_RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
     ports:
@@ -131,7 +145,14 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - rabbit-network
+
+networks:
+  rabbit-network:
+    name: rabbit-network
+    driver: bridge
 
 volumes:
-  rabbit_pg_data:
-  rabbit_redis_data:
+  postgres_data:
+  redis_data:

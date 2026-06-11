@@ -8,17 +8,24 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { CartConflictModal } from '@/components/cart/CartConflictModal'
 import { useCartStore } from '@/store'
-import type { CartItem } from '@/types'
+import type { CartItemInput, CartLineItem } from '@/store'
 
 type CartContextValue = {
   hydrated: boolean
-  items: CartItem[]
+  items: CartLineItem[]
   shopId: string | null
-  addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void
-  removeItem: (productId: string) => void
-  updateQuantity: (productId: string, quantity: number) => void
+  activeStoreId: string | null
+  activeStoreName: string | null
+  cartConflict: ReturnType<typeof useCartStore.getState>['cartConflict']
+  addItem: (item: CartItemInput, qty?: number) => void
+  clearAndAddItem: (item: CartItemInput, qty?: number) => void
+  clearConflict: () => void
+  removeItem: (id: string) => void
+  updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
+  subtotal: () => number
   total: () => number
   itemCount: () => number
 }
@@ -29,11 +36,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
 
   const items = useCartStore((s) => s.items)
-  const shopId = useCartStore((s) => s.shopId)
+  const activeStoreId = useCartStore((s) => s.activeStoreId)
+  const activeStoreName = useCartStore((s) => s.activeStoreName)
+  const cartConflict = useCartStore((s) => s.cartConflict)
   const addItem = useCartStore((s) => s.addItem)
+  const clearAndAddItem = useCartStore((s) => s.clearAndAddItem)
+  const clearConflict = useCartStore((s) => s.clearConflict)
   const removeItem = useCartStore((s) => s.removeItem)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const clearCart = useCartStore((s) => s.clearCart)
+  const subtotal = useCartStore((s) => s.subtotal)
   const total = useCartStore((s) => s.total)
   const itemCount = useCartStore((s) => s.itemCount)
 
@@ -48,28 +60,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
     () => ({
       hydrated,
       items,
-      shopId,
+      shopId: activeStoreId,
+      activeStoreId,
+      activeStoreName,
+      cartConflict,
       addItem,
+      clearAndAddItem,
+      clearConflict,
       removeItem,
       updateQuantity,
       clearCart,
+      subtotal,
       total,
       itemCount,
     }),
     [
       hydrated,
       items,
-      shopId,
+      activeStoreId,
+      activeStoreName,
+      cartConflict,
       addItem,
+      clearAndAddItem,
+      clearConflict,
       removeItem,
       updateQuantity,
       clearCart,
+      subtotal,
       total,
       itemCount,
     ],
   )
 
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
+  return (
+    <CartContext.Provider value={value}>
+      {children}
+      <CartConflictModal />
+    </CartContext.Provider>
+  )
 }
 
 export function useCart() {

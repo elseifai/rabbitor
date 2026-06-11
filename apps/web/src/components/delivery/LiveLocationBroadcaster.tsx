@@ -1,19 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { io, type Socket } from 'socket.io-client'
 import { MapPin, Radio } from 'lucide-react'
-
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:4000'
-
-let socket: Socket | null = null
-
-function getSocket(): Socket {
-  if (!socket) {
-    socket = io(socketUrl, { autoConnect: true })
-  }
-  return socket
-}
+import { socketClient } from '@/lib/socket-client'
+import { useAuth } from '@/context/AuthContext'
 
 export function LiveLocationBroadcaster({
   orderId,
@@ -24,6 +14,7 @@ export function LiveLocationBroadcaster({
   destLat: number
   destLng: number
 }) {
+  const { token } = useAuth()
   const watchIdRef = useRef<number | null>(null)
   const [isTracking, setIsTracking] = useState(false)
   const [lastSent, setLastSent] = useState<{ lat: number; lng: number } | null>(null)
@@ -35,8 +26,7 @@ export function LiveLocationBroadcaster({
       return
     }
 
-    const client = getSocket()
-    client.emit('join-order-room', { orderId })
+    const releaseRoom = socketClient.acquireOrderRoom(orderId, { token })
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
@@ -45,7 +35,7 @@ export function LiveLocationBroadcaster({
         setLastSent({ lat, lng })
         setIsTracking(true)
         setError(null)
-        client.emit('update-live-location', { orderId, lat, lng })
+        socketClient.emit('update-live-location', { orderId, lat, lng })
       },
       (err) => {
         setIsTracking(false)
@@ -58,9 +48,9 @@ export function LiveLocationBroadcaster({
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current)
       }
-      client.emit('leave-order-room', { orderId })
+      releaseRoom()
     }
-  }, [orderId])
+  }, [orderId, token])
 
   return (
     <div className="space-y-4">

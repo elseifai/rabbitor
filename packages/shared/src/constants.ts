@@ -19,4 +19,11 @@ export const REDIS_KEYS = {
   storeOpen: (storeId: string) => `store:${storeId}:open`,
   orderStatus: (orderId: string) => `order:${orderId}:status`,
   riderLocation: (rabbitorId: string) => `rabbitor:${rabbitorId}:location`,
+  riderStage: (orderId: string) => `order:${orderId}:riderStage`,
+  orderRiderLocation: (orderId: string) => `order:${orderId}:riderLocation`,
+  shopCategoryProducts: (shopId: string, category: string) =>
+    `shop:${shopId}:category:${category}`,
 } as const;
+
+/** Absolute TTL for shop inventory cache entries (seconds). */
+export const SHOP_PRODUCT_CACHE_TTL_SECONDS = 300;

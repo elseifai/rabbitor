@@ -7,6 +7,7 @@ import {
   resolveProductForShop,
   productUnavailableMessage,
 } from '@/lib/resolve-cart-product'
+import { broadcastNewMerchantOrder } from '@/lib/order-events'
 
 export async function POST(request: Request) {
   try {
@@ -183,6 +184,8 @@ export async function POST(request: Request) {
 
       return created
     })
+
+    await broadcastNewMerchantOrder(newOrder.id)
 
     return NextResponse.json({
       success: true,

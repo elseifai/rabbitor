@@ -3,8 +3,10 @@ import { prisma } from "../lib/prisma";
 import { notFound, badRequest, forbidden } from "../lib/errors";
 import { getRedis } from "../lib/redis";
 import { haversineKm } from "../lib/geo";
+import { emitNewOrderToStore } from "./merchant-order-events";
 import { getIO, orderRoom } from "../socket/io";
 import { REDIS_KEYS } from "@rabbit/shared";
+import { invalidateAllShopProductCaches } from "../lib/inventory-cache";
 import { sendPushNotification } from "../lib/fcm";
 import { applyCouponInTransaction } from "./coupon.service";
 
@@ -104,6 +106,13 @@ export async function createOrder(
   });
 
   await getRedis().set(REDIS_KEYS.orderStatus(order.id), order.status, "EX", 86400);
+  await invalidateAllShopProductCaches(shop.id);
+
+  try {
+    await emitNewOrderToStore(order.id);
+  } catch (err) {
+    console.warn("[merchant-order-events] emit failed:", (err as Error).message);
+  }
 
   return {
     id: order.id,
@@ -114,6 +123,101 @@ export async function createOrder(
     storeName: order.shop.name,
     createdAt: order.createdAt.toISOString(),
   };
+}
+
+type VendorStatusInput = "ACCEPTED" | "REJECTED" | "PREPARING" | "OUT_FOR_DELIVERY" | "CANCELLED";
+
+export async function listMerchantOrders(shopId: string, page = 1, limit = 50) {
+  const safePage = Math.max(1, page);
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  const skip = (safePage - 1) * safeLimit;
+
+  const where = { shopId };
+
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: {
+        items: {
+          include: { product: { select: { name: true, unit: true } } },
+        },
+        customer: { select: { name: true, phone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: safeLimit,
+    }),
+    prisma.order.count({ where }),
+  ]);
+
+  return {
+    orders: orders.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      status: o.status,
+      totalPrice: o.totalPrice,
+      deliveryFee: o.deliveryFee,
+      itemCount: o.items.reduce((sum, item) => sum + item.quantity, 0),
+      items: o.items.map((item) => ({
+        id: item.id,
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.price,
+        unit: item.product.unit,
+      })),
+      customerPhone: o.customer.phone ?? "",
+      createdAt: o.createdAt.toISOString(),
+    })),
+    page: safePage,
+    limit: safeLimit,
+    total,
+  };
+}
+
+export async function updateMerchantOrderStatus(
+  shopId: string,
+  orderId: string,
+  status: VendorStatusInput,
+) {
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, shopId },
+    include: {
+      shop: {
+        select: {
+          latitude: true,
+          longitude: true,
+        },
+      },
+      customer: { select: { fcmToken: true } },
+    },
+  });
+
+  if (!order) {
+    throw notFound("Order not found");
+  }
+
+  if (!["ACCEPTED", "REJECTED", "PREPARING", "OUT_FOR_DELIVERY", "CANCELLED"].includes(status)) {
+    throw forbidden("Merchants cannot set this order status");
+  }
+
+  const mappedStatus = STATUS_MAP[status];
+
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      status: mappedStatus,
+    },
+  });
+
+  await getRedis().set(REDIS_KEYS.orderStatus(orderId), mappedStatus, "EX", 86400);
+
+  if (mappedStatus === "ACCEPTED_BY_SHOP") {
+    await assignNearestRabbitor(orderId, order.shop.latitude, order.shop.longitude);
+  }
+
+  await notifyCustomerOrderStatus(order.customer.fcmToken, mappedStatus);
+
+  return updated;
 }
 
 export async function updateOrderStatus(

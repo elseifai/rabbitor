@@ -8,7 +8,10 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#16a34a',
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Home', tabBarLabel: 'Home' }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Home', tabBarLabel: 'Home', headerShown: false }}
+      />
       <Tabs.Screen name="orders" options={{ title: 'Orders', tabBarLabel: 'Orders' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarLabel: 'Profile' }} />
     </Tabs>

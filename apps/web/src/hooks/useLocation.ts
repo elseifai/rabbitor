@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useLocationStore } from '@/store'
 
 interface UseLocationResult {
@@ -34,62 +34,68 @@ async function reverseGeocode(lat: number, lng: number) {
       addr.village ||
       'Near you'
     const city = addr.city || addr.town || addr.state_district || ''
-    const pincode = addr.postcode || ''
     const label =
       data.display_name?.split(',').slice(0, 3).join(', ') || area
-    return { area, city, pincode, label }
+    return { area, city, label }
   } catch {
-    return { area: DEFAULT_AREA, city: DEFAULT_CITY, pincode: '', label: DEFAULT_AREA }
+    return { area: DEFAULT_AREA, city: DEFAULT_CITY, label: DEFAULT_AREA }
   }
 }
 
 export function useLocation(): UseLocationResult {
-  const { location, setLocation } = useLocationStore()
-  const [isDetecting, setIsDetecting] = useState(false)
-  const [permissionDenied, setPermissionDenied] = useState(false)
+  const coordinates = useLocationStore((s) => s.coordinates)
+  const formattedAddress = useLocationStore((s) => s.formattedAddress)
+  const isFetching = useLocationStore((s) => s.isFetching)
+  const permissionStatus = useLocationStore((s) => s.permissionStatus)
+  const setLocation = useLocationStore((s) => s.setLocation)
+  const setPermission = useLocationStore((s) => s.setPermission)
+  const setFetching = useLocationStore((s) => s.setFetching)
+  const setError = useLocationStore((s) => s.setError)
 
   const requestLocation = () => {
-    if (!navigator.geolocation) return
-    setIsDetecting(true)
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported on this device')
+      return
+    }
+
+    setFetching(true)
+    setError(null)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords
         const geo = await reverseGeocode(latitude, longitude)
-        setLocation({
-          label: geo.label,
-          area: geo.area,
-          city: geo.city,
-          pincode: geo.pincode,
-          latitude,
-          longitude,
-        })
-        setIsDetecting(false)
-        setPermissionDenied(false)
+        setLocation(latitude, longitude, geo.label)
+        setPermission('granted')
       },
       (err) => {
         console.warn('Location error:', err.message)
-        setIsDetecting(false)
-        if (err.code === err.PERMISSION_DENIED) setPermissionDenied(true)
+        if (err.code === err.PERMISSION_DENIED) {
+          setPermission('denied')
+          setError('Location permission denied')
+        } else {
+          setError(err.message || 'Unable to detect location')
+        }
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     )
   }
 
-  // Auto-detect on first load if no location saved
   useEffect(() => {
-    if (!location) {
+    if (!coordinates) {
       requestLocation()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const displayArea = formattedAddress?.split(',')[0]?.trim() ?? DEFAULT_AREA
+
   return {
-    lat: location?.latitude ?? DEFAULT_LAT,
-    lng: location?.longitude ?? DEFAULT_LNG,
-    area: location?.area ?? DEFAULT_AREA,
-    city: (location as any)?.city ?? DEFAULT_CITY,
-    isDetecting,
-    permissionDenied,
+    lat: coordinates?.lat ?? DEFAULT_LAT,
+    lng: coordinates?.lng ?? DEFAULT_LNG,
+    area: displayArea,
+    city: formattedAddress?.split(',')[1]?.trim() ?? DEFAULT_CITY,
+    isDetecting: isFetching,
+    permissionDenied: permissionStatus === 'denied',
     requestLocation,
   }
 }

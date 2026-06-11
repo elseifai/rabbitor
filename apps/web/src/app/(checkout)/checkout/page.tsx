@@ -66,7 +66,8 @@ function instructionLabel(key: string | null): string | undefined {
 export default function DynamicCheckoutPage() {
   const router = useRouter()
   const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
-  const location = useLocationStore((s) => s.location)
+  const coordinates = useLocationStore((s) => s.coordinates)
+  const formattedAddress = useLocationStore((s) => s.formattedAddress)
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
   const [selectedInstruction, setSelectedInstruction] = useState<string | null>(null)
@@ -97,8 +98,8 @@ export default function DynamicCheckoutPage() {
   const grandTotal = Math.max(0, itemTotal - discountAmount) + deliveryFee + partnerTip
 
   const addressLine = deliveryAddress
-  const lat = destLat ?? location?.latitude ?? SAVED_LOCATIONS[0].latitude
-  const lng = destLng ?? location?.longitude ?? SAVED_LOCATIONS[0].longitude
+  const lat = destLat ?? coordinates?.lat ?? SAVED_LOCATIONS[0].latitude
+  const lng = destLng ?? coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
 
   const detectDeliveryLocation = () => {
     if (!navigator.geolocation) return
@@ -134,12 +135,12 @@ export default function DynamicCheckoutPage() {
 
   // Pre-fill address from saved location
   useEffect(() => {
-    if (!deliveryAddress && location?.label) {
-      setDeliveryAddress(location.label)
-      if (location.latitude) setDestLat(location.latitude)
-      if (location.longitude) setDestLng(location.longitude)
+    if (!deliveryAddress && formattedAddress) {
+      setDeliveryAddress(formattedAddress)
+      if (coordinates?.lat) setDestLat(coordinates.lat)
+      if (coordinates?.lng) setDestLng(coordinates.lng)
     }
-  }, [location, deliveryAddress])
+  }, [coordinates, formattedAddress, deliveryAddress])
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
 
   useEffect(() => {
@@ -179,9 +180,9 @@ export default function DynamicCheckoutPage() {
             .map((p) => p.id),
         )
 
-        const stale = items.filter((item) => !validIds.has(item.productId))
+        const stale = items.filter((item) => !validIds.has(item.id))
         if (stale.length > 0 && !cancelled) {
-          stale.forEach((item) => removeItem(item.productId))
+          stale.forEach((item) => removeItem(item.id))
           setError(
             'Some items in your cart are no longer available and were removed. Add items again from the shop.',
           )
@@ -239,7 +240,7 @@ export default function DynamicCheckoutPage() {
     couponCode: appliedCoupon ?? undefined,
     paymentMethod,
     items: items.map((item) => ({
-      productId: item.productId,
+      productId: item.id,
       quantity: item.quantity,
       price: item.price,
     })),
@@ -464,7 +465,7 @@ export default function DynamicCheckoutPage() {
           <div className="divide-y divide-slate-50">
             {items.map((item) => (
               <div
-                key={item.productId}
+                key={item.id}
                 className="flex justify-between py-2.5 text-xs font-bold"
               >
                 <span className="text-slate-800">

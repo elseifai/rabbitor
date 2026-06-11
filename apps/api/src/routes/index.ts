@@ -10,6 +10,7 @@ import productsUploadRoutes, {
 import ordersRoutes from "./orders.routes";
 import paymentsRoutes from "./payments.routes";
 import rabbitorRoutes from "./rabbitor.routes";
+import merchantRoutes from "./merchant.routes";
 import internalRoutes from "./internal.routes";
 import adsRoutes from "./ads.routes";
 import { prisma } from "../lib/prisma";
@@ -58,6 +59,7 @@ router.use("/coupons", couponsRouter);
 router.use("/vendor", vendorRouter);
 router.use("/admin", adminRouter);
 router.use("/rabbitor", rabbitorRoutes);
+router.use("/merchant", merchantRoutes);
 router.use("/orders", ordersRoutes);
 router.use("/payments", paymentsRoutes);
 router.use("/ads", adsRoutes);

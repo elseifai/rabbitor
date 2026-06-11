@@ -184,8 +184,12 @@ export async function loginUser(phone: string, password: string) {
   };
 }
 
-function issueTokens(user: { id: string; role: UserRole; phone: string }) {
-  const payload: JwtPayload = { sub: user.id, role: user.role, phone: user.phone };
+function issueTokens(user: { id: string; role: UserRole; phone: string | null }) {
+  const payload: JwtPayload = {
+    sub: user.id,
+    role: user.role,
+    phone: user.phone ?? "",
+  };
   const accessToken = jwt.sign(payload, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
   } as jwt.SignOptions);

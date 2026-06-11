@@ -2,8 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Search, ChevronUp, Minus, Plus, Percent } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ChevronUp, Percent } from 'lucide-react'
+import { RotatingSearchBar } from '@/components/navigation/RotatingSearchBar'
+import { SubPlatformTabs } from '@/components/navigation/SubPlatformTabs'
+import {
+  UnifiedProductCard,
+  type UnifiedProductData,
+} from '@/components/products/UnifiedProductCard'
+import {
+  FASHION_DEAL_BADGES,
+  SUB_PLATFORM_CONFIG,
+  parseSubPlatformId,
+  type SubPlatformId,
+} from '@/lib/sub-platforms'
 import { useLocationStore, useCartStore } from '@/store'
 import { SAVED_LOCATIONS } from '@/lib/constants'
 import { HOME_CATEGORY_TABS } from '@/lib/categories'
@@ -45,10 +57,55 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-const ROTATING_PROMOS = [
-  { text: '🍦 ICE CREAM CARNIVAL', emoji: '🍦' },
-  { text: '🐰 RABBIT FAST DEALS', emoji: '🐰' },
-  { text: '🐟 FRESH FISH TODAY', emoji: '🐟' },
+const FASHION_FALLBACK_DEALS: DealProduct[] = [
+  {
+    id: 'fashion-1',
+    name: 'Urban Runner Sneakers',
+    unit: 'UK 6-11',
+    price: 549,
+    mrp: 1299,
+    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
+    shopId: 'boutique-hub',
+    shopName: 'Boutique Hub',
+    shopSlug: 'boutique-hub',
+    storeType: 'GENERAL',
+  },
+  {
+    id: 'fashion-2',
+    name: 'Linen Casual Shirt',
+    unit: 'S-XXL',
+    price: 499,
+    mrp: 999,
+    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400',
+    shopId: 'boutique-hub',
+    shopName: 'Boutique Hub',
+    shopSlug: 'boutique-hub',
+    storeType: 'GENERAL',
+  },
+  {
+    id: 'fashion-3',
+    name: 'High-Rise Slim Jeans',
+    unit: '28-36',
+    price: 599,
+    mrp: 1499,
+    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400',
+    shopId: 'boutique-hub',
+    shopName: 'Boutique Hub',
+    shopSlug: 'boutique-hub',
+    storeType: 'GENERAL',
+  },
+  {
+    id: 'fashion-4',
+    name: 'Everyday Tote Bag',
+    unit: 'One Size',
+    price: 399,
+    mrp: 799,
+    image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400',
+    shopId: 'boutique-hub',
+    shopName: 'Boutique Hub',
+    shopSlug: 'boutique-hub',
+    storeType: 'GENERAL',
+  },
 ]
 
 const COUPONS = [
@@ -195,98 +252,25 @@ function ShopSkeleton() {
   )
 }
 
-function ProductDealCard({ product }: { product: DealProduct }) {
-  const addItem = useCartStore((s) => s.addItem)
-  const updateQuantity = useCartStore((s) => s.updateQuantity)
-  const inCart = useCartStore((s) => s.items.find((i) => i.productId === product.id))
-  const original = product.mrp && product.mrp > product.price ? product.mrp : null
-  const discount = original
-    ? Math.round(((original - product.price) / original) * 100)
-    : 0
-  const outOfStock = product.stock === 0
-  const placeholder = STORE_PLACEHOLDERS[product.storeType ?? ''] ?? { emoji: '📦', bg: 'bg-gray-100' }
-
-  return (
-    <div className="relative rounded-xl border border-[#F0F0F0] bg-white p-2">
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-[#F8F8F8]">
-        {product.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt="" loading="lazy" className="h-full w-full object-cover" />
-        ) : (
-          <div className={cn('flex h-full w-full items-center justify-center text-4xl', placeholder.bg)}>
-            {placeholder.emoji}
-          </div>
-        )}
-        {!outOfStock && discount > 0 && (
-          <span className="absolute right-1 top-1 rounded bg-[#0C831F] px-1.5 py-0.5 text-[9px] font-bold text-white">
-            {discount}% OFF
-          </span>
-        )}
-        {outOfStock && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-bold text-white">
-            Out of Stock
-          </div>
-        )}
-      </div>
-
-      <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-snug text-[#1C1C1C]">
-        {product.name}
-      </p>
-      <p className="text-[11px] text-[#878787]">{product.unit}</p>
-
-      <div className="mt-2 flex items-end justify-between">
-        <div className="flex items-baseline gap-1">
-          <span className="text-sm font-bold text-[#1C1C1C]">{formatCurrency(product.price)}</span>
-          {original && (
-            <span className="text-xs text-[#878787] line-through">{formatCurrency(original)}</span>
-          )}
-        </div>
-
-        {!outOfStock &&
-          (inCart ? (
-            <div className="flex items-center gap-1 rounded-lg border border-[#0C831F] bg-white px-0.5 py-0.5">
-              <button
-                type="button"
-                onClick={() => updateQuantity(product.id, inCart.quantity - 1)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-[#0C831F] active:scale-95"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span className="min-w-[16px] text-center text-sm font-bold text-[#0C831F]">
-                {inCart.quantity}
-              </span>
-              <button
-                type="button"
-                onClick={() => updateQuantity(product.id, inCart.quantity + 1)}
-                className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0C831F] text-white active:scale-95"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() =>
-                addItem({
-                  productId: product.id,
-                  shopId: product.shopId,
-                  shopName: product.shopName,
-                  shopSlug: product.shopSlug,
-                  name: product.name,
-                  price: product.price,
-                  unit: product.unit,
-                  image: product.image ?? undefined,
-                })
-              }
-              className="flex flex-col items-center rounded-lg border-[1.5px] border-[#FF3F6C] bg-white px-3 py-0.5 active:scale-95"
-            >
-              <span className="text-[13px] font-bold leading-none text-[#FF3F6C]">ADD</span>
-              <span className="text-[10px] leading-none text-[#FF3F6C]">+</span>
-            </button>
-          ))}
-      </div>
-    </div>
-  )
+function toUnifiedProduct(
+  product: DealProduct,
+  variant: 'GROCERY' | 'RETAIL',
+): UnifiedProductData {
+  return {
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    mrp: product.mrp,
+    unit: product.unit,
+    image: product.image,
+    storeId: product.shopId,
+    storeName: product.shopName,
+    storeType: product.storeType,
+    stock: product.stock,
+    optionCount: variant === 'RETAIL' ? 4 : undefined,
+    sizes: variant === 'RETAIL' ? ['S', 'M', 'L', 'XL'] : undefined,
+    colors: variant === 'RETAIL' ? ['Black', 'Navy'] : undefined,
+  }
 }
 
 function ViewCartBar() {
@@ -349,11 +333,15 @@ function HomeShopCard({ shop }: { shop: ShopListItem }) {
 }
 
 export function HomeFeed() {
-  const location = useLocationStore((s) => s.location)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const coordinates = useLocationStore((s) => s.coordinates)
   const cartTotal = useCartStore((s) => s.total())
 
+  const [subPlatform, setSubPlatform] = useState<SubPlatformId>(() =>
+    parseSubPlatformId(searchParams.get('platform')),
+  )
   const [activeCategory, setActiveCategory] = useState('all')
-  const [promoIdx, setPromoIdx] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [shops, setShops] = useState<ShopListItem[]>([])
   const [deals, setDeals] = useState<DealProduct[]>([])
@@ -364,16 +352,24 @@ export function HomeFeed() {
   const dealsRef = useRef<HTMLDivElement>(null)
   const couponsRef = useRef<HTMLDivElement>(null)
 
-  const lat = location?.latitude ?? SAVED_LOCATIONS[0].latitude
-  const lng = location?.longitude ?? SAVED_LOCATIONS[0].longitude
+  const lat = coordinates?.lat ?? SAVED_LOCATIONS[0].latitude
+  const lng = coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
 
+  const platformConfig = SUB_PLATFORM_CONFIG[subPlatform]
   const tab = HOME_CATEGORY_TABS.find((t) => t.id === activeCategory)
   const storeType = tab?.storeType
 
-  useEffect(() => {
-    const t = setInterval(() => setPromoIdx((i) => (i + 1) % ROTATING_PROMOS.length), 3000)
-    return () => clearInterval(t)
-  }, [])
+  const handleSubPlatformChange = useCallback(
+    (next: SubPlatformId) => {
+      setSubPlatform(next)
+      const params = new URLSearchParams(searchParams.toString())
+      if (next === 'all') params.delete('platform')
+      else params.set('platform', next)
+      const query = params.toString()
+      router.replace(query ? `/?${query}` : '/', { scroll: false })
+    },
+    [router, searchParams],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -495,50 +491,75 @@ export function HomeFeed() {
     )
   }, [searchQuery, shops])
 
+  const platformDeals = useMemo(() => {
+    let list = deals
+    if (platformConfig.storeTypes?.length) {
+      list = list.filter(
+        (d) => !d.storeType || platformConfig.storeTypes!.includes(d.storeType),
+      )
+    }
+    if (subPlatform === 'fashion') {
+      const merged = [...FASHION_FALLBACK_DEALS, ...list]
+      const seen = new Set<string>()
+      return merged.filter((item) => {
+        if (seen.has(item.id)) return false
+        seen.add(item.id)
+        return true
+      })
+    }
+    return list
+  }, [deals, platformConfig.storeTypes, subPlatform])
+
   return (
     <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F0F0F0] font-sans shadow-xl">
       {/* SECTION A: Top search bar */}
       <div className="sticky top-0 z-50 border-b border-[#F0F0F0] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="relative w-[60%]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#878787]" />
-            <input
+          <div className="w-[60%]">
+            <RotatingSearchBar
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder='Search "atta", "fish", "vegetables"...'
-              className="h-10 w-full rounded-lg bg-[#F0F0F0] pl-9 pr-3 text-[13px] text-[#1C1C1C] outline-none placeholder:text-[#878787]"
+              onChange={setSearchQuery}
+              results={
+                searchResults.length > 0 ? (
+                  <div className="max-h-48 overflow-y-auto">
+                    {searchResults.map((s) => (
+                      <Link
+                        key={s.id}
+                        href={`/shops/${s.slug}`}
+                        className="block border-t border-[#F0F0F0] px-3 py-2.5 text-sm hover:bg-[#F8F8F8]"
+                        onClick={() => setSearchQuery('')}
+                      >
+                        <span className="font-semibold text-[#1C1C1C]">{s.name}</span>
+                        <span className="ml-2 text-xs text-[#878787]">{s.category}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null
+              }
             />
-            {searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[#F0F0F0] bg-white shadow-lg">
-                {searchResults.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/shops/${s.slug}`}
-                    className="block border-b border-[#F0F0F0] px-3 py-2.5 text-sm last:border-0 hover:bg-[#F8F8F8]"
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <span className="font-semibold text-[#1C1C1C]">{s.name}</span>
-                    <span className="ml-2 text-xs text-[#878787]">{s.category}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
           </div>
 
-          <div className="flex w-[40%] items-center justify-between rounded-lg bg-[#FFF3E0] px-2 py-1 h-10">
-            <p
-              key={promoIdx}
-              className="animate-in fade-in text-[11px] font-bold uppercase leading-tight text-[#D4380D] duration-500"
-            >
-              {ROTATING_PROMOS[promoIdx].text}
+          <div
+            className={cn(
+              'flex h-10 w-[40%] items-center justify-center rounded-lg px-2 py-1 transition-colors duration-300',
+              platformConfig.etaTone,
+            )}
+          >
+            <p className="text-center text-[11px] font-bold leading-tight">
+              {platformConfig.etaLabel}
             </p>
-            <span className="text-lg">{ROTATING_PROMOS[promoIdx].emoji}</span>
           </div>
         </div>
+
+        <SubPlatformTabs
+          activeTab={subPlatform}
+          onChange={handleSubPlatformChange}
+          className="px-0 pb-0 pt-2"
+        />
       </div>
 
       {/* SECTION B: Category tabs */}
-      <div className="sticky top-[64px] z-40 border-b border-[#F0F0F0] bg-white">
+      <div className="sticky top-[116px] z-40 border-b border-[#F0F0F0] bg-white">
         <div className="flex overflow-x-auto px-4 scrollbar-hide">
           {HOME_CATEGORY_TABS.map((cat) => {
             const active = activeCategory === cat.id
@@ -586,8 +607,32 @@ export function HomeFeed() {
           </section>
         )}
 
-        {/* Grocery & Kitchen (only on All) */}
-        {activeCategory === 'all' && (
+        {/* Fashion deals scroller */}
+        {platformConfig.showFashionDeals && activeCategory === 'all' && (
+          <section className="mb-2 bg-white p-4">
+            <h2 className="text-lg font-bold text-[#1C1C1C]">
+              Fashion Deals: Everything Under ₹599
+            </h2>
+            <p className="text-xs text-[#878787]">Same-day style drops from local boutiques</p>
+            <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide">
+              {FASHION_DEAL_BADGES.map((badge) => (
+                <button
+                  key={badge.label}
+                  type="button"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#FBCFE8] bg-gradient-to-r from-[#FFF1F2] to-[#FDF2F8] px-3 py-2 text-left shadow-sm transition active:scale-[0.98]"
+                >
+                  <span className="rounded-full bg-[#1C1C1C] px-2 py-0.5 text-[9px] font-bold text-white">
+                    {badge.tag}
+                  </span>
+                  <span className="text-[12px] font-bold text-[#1C1C1C]">{badge.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Grocery & Kitchen */}
+        {platformConfig.showGroceryLayouts && activeCategory === 'all' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Grocery & Kitchen</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -608,8 +653,8 @@ export function HomeFeed() {
         </section>
         )}
 
-        {/* Snacks & Drinks (only on All) */}
-        {activeCategory === 'all' && (
+        {/* Snacks & Drinks */}
+        {platformConfig.showGroceryLayouts && activeCategory === 'all' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Snacks & Drinks</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -667,17 +712,29 @@ export function HomeFeed() {
         {/* Flash Deals */}
         <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">
-            {activeCategory === 'all' ? 'Flash Deals: All Time Low' : `${tab?.label} — Top Picks`}
+            {subPlatform === 'fashion'
+              ? 'Boutique Picks: Under ₹599'
+              : activeCategory === 'all'
+                ? 'Flash Deals: All Time Low'
+                : `${tab?.label} — Top Picks`}
           </h2>
-          <p className="text-xs text-[#878787]">Fresh Essentials Every Day</p>
-          {deals.length === 0 ? (
+          <p className="text-xs text-[#878787]">
+            {subPlatform === 'fashion'
+              ? 'Curated apparel, footwear & accessories'
+              : 'Fresh Essentials Every Day'}
+          </p>
+          {platformDeals.length === 0 ? (
             <p className="mt-4 text-sm text-[#878787]">
               No items available in this category yet.
             </p>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-2">
-              {deals.map((p) => (
-                <ProductDealCard key={p.id} product={p} />
+              {platformDeals.map((p) => (
+                <UnifiedProductCard
+                  key={p.id}
+                  product={toUnifiedProduct(p, platformConfig.productVariant)}
+                  variant={platformConfig.productVariant}
+                />
               ))}
             </div>
           )}
@@ -706,7 +763,9 @@ export function HomeFeed() {
         {/* Nearby Shops */}
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Stores near you</h2>
-          <p className="text-xs text-[#878787]">Delivering in 15-30 mins</p>
+          <p className="text-xs text-[#878787]">
+            {subPlatform === 'fashion' ? 'Same-day delivery available' : 'Delivering in 15-30 mins'}
+          </p>
           <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
             {loadingShops ? (
               <>

@@ -6,7 +6,11 @@ import { prisma } from '@/lib/prisma'
 import { clearSession, requireSession } from '@/lib/auth'
 import { canTransition, generateOrderNumber, ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
-import { broadcastOrderEvent } from '@/lib/order-events'
+import {
+  broadcastDeliveryOffer,
+  broadcastNewMerchantOrder,
+  broadcastOrderEvent,
+} from '@/lib/order-events'
 import { getCatalogProductName } from '@/lib/shop-catalog'
 import type { OrderStatus } from '@rabbit/database'
 
@@ -132,7 +136,10 @@ async function placeOrder(input: {
     return created
   })
 
+  await broadcastNewMerchantOrder(order.id)
+
   revalidatePath('/orders')
+  revalidatePath('/merchant/orders')
   return { ok: true as const, orderId: order.id, orderNumber: order.orderNumber }
 }
 
@@ -169,7 +176,11 @@ export async function getOrderAction(orderId: string) {
   }
 }
 
-export async function updateOrderStatusAction(orderId: string, status: OrderStatus) {
+export async function updateOrderStatusAction(
+  orderId: string,
+  status: OrderStatus,
+  note?: string,
+) {
   const session = await requireSession(['VENDOR', 'ADMIN', 'RABBITOR'])
 
   const order = await prisma.order.findUnique({
@@ -190,13 +201,20 @@ export async function updateOrderStatusAction(orderId: string, status: OrderStat
     where: { id: orderId },
     data: {
       status,
-      statusHistory: { create: { status, note: `Updated by ${session.role}` } },
+      statusHistory: {
+        create: { status, note: note?.trim() || `Updated by ${session.role}` },
+      },
     },
   })
 
   await broadcastOrderEvent(orderId, { type: 'status', status: ORDER_STATUS_LABELS[status] })
 
+  if (status === 'OUT_FOR_DELIVERY') {
+    await broadcastDeliveryOffer(orderId)
+  }
+
   revalidatePath('/merchant/orders')
+  revalidatePath('/delivery/orders')
   revalidatePath(`/orders/${orderId}`)
   return { ok: true as const }
 }
@@ -210,10 +228,15 @@ export async function getMerchantOrdersAction() {
   if (shops.length === 0) return []
 
   const orders = await prisma.order.findMany({
-    where: { shopId: { in: shops.map((s) => s.id) } },
+    where: {
+      shopId: { in: shops.map((s) => s.id) },
+      status: {
+        in: ['PENDING', 'ACCEPTED_BY_SHOP', 'PREPARING', 'OUT_FOR_DELIVERY'],
+      },
+    },
     include: {
-      items: true,
-      shop: { select: { name: true } },
+      items: { include: { product: { select: { name: true } } } },
+      shop: { select: { id: true, name: true } },
       customer: { select: { name: true, phone: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -224,10 +247,17 @@ export async function getMerchantOrdersAction() {
     id: o.id,
     orderNumber: o.orderNumber,
     status: o.status,
+    shopId: o.shop.id,
     shopName: o.shop.name,
     customerPhone: o.customer.phone?.replace(/\d(?=\d{4})/g, '•') ?? '',
     totalPrice: o.totalPrice + o.deliveryFee,
-    itemCount: o.items.length,
+    itemCount: o.items.reduce((sum, item) => sum + item.quantity, 0),
     createdAt: o.createdAt.toISOString(),
+    items: o.items.map((item) => ({
+      id: item.id,
+      name: item.product.name,
+      quantity: item.quantity,
+      price: item.price,
+    })),
   }))
 }

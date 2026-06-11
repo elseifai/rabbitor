@@ -7,42 +7,55 @@ import { SAVED_LOCATIONS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 
 export function LocationPicker() {
-  const { location, setLocation } = useLocationStore()
+  const formattedAddress = useLocationStore((s) => s.formattedAddress)
+  const coordinates = useLocationStore((s) => s.coordinates)
+  const isFetching = useLocationStore((s) => s.isFetching)
+  const setLocation = useLocationStore((s) => s.setLocation)
+  const setFetching = useLocationStore((s) => s.setFetching)
+  const setPermission = useLocationStore((s) => s.setPermission)
+  const setError = useLocationStore((s) => s.setError)
+
   const [pincode, setPincode] = useState('')
-  const [detecting, setDetecting] = useState(false)
-  const [expanded, setExpanded] = useState(!location)
+  const [expanded, setExpanded] = useState(!formattedAddress)
 
   const detectLocation = () => {
-    if (!navigator.geolocation) return
-    setDetecting(true)
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported on this device')
+      return
+    }
+
+    setFetching(true)
+    setError(null)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLocation({
-          label: 'Current location',
-          area: 'Near you (GPS)',
-          pincode: pincode || '400058',
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        })
-        setDetecting(false)
+        setLocation(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          'Current location — Near you (GPS)',
+        )
+        setPermission('granted')
         setExpanded(false)
       },
-      () => setDetecting(false),
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          setPermission('denied')
+          setError('Location permission denied')
+        } else {
+          setError(err.message || 'Unable to detect location')
+        }
+      },
       { timeout: 8000 },
     )
   }
 
   const applyPincode = () => {
     if (pincode.length < 6) return
-    setLocation({
-      label: 'Delivery area',
-      area: `Pincode ${pincode}`,
-      pincode,
-      latitude: 19.1364,
-      longitude: 72.8296,
-    })
+    setLocation(19.1364, 72.8296, `Pincode ${pincode}`)
     setExpanded(false)
   }
+
+  const isSelected = (lat: number, lng: number) =>
+    coordinates?.lat === lat && coordinates?.lng === lng
 
   return (
     <div
@@ -58,8 +71,8 @@ export function LocationPicker() {
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
               Deliver to
             </p>
-            {location ? (
-              <p className="font-semibold text-gray-900">{location.area}</p>
+            {formattedAddress ? (
+              <p className="font-semibold text-gray-900">{formattedAddress}</p>
             ) : (
               <p className="text-sm text-gray-500">Set location to see nearby shops</p>
             )}
@@ -80,10 +93,10 @@ export function LocationPicker() {
           <button
             type="button"
             onClick={detectLocation}
-            disabled={detecting}
+            disabled={isFetching}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-rabbit-200 bg-rabbit-50 py-3 text-sm font-semibold text-rabbit-700 transition hover:bg-rabbit-100 disabled:opacity-60"
           >
-            {detecting ? (
+            {isFetching ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Navigation className="h-4 w-4" />
@@ -119,12 +132,16 @@ export function LocationPicker() {
                   key={loc.id}
                   type="button"
                   onClick={() => {
-                    setLocation(loc)
+                    setLocation(
+                      loc.latitude,
+                      loc.longitude,
+                      `${loc.label} — ${loc.area}`,
+                    )
                     setExpanded(false)
                   }}
                   className={cn(
                     'flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm transition',
-                    location?.label === loc.label
+                    isSelected(loc.latitude, loc.longitude)
                       ? 'border-rabbit-300 bg-rabbit-50'
                       : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50',
                   )}
@@ -133,7 +150,7 @@ export function LocationPicker() {
                     <span className="font-medium text-gray-900">{loc.label}</span>
                     <span className="block text-xs text-gray-500">{loc.area}</span>
                   </span>
-                  {location?.label === loc.label && (
+                  {isSelected(loc.latitude, loc.longitude) && (
                     <Check className="h-4 w-4 text-rabbit-600" />
                   )}
                 </button>

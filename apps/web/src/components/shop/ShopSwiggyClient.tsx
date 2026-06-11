@@ -125,7 +125,7 @@ export function ShopSwiggyClient({
   const { items, addItem, updateQuantity } = useCart()
 
   const getQty = (productId: string) =>
-    items.find((i) => i.productId === productId)?.quantity ?? 0
+    items.find((i) => i.id === productId)?.quantity ?? 0
 
   const updateQty = (product: CatalogShop['products'][number], delta: number) => {
     const current = getQty(product.id)
@@ -138,13 +138,12 @@ export function ShopSwiggyClient({
 
     if (current === 0) {
       addItem({
-        productId: product.id,
-        shopId: shop.id,
-        shopName: shop.name,
-        shopSlug: shop.slug,
+        id: product.id,
+        storeId: shop.id,
+        storeName: shop.name,
         name: product.name,
         price: product.price,
-        unit: product.unit,
+        image: product.image,
       })
       if (next > 1) updateQuantity(product.id, next)
       return

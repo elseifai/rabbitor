@@ -1,9 +1,10 @@
-import jwt from "jsonwebtoken";
 import type { Server, Socket } from "socket.io";
-import { config } from "../config";
 import { prisma } from "../lib/prisma";
-import type { JwtPayload } from "../middleware/auth";
+import { ACTIVE_RIDER_ORDER_STATUSES, type JwtPayload } from "../middleware/auth";
 import { orderRoom, setIO } from "./io";
+import { socketAuthMiddleware } from "./auth";
+import { registerMerchantHandlers } from "./merchant";
+import { registerRiderHandlers } from "./rider";
 
 interface JoinOrderRoomPayload {
   orderId: string;
@@ -13,26 +14,17 @@ interface UpdateLiveLocationPayload {
   orderId: string;
   lat: number;
   lng: number;
+  bearing?: number;
 }
 
 export function setupTrackingSocket(io: Server): void {
   setIO(io);
-
-  io.use((socket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token || typeof token !== "string") {
-      return next(new Error("Unauthorized"));
-    }
-    try {
-      const payload = jwt.verify(token, config.jwtSecret) as JwtPayload;
-      socket.data.user = payload;
-      next();
-    } catch {
-      next(new Error("Unauthorized"));
-    }
-  });
+  io.use(socketAuthMiddleware);
 
   io.on("connection", (socket: Socket) => {
+    registerMerchantHandlers(socket);
+    registerRiderHandlers(socket);
+
     socket.on("join-order-room", ({ orderId }: JoinOrderRoomPayload) => {
       if (!orderId) return;
       socket.join(orderRoom(orderId));
@@ -43,20 +35,24 @@ export function setupTrackingSocket(io: Server): void {
       socket.leave(orderRoom(orderId));
     });
 
-    socket.on("update-live-location", async ({ orderId, lat, lng }: UpdateLiveLocationPayload) => {
+    socket.on("update-live-location", async ({ orderId, lat, lng, bearing }: UpdateLiveLocationPayload) => {
       if (!orderId || typeof lat !== "number" || typeof lng !== "number") return;
 
       const user = socket.data.user as JwtPayload | undefined;
       if (!user) return;
 
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        select: { deliveryPartnerId: true },
+      const order = await prisma.order.findFirst({
+        where: {
+          id: orderId,
+          deliveryPartnerId: user.sub,
+          status: { in: ACTIVE_RIDER_ORDER_STATUSES },
+        },
+        select: { id: true },
       });
 
-      if (!order || order.deliveryPartnerId !== user.sub) return;
+      if (!order) return;
 
-      io.to(orderRoom(orderId)).emit("location-updated", { lat, lng });
+      io.to(orderRoom(orderId)).emit("location-updated", { lat, lng, bearing });
     });
   });
 }

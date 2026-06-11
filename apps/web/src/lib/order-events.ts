@@ -19,3 +19,27 @@ export async function broadcastOrderEvent(
     // Realtime server may be offline during local dev
   }
 }
+
+export async function broadcastDeliveryOffer(orderId: string): Promise<void> {
+  try {
+    await fetch(`${SOCKET_SERVER_URL}/api/v1/internal/delivery/offer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+    })
+  } catch {
+    // Realtime server may be offline during local dev
+  }
+}
+
+export async function broadcastNewMerchantOrder(orderId: string): Promise<void> {
+  try {
+    await fetch(`${SOCKET_SERVER_URL}/api/v1/internal/merchant/new-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId }),
+    })
+  } catch {
+    // Realtime server may be offline during local dev
+  }
+}

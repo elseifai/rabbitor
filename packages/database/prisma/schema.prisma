@@ -212,12 +212,15 @@ model Product {
   isAvailable Boolean @default(true)
   unit        String  @default("piece")
   stock       Int     @default(10)
+  /// Menu grouping for category-scoped storefront feeds (sub-platform tabs)
+  category    String  @default("general")
 
   orderItems OrderItem[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
   @@index([shopId, isAvailable])
+  @@index([shopId, category])
 }
 
 model Review {
@@ -271,7 +274,7 @@ model Order {
 
   @@index([customerId])
   @@index([shopId, status])
-  @@index([deliveryPartnerId])
+  @@index([deliveryPartnerId, status])
 }
 
 model OrderItem {

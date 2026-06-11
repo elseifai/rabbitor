@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
+import { mintApiAccessToken } from '@/lib/api-jwt'
 
 export async function getMerchantShopAction() {
   try {
@@ -282,6 +283,30 @@ export async function updateMerchantSettingsAction(input: {
     return { ok: true as const }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not save settings'
+    return { ok: false as const, error: message }
+  }
+}
+
+export async function getMerchantRealtimeAuthAction() {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: session.userId },
+      select: { id: true, name: true },
+    })
+    if (!shop) {
+      return { ok: false as const, error: 'No shop found for this merchant account' }
+    }
+
+    const token = await mintApiAccessToken(session.userId)
+    return {
+      ok: true as const,
+      token,
+      storeId: shop.id,
+      storeName: shop.name,
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Not authenticated'
     return { ok: false as const, error: message }
   }
 }

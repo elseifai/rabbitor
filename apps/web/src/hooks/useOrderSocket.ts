@@ -1,50 +1,24 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { io, type Socket } from 'socket.io-client'
-
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:4000'
-
-let sharedSocket: Socket | null = null
-
-function getSocket(): Socket {
-  if (!sharedSocket) {
-    sharedSocket = io(socketUrl, {
-      autoConnect: true,
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 8,
-    })
-  }
-  return sharedSocket
-}
+import { socketClient } from '@/lib/socket-client'
+import { useSocket } from '@/context/SocketContext'
 
 export function useOrderSocket(orderId: string) {
-  const [connected, setConnected] = useState(false)
+  const { connected, reconnecting, latencyMs } = useSocket()
   const [status, setStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!orderId) return
 
-    const client = getSocket()
-
-    const onConnect = () => setConnected(true)
-    const onDisconnect = () => setConnected(false)
-    const onStatus = (label: string) => setStatus(label)
-
-    client.emit('join-order-room', { orderId })
-    client.on('connect', onConnect)
-    client.on('disconnect', onDisconnect)
-    client.on('status-updated', onStatus)
-
-    if (client.connected) setConnected(true)
+    const releaseRoom = socketClient.acquireOrderRoom(orderId)
+    const offStatus = socketClient.on('status-updated', (label: string) => setStatus(label))
 
     return () => {
-      client.emit('leave-order-room', { orderId })
-      client.off('connect', onConnect)
-      client.off('disconnect', onDisconnect)
-      client.off('status-updated', onStatus)
+      offStatus()
+      releaseRoom()
     }
   }, [orderId])
 
-  return { connected, status }
+  return { connected, reconnecting, latencyMs, status }
 }

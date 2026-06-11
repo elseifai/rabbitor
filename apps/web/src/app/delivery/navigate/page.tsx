@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { getActiveDeliveryAction } from '@/actions/delivery'
 import { LiveLocationBroadcaster } from '@/components/delivery/LiveLocationBroadcaster'
+import type { OrderStatus } from '@rabbit/database'
 import { ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 
 interface Props {
@@ -42,7 +43,9 @@ export default async function DeliveryNavigatePage({ searchParams }: Props) {
         <p className="text-xs uppercase tracking-wide text-rabbit-400">Active delivery</p>
         <h2 className="text-xl font-bold">{activeOrder.orderNumber}</h2>
         <p className="mt-1 text-sm text-gray-400">{activeOrder.shopName}</p>
-        <p className="mt-2 text-xs text-gray-500">{ORDER_STATUS_LABELS[activeOrder.status]}</p>
+        <p className="mt-2 text-xs text-gray-500">
+          {ORDER_STATUS_LABELS[activeOrder.status as OrderStatus]}
+        </p>
       </div>
 
       <LiveLocationBroadcaster

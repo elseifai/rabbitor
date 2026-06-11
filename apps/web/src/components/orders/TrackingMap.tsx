@@ -1,25 +1,11 @@
 'use client'
 
 import { useEffect, useState, type ComponentType } from 'react'
-import { io, type Socket } from 'socket.io-client'
 import { ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 import type { OrderStatus } from '@rabbit/database'
+import { socketClient } from '@/lib/socket-client'
+import { useSocket } from '@/context/SocketContext'
 import type { MapPoint } from './TrackingMapView'
-
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:4000'
-
-let socket: Socket | null = null
-
-function getSocket(): Socket {
-  if (!socket) {
-    socket = io(socketUrl, {
-      autoConnect: true,
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-    })
-  }
-  return socket
-}
 
 function MapFallback({
   destLat,
@@ -72,9 +58,9 @@ export function TrackingMap({
     shopLng?: number
   }> | null>(null)
 
+  const { connected: socketConnected } = useSocket()
   const [driverLocation, setDriverLocation] = useState<MapPoint | null>(null)
   const [status, setStatus] = useState(ORDER_STATUS_LABELS[initialStatus])
-  const [socketConnected, setSocketConnected] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -94,27 +80,18 @@ export function TrackingMap({
   useEffect(() => {
     if (!mounted) return
 
-    const client = getSocket()
-
-    const onConnect = () => setSocketConnected(true)
-    const onDisconnect = () => setSocketConnected(false)
+    const releaseRoom = socketClient.acquireOrderRoom(orderId)
     const onLocation = (data: MapPoint) => setDriverLocation({ lat: data.lat, lng: data.lng })
     const onStatus = (newStatus: string) => setStatus(newStatus)
 
-    client.emit('join-order-room', { orderId })
-    client.on('connect', onConnect)
-    client.on('disconnect', onDisconnect)
-    client.on('location-updated', onLocation)
-    client.on('status-updated', onStatus)
-
-    if (client.connected) setSocketConnected(true)
+    const unsubs = [
+      socketClient.on('location-updated', onLocation),
+      socketClient.on('status-updated', onStatus),
+    ]
 
     return () => {
-      client.emit('leave-order-room', { orderId })
-      client.off('connect', onConnect)
-      client.off('disconnect', onDisconnect)
-      client.off('location-updated', onLocation)
-      client.off('status-updated', onStatus)
+      unsubs.forEach((off) => off())
+      releaseRoom()
     }
   }, [mounted, orderId])
 

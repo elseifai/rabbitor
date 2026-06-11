@@ -16,3 +16,11 @@ export function getIO(): Server {
 export function orderRoom(orderId: string): string {
   return `order:${orderId}`;
 }
+
+export function storeRoom(storeId: string): string {
+  return `store:${storeId}`;
+}
+
+export function riderRoom(riderId: string): string {
+  return `rider:${riderId}`;
+}

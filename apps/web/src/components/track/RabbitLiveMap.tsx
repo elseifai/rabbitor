@@ -1,24 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ComponentType } from 'react'
-import { io, type Socket } from 'socket.io-client'
 import type { OrderStatus } from '@rabbit/database'
+import { socketClient } from '@/lib/socket-client'
 import type { MapPoint } from './RabbitMapView'
-
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || 'http://localhost:4000'
-
-let socket: Socket | null = null
-
-function getSocket(): Socket {
-  if (!socket) {
-    socket = io(socketUrl, {
-      autoConnect: true,
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-    })
-  }
-  return socket
-}
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * Math.min(1, Math.max(0, t))
@@ -134,13 +119,13 @@ export function RabbitLiveMap({
 
   useEffect(() => {
     if (!mounted || !orderId) return
-    const client = getSocket()
-    const onLocation = (data: MapPoint) => setDriverLocation({ lat: data.lat, lng: data.lng })
-    client.emit('join-order-room', { orderId })
-    client.on('location-updated', onLocation)
+    const releaseRoom = socketClient.acquireOrderRoom(orderId)
+    const offLocation = socketClient.on('location-updated', (data: MapPoint) =>
+      setDriverLocation({ lat: data.lat, lng: data.lng }),
+    )
     return () => {
-      client.emit('leave-order-room', { orderId })
-      client.off('location-updated', onLocation)
+      offLocation()
+      releaseRoom()
     }
   }, [mounted, orderId])
 

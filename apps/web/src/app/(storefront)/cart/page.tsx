@@ -6,6 +6,7 @@ import { ShoppingBag, Minus, Plus } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { CartMilestoneTracker } from '@/components/cart/CartMilestoneTracker'
 
 const PLATFORM_FEE = 5
 
@@ -62,14 +63,14 @@ export default function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[480px] px-4 py-4 pb-24">
+    <div className="mx-auto max-w-[480px] px-4 py-4 pb-44">
       <h1 className="text-lg font-bold text-[#1C1C1C]">Your Cart</h1>
-      <p className="text-sm text-[#FF6B35]">{items[0]?.shopName}</p>
+      <p className="text-sm text-[#FF6B35]">{items[0]?.storeName}</p>
 
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
           <li
-            key={item.productId}
+            key={item.id}
             className="flex gap-3 rounded-xl border border-[#F0F0F0] bg-white p-3"
           >
             <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[#F8F8F8]">
@@ -82,7 +83,7 @@ export default function CartPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-[#1C1C1C]">{item.name}</p>
-              <p className="text-xs text-[#878787]">{item.unit}</p>
+              <p className="text-xs text-[#878787]">{item.storeName}</p>
               <p className="mt-1 text-sm font-bold text-[#0C831F]">
                 {formatCurrency(item.price * item.quantity)}
               </p>
@@ -90,7 +91,7 @@ export default function CartPage() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                onClick={() => updateQuantity(item.id, item.quantity - 1)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#0C831F]"
               >
                 <Minus className="h-3.5 w-3.5 text-[#0C831F]" />
@@ -98,7 +99,7 @@ export default function CartPage() {
               <span className="text-sm font-bold">{item.quantity}</span>
               <button
                 type="button"
-                onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                onClick={() => updateQuantity(item.id, item.quantity + 1)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0C831F] text-white"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -156,12 +157,18 @@ export default function CartPage() {
       </div>
       {couponError && <p className="mt-1 text-xs text-red-500">{couponError}</p>}
 
-      <Link
-        href="/checkout"
-        className="mt-6 block w-full rounded-xl bg-[#FF6B35] py-3.5 text-center text-sm font-bold text-white"
-      >
-        Proceed to Checkout
-      </Link>
+      <CartMilestoneTracker stackAboveCheckout />
+
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#F0F0F0] bg-white px-4 py-3">
+        <div className="mx-auto max-w-[480px]">
+          <Link
+            href="/checkout"
+            className="block w-full rounded-xl bg-[#FF6B35] py-3.5 text-center text-sm font-bold text-white shadow-lg"
+          >
+            Proceed to Checkout · {formatCurrency(grandTotal)}
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }
