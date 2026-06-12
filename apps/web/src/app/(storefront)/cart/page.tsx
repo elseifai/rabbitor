@@ -2,15 +2,18 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ShoppingBag, Minus, Plus } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Minus, Plus, Banknote, CreditCard } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { CartMilestoneTracker } from '@/components/cart/CartMilestoneTracker'
 
 const PLATFORM_FEE = 5
+const RAZORPAY_ENABLED = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
 
 export default function CartPage() {
+  const router = useRouter()
   const items = useCartStore((s) => s.items)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const itemTotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
@@ -46,6 +49,10 @@ export default function CartPage() {
     }
   }
 
+  const goToCheckout = (payment: 'cod' | 'upi') => {
+    router.push(`/checkout?payment=${payment}`)
+  }
+
   if (items.length === 0) {
     return (
       <div className="mx-auto flex max-w-[480px] flex-col items-center px-4 py-20 text-center">
@@ -63,7 +70,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[480px] px-4 py-4 pb-44">
+    <div className="mx-auto max-w-[480px] px-4 py-4 pb-52">
       <h1 className="text-lg font-bold text-[#1C1C1C]">Your Cart</h1>
       <p className="text-sm text-[#FF6B35]">{items[0]?.storeName}</p>
 
@@ -73,16 +80,23 @@ export default function CartPage() {
             key={item.id}
             className="flex gap-3 rounded-xl border border-[#F0F0F0] bg-white p-3"
           >
-            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[#F8F8F8]">
+            <Link
+              href={`/product/${item.id}`}
+              className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[#F8F8F8]"
+            >
               {item.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.image} alt="" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full items-center justify-center text-2xl">🛒</div>
               )}
-            </div>
+            </Link>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-[#1C1C1C]">{item.name}</p>
+              <Link href={`/product/${item.id}`}>
+                <p className="truncate text-sm font-bold text-[#1C1C1C] hover:text-[#E42575]">
+                  {item.name}
+                </p>
+              </Link>
               <p className="text-xs text-[#878787]">{item.storeName}</p>
               <p className="mt-1 text-sm font-bold text-[#0C831F]">
                 {formatCurrency(item.price * item.quantity)}
@@ -93,6 +107,7 @@ export default function CartPage() {
                 type="button"
                 onClick={() => updateQuantity(item.id, item.quantity - 1)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#0C831F]"
+                aria-label="Decrease quantity"
               >
                 <Minus className="h-3.5 w-3.5 text-[#0C831F]" />
               </button>
@@ -101,6 +116,7 @@ export default function CartPage() {
                 type="button"
                 onClick={() => updateQuantity(item.id, item.quantity + 1)}
                 className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0C831F] text-white"
+                aria-label="Increase quantity"
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -157,16 +173,32 @@ export default function CartPage() {
       </div>
       {couponError && <p className="mt-1 text-xs text-red-500">{couponError}</p>}
 
-      <CartMilestoneTracker stackAboveCheckout />
+      <CartMilestoneTracker stackAboveCheckout className="!bottom-[9.5rem]" />
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#F0F0F0] bg-white px-4 py-3">
-        <div className="mx-auto max-w-[480px]">
-          <Link
-            href="/checkout"
-            className="block w-full rounded-xl bg-[#FF6B35] py-3.5 text-center text-sm font-bold text-white shadow-lg"
+      {/* Fixed payment actions — above milestone tracker in z-order */}
+      <div className="fixed bottom-0 left-0 right-0 z-[60] border-t border-[#F0F0F0] bg-white px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto flex max-w-[480px] flex-col gap-2">
+          <p className="text-center text-xs font-semibold text-gray-500">
+            Total payable · <span className="text-gray-900">{formatCurrency(grandTotal)}</span>
+          </p>
+
+          <button
+            type="button"
+            onClick={() => goToCheckout('cod')}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#0C831F] bg-white py-3.5 text-sm font-bold text-[#0C831F] transition active:scale-[0.98]"
           >
-            Proceed to Checkout · {formatCurrency(grandTotal)}
-          </Link>
+            <Banknote className="h-4 w-4" />
+            Cash on Delivery
+          </button>
+
+          <button
+            type="button"
+            onClick={() => goToCheckout(RAZORPAY_ENABLED ? 'upi' : 'cod')}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF6B35] py-3.5 text-sm font-bold text-white shadow-lg transition active:scale-[0.98]"
+          >
+            <CreditCard className="h-4 w-4" />
+            {RAZORPAY_ENABLED ? 'Proceed to Payment' : 'Proceed to Checkout'}
+          </button>
         </div>
       </div>
     </div>

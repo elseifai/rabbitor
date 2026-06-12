@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCart } from '@/context/CartContext'
 import {
   ArrowLeft,
@@ -65,6 +65,7 @@ function instructionLabel(key: string | null): string | undefined {
 
 export default function DynamicCheckoutPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
   const coordinates = useLocationStore((s) => s.coordinates)
   const formattedAddress = useLocationStore((s) => s.formattedAddress)
@@ -142,6 +143,15 @@ export default function DynamicCheckoutPage() {
     }
   }, [coordinates, formattedAddress, deliveryAddress])
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
+
+  useEffect(() => {
+    const paymentParam = searchParams.get('payment')
+    if (paymentParam === 'cod') {
+      setPaymentMethod('cod')
+    } else if (paymentParam === 'upi' || paymentParam === 'card') {
+      setPaymentMethod(paymentParam === 'card' ? 'card' : 'upi')
+    }
+  }, [searchParams])
 
   useEffect(() => {
     getSessionAction().then((session) => {

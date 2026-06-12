@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { Minus, Plus } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -53,9 +54,14 @@ export function UnifiedProductCard({
   variant?: ProductCardVariant
   className?: string
 }) {
+  const router = useRouter()
   const addItem = useCartStore((s) => s.addItem)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const inCart = useCartStore((s) => s.items.find((i) => i.id === product.id))
+
+  const openProductDetail = () => {
+    router.push(`/product/${product.id}`)
+  }
 
   const originalPrice =
     product.mrp && product.mrp > product.price ? product.mrp : null
@@ -75,7 +81,19 @@ export function UnifiedProductCard({
   if (variant === 'RETAIL') {
     return (
       <article
-        className={cn('overflow-hidden rounded-2xl border border-[#F0F0F0] bg-white', className)}
+        role="button"
+        tabIndex={0}
+        onClick={openProductDetail}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            openProductDetail()
+          }
+        }}
+        className={cn(
+          'cursor-pointer overflow-hidden rounded-2xl border border-[#F0F0F0] bg-white transition hover:shadow-md',
+          className,
+        )}
       >
         <div className="relative aspect-[3/4] overflow-hidden bg-[#F8F8F8]">
           {product.image ? (
@@ -148,7 +166,10 @@ export function UnifiedProductCard({
 
           {!outOfStock &&
             (inCart ? (
-              <div className="flex items-center justify-center gap-3 rounded-xl bg-[#FF3F6C] py-2.5">
+              <div
+                className="flex items-center justify-center gap-3 rounded-xl bg-[#FF3F6C] py-2.5"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <button
                   type="button"
                   onClick={() => updateQuantity(product.id, inCart.quantity - 1)}
@@ -172,7 +193,10 @@ export function UnifiedProductCard({
             ) : (
               <button
                 type="button"
-                onClick={handleAdd}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleAdd()
+                }}
                 className="w-full rounded-xl bg-gradient-to-r from-[#FF3F6C] to-[#FF6B9D] py-2.5 text-[12px] font-bold uppercase tracking-wide text-white shadow-[0_4px_14px_rgba(255,63,108,0.3)] transition active:scale-[0.98]"
               >
                 ADD / {optionCount} options available
@@ -185,6 +209,15 @@ export function UnifiedProductCard({
 
   return (
     <article
+      role="button"
+      tabIndex={0}
+      onClick={openProductDetail}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          openProductDetail()
+        }
+      }}
       className={cn(
         'group relative flex cursor-pointer flex-col rounded-2xl border border-gray-100 bg-white p-3 shadow-sm transition-all duration-200 hover:shadow-md',
         className,
