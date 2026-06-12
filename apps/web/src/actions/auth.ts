@@ -25,6 +25,9 @@ export async function requestOtpAction(phone: string) {
 export async function requestEmailOtpAction(email: string, role?: Role) {
   try {
     const result = await sendEmailOtp(email, role === 'ADMIN' ? undefined : role)
+    if (!result.success) {
+      return { ok: false as const, error: result.error ?? 'Failed to send verification email.' }
+    }
     return { ok: true as const, devCode: result.devCode }
   } catch (e) {
     return { ok: false as const, error: (e as Error).message }

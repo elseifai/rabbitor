@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
+import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
+import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
 
 const REDIRECT: Record<string, string> = {
@@ -17,8 +19,12 @@ const RESEND_SECONDS = 60
 
 export default function AuthPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login } = useAuth()
+  const sandbox = isDevSandboxClient()
+  const returnTo = searchParams.get('redirect')
 
+  const [showEmailLogin, setShowEmailLogin] = useState(false)
   const [step, setStep] = useState<1 | 2>(1)
   const [email, setEmail] = useState('')
   const [digits, setDigits] = useState(['', '', '', '', '', ''])
@@ -113,10 +119,52 @@ export default function AuthPage() {
     setTimeout(() => inputRefs.current[0]?.focus(), 100)
   }
 
+  // DEV ONLY BYPASS — sandbox shows role picker first; email/Google is secondary.
+  if (sandbox && !showEmailLogin && step === 1) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="flex items-center gap-3 p-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FF6B35] text-lg font-black text-white">
+            🐰
+          </div>
+          <span className="text-lg font-black text-gray-900">Rabbit</span>
+        </div>
+        <DevRoleLoginPanel
+          mode="page"
+          resolveRedirect={(account, user) => {
+            if (returnTo && user.role === 'CUSTOMER') return returnTo
+            return REDIRECT[user.role] ?? account.redirect
+          }}
+        />
+        <div className="px-6 pb-8 text-center">
+          <button
+            type="button"
+            onClick={() => setShowEmailLogin(true)}
+            className="text-xs font-semibold text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+          >
+            Use email / Google sign-in instead
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col bg-white">
       {/* Header */}
       <div className="flex items-center gap-3 p-4">
+        {sandbox && step === 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowEmailLogin(false)
+              setError(null)
+            }}
+            className="text-xs font-bold text-[#FF6B35]"
+          >
+            ← Roles
+          </button>
+        )}
         {step === 2 && (
           <button
             type="button"

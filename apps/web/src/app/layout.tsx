@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { SocketProvider } from '@/context/SocketContext'
 import { FcmInit } from '@/components/FcmInit'
 import { SplashGate } from '@/components/SplashGate'
+import { SandboxAuthGate } from '@/components/auth/SandboxAuthGate'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -43,8 +44,10 @@ export default function RootLayout({
           <SocketProvider>
             <CartProvider>
               <SplashGate>
-                <FcmInit />
-                {children}
+                <SandboxAuthGate>
+                  <FcmInit />
+                  {children}
+                </SandboxAuthGate>
               </SplashGate>
             </CartProvider>
           </SocketProvider>

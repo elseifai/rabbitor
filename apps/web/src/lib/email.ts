@@ -16,6 +16,10 @@ export async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<v
   const from = process.env.EMAIL_FROM ?? 'Rabbit <onboarding@resend.dev>'
 
   if (!apiKey) {
+    const msg = 'Email service is not configured (RESEND_API_KEY missing)'
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(msg)
+    }
     console.warn(`[EMAIL] RESEND_API_KEY not set — would send to ${to}: ${subject}`)
     return
   }

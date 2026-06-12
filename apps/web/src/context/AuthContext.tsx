@@ -21,6 +21,7 @@ import { logoutAction, getCurrentUserAction } from '@/actions/auth'
 type AuthContextValue = {
   user: SessionUser | null
   token: string | null
+  hydrated: boolean
   isLoggedIn: boolean
   login: (token: string, user: SessionUser) => void
   logout: () => Promise<void>
@@ -34,31 +35,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
 
+  // DEV SANDBOX REFACTOR — hydrate from localStorage first, then httpOnly cookie fallback.
   useEffect(() => {
+    const hydrateFromServer = () =>
+      getCurrentUserAction().then((current) => {
+        if (current) {
+          saveSession(current.token, current.user)
+          setUser(current.user)
+          setToken(current.token)
+        }
+      })
+
     const session = getSession()
     if (session) {
       setUser(session.user)
       setToken(session.token)
       setHydrated(true)
+      void hydrateFromServer()
     } else {
-      // No local session — may have just logged in via Google/magic-link (cookie only).
-      getCurrentUserAction()
-        .then((current) => {
-          if (current) {
-            saveSession(current.token, current.user)
-            setUser(current.user)
-            setToken(current.token)
-          }
-        })
-        .finally(() => setHydrated(true))
+      void hydrateFromServer().finally(() => setHydrated(true))
     }
 
     const onLogout = () => {
       setUser(null)
       setToken(null)
     }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'rabbit_token' && event.key !== 'rabbit_user') return
+      const next = getSession()
+      if (next) {
+        setUser(next.user)
+        setToken(next.token)
+      } else {
+        setUser(null)
+        setToken(null)
+      }
+    }
+
     window.addEventListener('rabbit:logout', onLogout)
-    return () => window.removeEventListener('rabbit:logout', onLogout)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('rabbit:logout', onLogout)
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   const login = useCallback((newToken: string, newUser: SessionUser) => {
@@ -80,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       token,
+      hydrated,
       isLoggedIn: hydrated && Boolean(user && token),
       login,
       logout,

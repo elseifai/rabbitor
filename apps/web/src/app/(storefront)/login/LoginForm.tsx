@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, ArrowLeft, Loader2 } from 'lucide-react'
+import { Mail, ArrowLeft, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
+import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
+import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
 
 export default function LoginForm() {
@@ -12,7 +14,9 @@ export default function LoginForm() {
   const searchParams = useSearchParams()
   const { login } = useAuth()
   const redirect = searchParams.get('redirect') ?? '/'
+  const sandbox = isDevSandboxClient()
 
+  const [showEmailLogin, setShowEmailLogin] = useState(false)
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
@@ -49,11 +53,50 @@ export default function LoginForm() {
     router.refresh()
   }
 
+  // DEV ONLY BYPASS — role picker is the primary entry in sandbox environments.
+  if (sandbox && !showEmailLogin && step === 'email') {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC]">
+        <div className="mx-auto max-w-lg px-4 pt-6">
+          <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-500">
+            <ArrowLeft className="h-4 w-4" /> Home
+          </Link>
+        </div>
+        <DevRoleLoginPanel mode="page" />
+        <div className="mx-auto max-w-lg px-4 pb-10 text-center">
+          <button
+            type="button"
+            onClick={() => setShowEmailLogin(true)}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Use email / Google sign-in instead
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-md px-4 py-12">
       <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-500">
         <ArrowLeft className="h-4 w-4" /> Home
       </Link>
+
+      {sandbox && (
+        <button
+          type="button"
+          onClick={() => {
+            setShowEmailLogin(false)
+            setStep('email')
+            setError(null)
+          }}
+          className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-[#FF6B35]"
+        >
+          <ChevronUp className="h-3.5 w-3.5" />
+          Back to role quick login
+        </button>
+      )}
 
       <h1 className="mt-6 font-display text-2xl font-bold">Sign in to Rabbit</h1>
       <p className="mt-1 text-sm text-gray-500">

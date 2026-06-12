@@ -4,7 +4,11 @@ import { signInWithGoogle } from '@/lib/auth'
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
 function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.PUBLIC_APP_URL ??
+    'http://localhost:3000'
+  )
 }
 
 function fail(reason: string) {

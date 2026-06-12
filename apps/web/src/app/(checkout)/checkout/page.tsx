@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCart } from '@/context/CartContext'
@@ -15,14 +15,18 @@ import {
   ShoppingBag,
   Banknote,
   Smartphone,
-  CheckCircle2,
   Loader2,
 } from 'lucide-react'
 import { useLocationStore } from '@/store'
 import { getDeliveryQuote } from '@/actions/shops'
-import { getSessionAction } from '@/actions/auth'
+import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
+import { OrderSuccessScreen } from '@/components/checkout/OrderSuccessScreen'
+import { isDevSandboxClient } from '@/lib/dev-auth'
+import { useAuth } from '@/context/AuthContext'
 import { SAVED_LOCATIONS } from '@/lib/constants'
 import { loadRazorpayScript } from '@/lib/razorpay'
+import { authFetch } from '@/lib/session'
+import { getSession as getClientSession } from '@/lib/session'
 import { AdBanner } from '@/components/ads/AdBanner'
 
 const TIP_OPTIONS = [20, 30, 50, 70]
@@ -66,7 +70,9 @@ function instructionLabel(key: string | null): string | undefined {
 export default function DynamicCheckoutPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { isLoggedIn, hydrated: authHydrated } = useAuth()
   const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
+  const sandbox = isDevSandboxClient()
   const coordinates = useLocationStore((s) => s.coordinates)
   const formattedAddress = useLocationStore((s) => s.formattedAddress)
 
@@ -86,7 +92,7 @@ export default function DynamicCheckoutPage() {
   const [destLng, setDestLng] = useState<number | null>(null)
   const [detectingAddress, setDetectingAddress] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)
+  const [needsAuth, setNeedsAuth] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
 
@@ -153,12 +159,18 @@ export default function DynamicCheckoutPage() {
     }
   }, [searchParams])
 
+  // DEV SANDBOX REFACTOR — trust localStorage + AuthContext; avoid re-prompting when session exists.
   useEffect(() => {
-    getSessionAction().then((session) => {
-      setAuthChecked(true)
-      if (!session) router.push('/auth?redirect=/checkout')
-    })
-  }, [router])
+    if (!authHydrated) return
+    const hasClientSession = Boolean(getClientSession())
+    setNeedsAuth(!(isLoggedIn || hasClientSession))
+  }, [authHydrated, isLoggedIn])
+
+  useEffect(() => {
+    if (authHydrated && needsAuth && !sandbox) {
+      router.push('/auth?redirect=/checkout')
+    }
+  }, [authHydrated, needsAuth, sandbox, router])
 
   useEffect(() => {
     if (toast) {
@@ -234,10 +246,15 @@ export default function DynamicCheckoutPage() {
   }
 
   const finishOrder = (orderId: string, placedOrderNumber?: string) => {
+    clearCart()
     setOrderPlacedId(orderId)
     if (placedOrderNumber) setOrderNumber(placedOrderNumber)
-    router.replace(`/track/${orderId}`)
   }
+
+  const goToTracking = useCallback(() => {
+    if (!orderPlacedId) return
+    router.replace(`/track/${orderPlacedId}`)
+  }, [orderPlacedId, router])
 
   const orderPayload = {
     shopId,
@@ -274,16 +291,24 @@ export default function DynamicCheckoutPage() {
     const payload = { ...orderPayload, address: deliveryAddress.trim(), paymentMethod: method }
 
     try {
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const response = await authFetch(
+        '/api/orders',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        { skipLogoutRedirect: true },
+      )
 
       const json = await response.json()
       if (!json.success) {
         if (response.status === 401) {
           setError(json.error ?? 'Please log in again.')
+          if (sandbox) {
+            setNeedsAuth(true)
+            return
+          }
           router.push('/auth?redirect=/checkout')
           return
         }
@@ -300,11 +325,15 @@ export default function DynamicCheckoutPage() {
       }
 
       try {
-        const paymentRes = await fetch('/api/payments/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId }),
-        })
+        const paymentRes = await authFetch(
+          '/api/payments/create',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId }),
+          },
+          { skipLogoutRedirect: true },
+        )
         const paymentJson = await paymentRes.json()
 
         if (!paymentJson.success) {
@@ -343,15 +372,19 @@ export default function DynamicCheckoutPage() {
             theme: { color: '#FF6B35' },
             handler: async (razorpayResponse) => {
               try {
-                const verifyRes = await fetch('/api/payments/verify', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    razorpayOrderId: razorpayResponse.razorpay_order_id,
-                    razorpayPaymentId: razorpayResponse.razorpay_payment_id,
-                    razorpaySignature: razorpayResponse.razorpay_signature,
-                  }),
-                })
+                const verifyRes = await authFetch(
+                  '/api/payments/verify',
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      razorpayOrderId: razorpayResponse.razorpay_order_id,
+                      razorpayPaymentId: razorpayResponse.razorpay_payment_id,
+                      razorpaySignature: razorpayResponse.razorpay_signature,
+                    }),
+                  },
+                  { skipLogoutRedirect: true },
+                )
                 const verifyJson = await verifyRes.json()
                 if (!verifyJson.success) {
                   reject(new Error(verifyJson.error?.message ?? verifyJson.error ?? 'Payment verification failed'))
@@ -380,7 +413,7 @@ export default function DynamicCheckoutPage() {
     }
   }
 
-  if (!hydrated || !authChecked) {
+  if (!hydrated || !authHydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] text-sm font-bold text-slate-400">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -389,19 +422,32 @@ export default function DynamicCheckoutPage() {
     )
   }
 
+  if (needsAuth && sandbox) {
+    return (
+      <DevRoleLoginPanel
+        mode="checkout"
+        highlightRole="customer"
+        redirectOnSuccess={false}
+        onSuccess={() => setNeedsAuth(false)}
+      />
+    )
+  }
+
+  if (needsAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] text-sm font-bold text-slate-400">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Redirecting to sign in…
+      </div>
+    )
+  }
+
   if (orderPlacedId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] px-6 font-sans text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-          <CheckCircle2 className="h-12 w-12 text-[#0C831F]" />
-        </div>
-        <h1 className="mt-6 text-2xl font-black text-slate-900">Order Placed! 🐰</h1>
-        {orderNumber && (
-          <p className="mt-2 text-sm font-semibold text-[#FF6B35]">#{orderNumber}</p>
-        )}
-        <p className="mt-2 text-sm text-slate-500">Taking you to live order tracking…</p>
-        <Loader2 className="mt-6 h-6 w-6 animate-spin text-[#FF6B35]" />
-      </div>
+      <OrderSuccessScreen
+        orderNumber={orderNumber}
+        onComplete={goToTracking}
+      />
     )
   }
 

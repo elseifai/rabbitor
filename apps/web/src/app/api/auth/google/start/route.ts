@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
+import { useSecureSessionCookies } from '@/lib/cookie-options'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 
 function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.PUBLIC_APP_URL ??
+    'http://localhost:3000'
+  )
 }
 
 /** Redirects the user to Google's consent screen. */
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
   const res = NextResponse.redirect(`${GOOGLE_AUTH_URL}?${params.toString()}`)
   res.cookies.set('g_oauth_nonce', nonce, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: useSecureSessionCookies(),
     sameSite: 'lax',
     maxAge: 600,
     path: '/',

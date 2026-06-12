@@ -12,6 +12,15 @@ const SALT_ROUNDS = 10;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_ACTIVE_CHALLENGES = 3;
 const MAX_OTP_ATTEMPTS = 5;
+/** DEV ONLY BYPASS — static OTP for seeded test accounts. */
+const DEV_OTP = "123456";
+
+function isDevOtpBypassEnabled(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_DEV_OTP_BYPASS === "true"
+  );
+}
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -60,6 +69,24 @@ export async function sendOtp(phone: string) {
 
 export async function verifyOtp(phone: string, code: string) {
   const normalized = normalizePhone(phone);
+  const trimmedCode = code.trim();
+
+  // DEV ONLY BYPASS — intercept `123456`, skip SMS gateway, authenticate seeded user by phone.
+  if (isDevOtpBypassEnabled() && trimmedCode === DEV_OTP) {
+    const user = await prisma.user.findUnique({
+      where: { phone: normalized },
+      select: {
+        id: true,
+        phone: true,
+        role: true,
+        displayName: true,
+      },
+    });
+    if (!user) {
+      throw unauthorized("Test user not found. Run database seed.");
+    }
+    return { user, ...issueTokens(user) };
+  }
 
   const challenge = await prisma.otpChallenge.findFirst({
     where: {
@@ -81,7 +108,7 @@ export async function verifyOtp(phone: string, code: string) {
     throw unauthorized("Too many attempts. Request a new OTP.");
   }
 
-  const valid = await bcrypt.compare(code.trim(), challenge.codeHash);
+  const valid = await bcrypt.compare(trimmedCode, challenge.codeHash);
   if (!valid) {
     await prisma.otpChallenge.update({
       where: { id: challenge.id },

@@ -1,8 +1,10 @@
 import { createHash, randomBytes, randomInt } from 'crypto'
 import { SignJWT, jwtVerify } from 'jose'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
+import { useSecureSessionCookies } from './cookie-options'
 import { prisma } from './prisma'
 import { sendEmail, verificationEmailHtml } from './email'
+import { DEV_OTP_CODE, isDevOtpBypassEnabled } from './dev-auth'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ?? 'rabbit-dev-secret-change-in-production',
@@ -10,7 +12,7 @@ const JWT_SECRET = new TextEncoder().encode(
 const SESSION_COOKIE = 'rabbit_session'
 const OTP_TTL_MS = 5 * 60 * 1000
 const EMAIL_TTL_MS = 10 * 60 * 1000
-const DEV_OTP = '123456'
+const DEV_OTP = DEV_OTP_CODE
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
@@ -39,7 +41,11 @@ function normalizeEmail(email: string): string {
 }
 
 function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.PUBLIC_APP_URL ??
+    'http://localhost:3000'
+  )
 }
 
 /** Signs a JWT for the user and sets the httpOnly session cookie. */
@@ -62,12 +68,21 @@ async function createSession(user: {
   const cookieStore = await cookies()
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: useSecureSessionCookies(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
     path: '/',
   })
   return token
+}
+
+async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return payload as unknown as SessionPayload
+  } catch {
+    return null
+  }
 }
 
 function toAuthUser(user: {
@@ -152,6 +167,21 @@ export async function verifyOtp(
   user?: AuthUser
 }> {
   const normalized = normalizePhone(phone)
+  const trimmedCode = code.trim()
+
+  // DEV ONLY BYPASS — static OTP `123456` skips SMS gateway; lookup seeded user by phone.
+  if (isDevOtpBypassEnabled() && trimmedCode === DEV_OTP) {
+    const user = await prisma.user.findUnique({ where: { phone: normalized } })
+    if (!user) {
+      return {
+        success: false,
+        error: 'Test user not found for this phone. Run `pnpm db:seed`.',
+      }
+    }
+    const token = await createSession(user)
+    return { success: true, token, user: toAuthUser(user) }
+  }
+
   const challenge = await prisma.otpChallenge.findFirst({
     where: {
       phone: normalized,
@@ -164,7 +194,7 @@ export async function verifyOtp(
   if (!challenge) return { success: false, error: 'OTP expired. Request a new one.' }
   if (challenge.attempts >= 5) return { success: false, error: 'Too many attempts.' }
 
-  const valid = challenge.codeHash === hashOtp(code.trim())
+  const valid = challenge.codeHash === hashOtp(trimmedCode)
   if (!valid) {
     await prisma.otpChallenge.update({
       where: { id: challenge.id },
@@ -189,24 +219,7 @@ export async function verifyOtp(
     })
   }
 
-  const token = await new SignJWT({
-    userId: user.id,
-    phone: user.phone,
-    role: user.role,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('7d')
-    .sign(JWT_SECRET)
-
-  const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7,
-    path: '/',
-  })
-
+  const token = await createSession(user)
   return { success: true, token, user: toAuthUser(user) }
 }
 
@@ -214,7 +227,7 @@ export async function verifyOtp(
 export async function sendEmailOtp(
   email: string,
   role?: Role,
-): Promise<{ success: boolean; devCode?: string }> {
+): Promise<{ success: boolean; devCode?: string; error?: string }> {
   const normalized = normalizeEmail(email)
   const isProd = process.env.NODE_ENV === 'production'
   const code = isProd ? randomInt(100000, 999999).toString() : DEV_OTP
@@ -239,7 +252,9 @@ export async function sendEmailOtp(
       html: verificationEmailHtml(code, link),
     })
   } catch (err) {
-    console.warn('[EMAIL] send failed:', (err as Error).message)
+    const message = (err as Error).message
+    console.warn('[EMAIL] send failed:', message)
+    return { success: false, error: message }
   }
 
   return isProd ? { success: true } : { success: true, devCode: code }
@@ -353,14 +368,19 @@ export async function signInWithGoogle(
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies()
-  const token = cookieStore.get(SESSION_COOKIE)?.value
-  if (!token) return null
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
-    return payload as unknown as SessionPayload
-  } catch {
-    return null
+  const cookieToken = cookieStore.get(SESSION_COOKIE)?.value
+  if (cookieToken) {
+    const session = await verifySessionToken(cookieToken)
+    if (session) return session
   }
+
+  // DEV SANDBOX REFACTOR — accept Bearer token when httpOnly cookie is unavailable (HTTP VPS).
+  const authHeader = (await headers()).get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    return verifySessionToken(authHeader.slice(7))
+  }
+
+  return null
 }
 
 /** Resolve session to a live DB user (handles stale JWT after db:seed). */
@@ -394,8 +414,16 @@ export async function getCurrentAuth(): Promise<{ token: string; user: AuthUser 
   if (!session) return null
   const user = await resolveSessionUser(session)
   if (!user) return null
+
   const cookieStore = await cookies()
-  const token = cookieStore.get(SESSION_COOKIE)?.value ?? ''
+  let token = cookieStore.get(SESSION_COOKIE)?.value ?? ''
+  if (!token) {
+    const authHeader = (await headers()).get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7)
+    }
+  }
+
   return { token, user: toAuthUser(user) }
 }
 

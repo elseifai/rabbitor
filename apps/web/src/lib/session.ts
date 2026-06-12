@@ -9,6 +9,8 @@ export type SessionUser = {
 
 const TOKEN_KEY = 'rabbit_token'
 const USER_KEY = 'rabbit_user'
+/** DEV SANDBOX REFACTOR — marks an active sandbox session across navigations. */
+const SESSION_ACTIVE_KEY = 'rabbit_session_active'
 
 function decodeJwtExp(token: string): number | null {
   try {
@@ -23,6 +25,7 @@ export function saveSession(token: string, user: SessionUser): void {
   if (typeof window === 'undefined') return
   localStorage.setItem(TOKEN_KEY, token)
   localStorage.setItem(USER_KEY, JSON.stringify(user))
+  sessionStorage.setItem(SESSION_ACTIVE_KEY, '1')
 }
 
 export function getSession(): { token: string; user: SessionUser } | null {
@@ -50,6 +53,7 @@ export function clearSession(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  sessionStorage.removeItem(SESSION_ACTIVE_KEY)
   void import('@/lib/socket-client').then(({ socketClient }) => {
     socketClient.disconnectAndPurge()
   })
@@ -61,17 +65,30 @@ export function getAuthHeader(): Record<string, string> {
   return { Authorization: `Bearer ${session.token}` }
 }
 
-/** Fetch wrapper — auto-logout on 401. */
-export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+type AuthFetchOptions = {
+  /** DEV SANDBOX REFACTOR — let checkout handle 401 inline instead of hard redirect. */
+  skipLogoutRedirect?: boolean
+}
+
+/** Fetch wrapper — attaches Bearer token; auto-logout on 401 unless skipped. */
+export async function authFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: AuthFetchOptions,
+): Promise<Response> {
   const headers = new Headers(init?.headers)
   const auth = getAuthHeader()
   if (auth.Authorization && !headers.has('Authorization')) {
     headers.set('Authorization', auth.Authorization)
   }
 
-  const res = await fetch(input, { ...init, headers })
+  const res = await fetch(input, { ...init, headers, credentials: 'include' })
 
-  if (res.status === 401 && typeof window !== 'undefined') {
+  if (
+    res.status === 401 &&
+    typeof window !== 'undefined' &&
+    !options?.skipLogoutRedirect
+  ) {
     clearSession()
     window.dispatchEvent(new CustomEvent('rabbit:logout'))
     if (!window.location.pathname.startsWith('/auth')) {

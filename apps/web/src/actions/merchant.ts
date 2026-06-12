@@ -32,6 +32,7 @@ export async function getMerchantShopAction() {
         name: p.name,
         price: p.price,
         unit: p.unit,
+        category: p.category,
         stock: p.stock,
         isAvailable: p.isAvailable,
         image: p.image,
@@ -60,6 +61,7 @@ export async function addProductAction(input: {
   shopId: string
   name: string
   price: number
+  category?: string
   unit?: string
   stock?: number
   imageDataUrl?: string
@@ -94,6 +96,7 @@ export async function addProductAction(input: {
         shopId: input.shopId,
         name: input.name.trim(),
         price: input.price,
+        category: input.category?.trim() || 'general',
         unit: input.unit?.trim() || 'piece',
         stock: input.stock ?? 10,
         image,
@@ -283,6 +286,211 @@ export async function updateMerchantSettingsAction(input: {
     return { ok: true as const }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not save settings'
+    return { ok: false as const, error: message }
+  }
+}
+
+// MERCHANT DASHBOARD EXPANSION — comprehensive multi-step merchant onboarding
+export async function merchantSignupAction(input: {
+  legalStoreName: string
+  businessCategory: string
+  supportPhone: string
+  address: string
+  latitude: number
+  longitude: number
+  avgPrepMinutes: number
+  openingHours: Record<string, { open: string; close: string }>
+  bankAccountNumber: string
+  ifscCode: string
+  gstRef?: string
+  panRef?: string
+  fssaiRef?: string
+  aadhaarRef?: string
+  deliveryRadiusKm?: number
+  minOrderValue?: number
+  baseDeliveryFee?: number
+}) {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+
+    const existing = await prisma.shop.findFirst({ where: { ownerId: session.userId } })
+    if (existing) {
+      return { ok: false as const, error: 'You already have a store registered' }
+    }
+
+    if (!input.legalStoreName.trim()) {
+      return { ok: false as const, error: 'Legal store name is required' }
+    }
+    if (!input.supportPhone.trim() || input.supportPhone.replace(/\D/g, '').length < 10) {
+      return { ok: false as const, error: 'Valid support contact is required' }
+    }
+    if (!input.address.trim()) {
+      return { ok: false as const, error: 'Store address is required' }
+    }
+    if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) {
+      return { ok: false as const, error: 'Valid geolocation is required' }
+    }
+    if (input.avgPrepMinutes < 5 || input.avgPrepMinutes > 120) {
+      return { ok: false as const, error: 'Preparation time must be between 5 and 120 minutes' }
+    }
+    if (!input.bankAccountNumber.trim() || input.bankAccountNumber.length < 8) {
+      return { ok: false as const, error: 'Valid bank account number is required' }
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(input.ifscCode.trim())) {
+      return { ok: false as const, error: 'Enter a valid IFSC code' }
+    }
+
+    const categoryToStoreType = (cat: string) => {
+      const lower = cat.toLowerCase()
+      if (lower.includes('fish') || lower.includes('seafood')) return 'FISH' as const
+      if (lower.includes('groc') || lower.includes('kirana')) return 'KIRANA' as const
+      if (lower.includes('pharm')) return 'PHARMACY' as const
+      if (lower.includes('baker')) return 'BAKERY' as const
+      if (lower.includes('dairy')) return 'DAIRY' as const
+      if (lower.includes('meat')) return 'MEAT' as const
+      if (lower.includes('veget')) return 'VEGETABLE' as const
+      return 'GENERAL' as const
+    }
+
+    const slugBase = input.legalStoreName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48)
+    const slug = `${slugBase}-${Date.now().toString(36)}`
+    const addressEncrypted = Buffer.from(input.address.trim()).toString('base64')
+
+    const result = await prisma.$transaction(async (tx) => {
+      const vendor = await tx.vendorProfile.upsert({
+        where: { userId: session.userId },
+        create: {
+          userId: session.userId,
+          businessName: input.legalStoreName.trim(),
+          businessCategory: input.businessCategory.trim(),
+          supportPhone: input.supportPhone.trim(),
+          kycStatus: 'PENDING',
+          bankAccountRef: input.bankAccountNumber.trim(),
+          ifscCode: input.ifscCode.trim().toUpperCase(),
+          gstRef: input.gstRef?.trim() || null,
+          panRef: input.panRef?.trim() || null,
+          fssaiRef: input.fssaiRef?.trim() || null,
+          aadhaarRef: input.aadhaarRef?.trim() || null,
+        },
+        update: {
+          businessName: input.legalStoreName.trim(),
+          businessCategory: input.businessCategory.trim(),
+          supportPhone: input.supportPhone.trim(),
+          bankAccountRef: input.bankAccountNumber.trim(),
+          ifscCode: input.ifscCode.trim().toUpperCase(),
+          gstRef: input.gstRef?.trim() || null,
+          panRef: input.panRef?.trim() || null,
+          fssaiRef: input.fssaiRef?.trim() || null,
+          aadhaarRef: input.aadhaarRef?.trim() || null,
+        },
+      })
+
+      const shop = await tx.shop.create({
+        data: {
+          ownerId: session.userId,
+          vendorId: vendor.id,
+          name: input.legalStoreName.trim(),
+          slug,
+          category: input.businessCategory.trim(),
+          storeType: categoryToStoreType(input.businessCategory),
+          address: input.address.trim(),
+          addressEncrypted,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          avgPrepMinutes: Math.round(input.avgPrepMinutes),
+          openingHours: input.openingHours,
+          deliveryRadiusKm: input.deliveryRadiusKm ?? 5,
+          minOrderValue: input.minOrderValue ?? 99,
+          baseDeliveryFee: input.baseDeliveryFee ?? 25,
+          isActive: true,
+        },
+      })
+
+      return { shopId: shop.id, kycStatus: vendor.kycStatus }
+    })
+
+    revalidatePath('/merchant')
+    revalidatePath('/merchant/signup')
+    revalidatePath('/shops')
+    return { ok: true as const, shopId: result.shopId, approvalStatus: 'PENDING_APPROVAL' as const }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Signup failed'
+    return { ok: false as const, error: message }
+  }
+}
+
+// MERCHANT DASHBOARD EXPANSION — store-scoped coupon management
+export async function getShopCouponsAction() {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: session.userId },
+      select: { id: true },
+    })
+    if (!shop) return []
+
+    return prisma.shopCoupon.findMany({
+      where: { shopId: shop.id },
+      orderBy: { createdAt: 'desc' },
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function createShopCouponAction(input: {
+  code: string
+  offerType: 'FLAT' | 'PERCENT' | 'FREE_DELIVERY'
+  discountValue: number
+  minOrderValue?: number
+  maxUses?: number
+  expiresAt?: string
+}) {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: session.userId },
+      select: { id: true },
+    })
+    if (!shop) return { ok: false as const, error: 'Shop not found' }
+
+    const code = input.code.trim().toUpperCase()
+    if (!code || code.length < 4) {
+      return { ok: false as const, error: 'Coupon code must be at least 4 characters' }
+    }
+
+    const discountType =
+      input.offerType === 'PERCENT' ? ('PERCENT' as const) : ('FLAT' as const)
+    const discountValue =
+      input.offerType === 'FREE_DELIVERY' ? 0 : input.discountValue
+
+    if (input.offerType === 'PERCENT' && (discountValue <= 0 || discountValue > 80)) {
+      return { ok: false as const, error: 'Percentage must be between 1 and 80' }
+    }
+    if (input.offerType === 'FLAT' && discountValue <= 0) {
+      return { ok: false as const, error: 'Flat discount must be greater than 0' }
+    }
+
+    await prisma.shopCoupon.create({
+      data: {
+        shopId: shop.id,
+        code,
+        discountType,
+        discountValue,
+        minOrderValue: input.minOrderValue ?? 0,
+        maxUses: input.maxUses ?? 100,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+      },
+    })
+
+    revalidatePath('/merchant')
+    return { ok: true as const }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not create coupon'
     return { ok: false as const, error: message }
   }
 }

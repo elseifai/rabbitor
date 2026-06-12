@@ -162,17 +162,17 @@ export function CartConflictModal() {
                   id={titleId}
                   className="text-lg font-bold leading-tight text-[#1C1C1C] sm:text-xl"
                 >
-                  Replace cart items?
+                  Replace your cart?
                 </h2>
                 <p
                   id={descriptionId}
                   className="mt-2 text-sm leading-relaxed text-[#5C5C5C]"
                 >
-                  Your cart contains items from{' '}
+                  {/* DEV SANDBOX REFACTOR — single-store checkout rule */}
+                  We can only process orders from one store at a time. Your cart has items from{' '}
                   <span className="font-semibold text-[#1C1C1C]">{existingStoreName}</span>.
-                  Do you want to discard these items and add products from{' '}
-                  <span className="font-semibold text-[#1C1C1C]">{incomingItem.storeName}</span>{' '}
-                  instead?
+                  Do you want to replace your cart with products from{' '}
+                  <span className="font-semibold text-[#1C1C1C]">{incomingItem.storeName}</span>?
                 </p>
               </div>
             </div>
