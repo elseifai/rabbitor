@@ -26,15 +26,25 @@ fi
 echo "==> Pulling latest code"
 git pull --ff-only || echo "(skipping git pull — not a clean fast-forward)"
 
+# Compose interpolates ${DATABASE_URL} from .env — keep it in sync with .env.docker
+ln -sf .env.docker .env
+
+if ! grep -q '^DATABASE_URL=' .env.docker; then
+  echo "ERROR: DATABASE_URL missing from .env.docker."
+  echo "Add: DATABASE_URL=postgresql://USER:PASSWORD@postgres:5432/rabbit?schema=public"
+  echo "URL-encode special characters in the password (+ / = etc.)."
+  exit 1
+fi
+
 echo "==> Rebuilding API image (no cache — ensures deps like express are bundled)"
-docker compose --profile app build --no-cache api
+docker compose --env-file .env.docker --profile app build --no-cache api
 
 echo "==> Building and starting full stack (postgres, redis, migrate, api, web)"
-docker compose --profile app up -d --build
+docker compose --env-file .env.docker --profile app up -d --build
 
 echo "==> Waiting for services to become healthy..."
 sleep 5
-docker compose --profile app ps
+docker compose --env-file .env.docker --profile app ps
 
 echo ""
 echo "Done. Check health:"
