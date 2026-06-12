@@ -137,13 +137,14 @@ export function ShopSwiggyClient({
     }
 
     if (current === 0) {
+      const extra = extrasMap[product.id] ?? DEFAULT_EXTRA
       addItem({
         id: product.id,
         storeId: shop.id,
         storeName: shop.name,
         name: product.name,
         price: product.price,
-        image: product.image,
+        image: extra.image,
       })
       if (next > 1) updateQuantity(product.id, next)
       return

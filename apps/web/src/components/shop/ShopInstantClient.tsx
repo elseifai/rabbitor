@@ -30,7 +30,6 @@ export function ShopInstantClient({ shop }: { shop: CatalogShop }) {
         storeName: shop.name,
         name: product.name,
         price: product.price,
-        image: product.image,
       })
       if (next > 1) updateQuantity(product.id, next)
       return
