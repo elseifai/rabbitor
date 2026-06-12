@@ -199,6 +199,7 @@ model Shop {
   products  Product[]
   orders    Order[]
   coupons   ShopCoupon[]
+  ads       Ad[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -370,6 +371,9 @@ model OrderStatusEvent {
 
 model Ad {
   id          String      @id @default(uuid())
+  /// MERCHANT SIDEBAR & CATALOG REFACTOR — null = platform-wide ad
+  shopId      String?
+  shop        Shop?       @relation(fields: [shopId], references: [id], onDelete: Cascade)
   title       String
   imageUrl    String
   linkUrl     String?
@@ -382,4 +386,5 @@ model Ad {
   createdAt   DateTime    @default(now())
 
   @@index([placement, isActive])
+  @@index([shopId, isActive])
 }

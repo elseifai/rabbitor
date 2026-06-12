@@ -1,13 +1,13 @@
 'use client'
 
 import { RoleGate } from '@/components/auth/RoleGate'
-import { MerchantProductListing } from '@/components/merchant/MerchantProductListing'
+import { MerchantCouponsPanel } from '@/components/merchant/MerchantCouponsPanel'
 
 // MERCHANT SIDEBAR & CATALOG REFACTOR
-export default function MerchantProductsPage() {
+export default function MerchantCouponsPage() {
   return (
     <RoleGate role="VENDOR" redirectTo="/merchant/login">
-      <MerchantProductListing />
+      <MerchantCouponsPanel />
     </RoleGate>
   )
 }

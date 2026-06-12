@@ -20,6 +20,7 @@ export async function getMerchantShopAction() {
       id: shop.id,
       name: shop.name,
       slug: shop.slug,
+      storeType: shop.storeType,
       isActive: shop.isActive,
       address: shop.address,
       category: shop.category,
@@ -57,6 +58,54 @@ export async function toggleShopOpenAction(shopId: string, isActive: boolean) {
   return { ok: true as const, isActive }
 }
 
+// MERCHANT SIDEBAR & CATALOG REFACTOR — clone master catalog item into shop inventory
+export async function addProductFromCatalogAction(input: {
+  shopId: string
+  catalogId: string
+  name: string
+  description?: string
+  category: string
+  price: number
+  unit: string
+  stock: number
+  isAvailable: boolean
+  imageUrl?: string
+}) {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    const shop = await prisma.shop.findFirst({
+      where: { id: input.shopId, ownerId: session.userId },
+    })
+    if (!shop) return { ok: false as const, error: 'Shop not found' }
+
+    if (!input.name.trim() || !Number.isFinite(input.price) || input.price <= 0) {
+      return { ok: false as const, error: 'Valid name and price required' }
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        shopId: input.shopId,
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        category: input.category.trim(),
+        price: input.price,
+        unit: input.unit.trim() || 'piece',
+        stock: input.stock ?? 10,
+        image: input.imageUrl?.startsWith('http') ? input.imageUrl : undefined,
+        isAvailable: input.isAvailable,
+      },
+    })
+
+    revalidatePath('/merchant')
+    revalidatePath('/merchant/products')
+    revalidatePath(`/shops/${shop.slug}`)
+    return { ok: true as const, productId: product.id, catalogId: input.catalogId }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not add product'
+    return { ok: false as const, error: message }
+  }
+}
+
 export async function addProductAction(input: {
   shopId: string
   name: string
@@ -64,6 +113,8 @@ export async function addProductAction(input: {
   category?: string
   unit?: string
   stock?: number
+  description?: string
+  isAvailable?: boolean
   imageDataUrl?: string
   imageUrl?: string
 }) {
@@ -95,12 +146,13 @@ export async function addProductAction(input: {
       data: {
         shopId: input.shopId,
         name: input.name.trim(),
+        description: input.description?.trim() || null,
         price: input.price,
         category: input.category?.trim() || 'general',
         unit: input.unit?.trim() || 'piece',
         stock: input.stock ?? 10,
         image,
-        isAvailable: true,
+        isAvailable: input.isAvailable ?? true,
       },
     })
 

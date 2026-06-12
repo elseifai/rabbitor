@@ -1,7 +1,13 @@
 'use client'
 
-import { MerchantIncomingOrdersPanel } from '@/components/merchant/MerchantIncomingOrdersPanel'
+import { RoleGate } from '@/components/auth/RoleGate'
+import { MerchantOrdersPipeline } from '@/components/merchant/MerchantOrdersPipeline'
 
+// MERCHANT SIDEBAR & CATALOG REFACTOR
 export default function MerchantOrdersPage() {
-  return <MerchantIncomingOrdersPanel />
+  return (
+    <RoleGate role="VENDOR" redirectTo="/merchant/login">
+      <MerchantOrdersPipeline />
+    </RoleGate>
+  )
 }
