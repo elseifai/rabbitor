@@ -515,10 +515,20 @@ export function HomeFeed() {
       {/* SECTION A: Top search bar */}
       <div className="sticky top-0 z-50 border-b border-[#F0F0F0] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="w-[60%]">
+          <form
+            className="w-[60%]"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const q = searchQuery.trim()
+              if (q) router.push(`/search?q=${encodeURIComponent(q)}`)
+            }}
+          >
             <RotatingSearchBar
               value={searchQuery}
               onChange={setSearchQuery}
+              onSubmit={(term) => {
+                router.push(`/search?q=${encodeURIComponent(term)}`)
+              }}
               results={
                 searchResults.length > 0 ? (
                   <div className="max-h-48 overflow-y-auto">
@@ -537,7 +547,7 @@ export function HomeFeed() {
                 ) : null
               }
             />
-          </div>
+          </form>
 
           <div
             className={cn(

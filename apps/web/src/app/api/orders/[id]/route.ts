@@ -19,7 +19,14 @@ const ORDER_INCLUDE = {
       slug: true,
     },
   },
-  deliveryPartner: { select: { id: true, name: true, phone: true } },
+  deliveryPartner: {
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      rabbitorProfile: { select: { currentLat: true, currentLng: true } },
+    },
+  },
   items: {
     include: {
       product: { select: { name: true, unit: true, image: true } },
@@ -61,6 +68,8 @@ function formatOrderResponse(order: OrderWithDetails) {
     shopLng,
     rabbitorName: order.deliveryPartner?.name ?? null,
     rabbitorPhone: order.deliveryPartner?.phone ?? null,
+    riderLat: order.deliveryPartner?.rabbitorProfile?.currentLat ?? null,
+    riderLng: order.deliveryPartner?.rabbitorProfile?.currentLng ?? null,
     distanceKm: Math.round(distanceKm * 10) / 10,
     platformFee: PLATFORM_FEE,
     grandTotal: orderGrandTotal(order) + PLATFORM_FEE,

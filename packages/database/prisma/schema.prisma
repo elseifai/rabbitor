@@ -103,6 +103,10 @@ model User {
   displayName   String?
   locale        Locale    @default(en)
   fcmToken      String?
+  /// LIVE ECOSYSTEM UPGRADE — last known delivery / profile coordinates
+  lastLatitude  Float?
+  lastLongitude Float?
+  savedAddress  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

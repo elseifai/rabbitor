@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { MapPin, Navigation, ChevronDown, Check, Loader2 } from 'lucide-react'
 import { useLocationStore } from '@/store'
 import { SAVED_LOCATIONS } from '@/lib/constants'
+import { detectAndSaveLocation, saveManualAddress } from '@/lib/geolocation-service'
 import { cn } from '@/lib/utils'
 
 export function LocationPicker() {
@@ -18,39 +19,18 @@ export function LocationPicker() {
   const [pincode, setPincode] = useState('')
   const [expanded, setExpanded] = useState(!formattedAddress)
 
-  const detectLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation is not supported on this device')
-      return
-    }
-
-    setFetching(true)
-    setError(null)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          'Current location — Near you (GPS)',
-        )
-        setPermission('granted')
-        setExpanded(false)
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          setPermission('denied')
-          setError('Location permission denied')
-        } else {
-          setError(err.message || 'Unable to detect location')
-        }
-      },
-      { timeout: 8000 },
-    )
+  const detectLocation = async () => {
+    const res = await detectAndSaveLocation({ syncDb: true })
+    if (res.ok) setExpanded(false)
   }
 
-  const applyPincode = () => {
+  const applyPincode = async () => {
     if (pincode.length < 6) return
-    setLocation(19.1364, 72.8296, `Pincode ${pincode}`)
+    await saveManualAddress({
+      address: `Pincode ${pincode}`,
+      lat: 19.1364,
+      lng: 72.8296,
+    })
     setExpanded(false)
   }
 
@@ -101,7 +81,7 @@ export function LocationPicker() {
             ) : (
               <Navigation className="h-4 w-4" />
             )}
-            Use current location
+            Detect Live Location
           </button>
 
           <div className="flex gap-2">

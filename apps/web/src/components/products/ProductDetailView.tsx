@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Minus, Plus, Loader2 } from 'lucide-react'
 import { useCartStore } from '@/store'
+import { ProductImage } from '@/components/products/ProductImage'
 import { formatCurrency } from '@/lib/utils'
 import {
   UnifiedProductCard,
@@ -142,18 +143,7 @@ export function ProductDetailView({ productId }: { productId: string }) {
 
       {/* Product summary */}
       <section className="bg-white px-4 pt-4">
-        <div className="flex aspect-square items-center justify-center rounded-2xl bg-[#F7F9FA] p-6">
-          {product.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.image}
-              alt={product.name}
-              className="max-h-full max-w-full object-contain mix-blend-multiply"
-            />
-          ) : (
-            <span className="text-6xl">📦</span>
-          )}
-        </div>
+        <ProductImage src={product.image} alt={product.name} className="rounded-2xl" />
 
         <div className="mt-4">
           <h2 className="text-xl font-bold text-gray-900">{product.name}</h2>

@@ -6,6 +6,7 @@ import { ArrowLeft, Search, Share2, Plus, Minus } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { cn, formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { ProductImage } from '@/components/products/ProductImage'
 
 interface Product {
   id: string
@@ -238,14 +239,7 @@ function ProductRow({
 }) {
   return (
     <div className="flex gap-3 border-b border-gray-50 pb-3">
-      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
-        {product.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.image} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-2xl">🛒</div>
-        )}
-      </div>
+      <ProductImage src={product.image} alt={product.name} className="h-20 w-20 shrink-0" fallback="🛒" />
       <div className="min-w-0 flex-1">
         <p className="line-clamp-2 text-sm font-bold text-gray-900">{product.name}</p>
         <p className="text-[11px] text-gray-400">{product.unit}</p>

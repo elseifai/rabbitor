@@ -9,8 +9,21 @@ import { useCartStore } from '@/store'
 import { getAuthHeader } from '@/lib/session'
 import { formatCurrency } from '@/lib/utils'
 import { labelToOrderStatus, trackingFromOrderStatus } from '@/lib/tracking-status'
+import { ProductImage } from '@/components/products/ProductImage'
 import { RabbitProgressTrack } from '@/components/track/RabbitProgressTrack'
-import { RabbitLiveMap } from '@/components/track/RabbitLiveMap'
+import dynamic from 'next/dynamic'
+
+const GoogleOrderMap = dynamic(
+  () => import('@/components/track/GoogleOrderMap').then((m) => m.GoogleOrderMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-72 items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-500">
+        Loading map…
+      </div>
+    ),
+  },
+)
 
 type OrderItem = {
   id: string
@@ -155,7 +168,10 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
   const destLng = order?.destLongitude ?? order?.shopLng ?? 72.8296
   const showRider =
     currentStatus === 'OUT_FOR_DELIVERY' || currentStatus === 'DELIVERED'
-  const showMap = currentStatus === 'OUT_FOR_DELIVERY'
+  const showMap =
+    currentStatus === 'OUT_FOR_DELIVERY' ||
+    currentStatus === 'PREPARING' ||
+    currentStatus === 'ACCEPTED_BY_SHOP'
   const delivered = currentStatus === 'DELIVERED'
 
   const etaLabel = useMemo(() => {
@@ -319,14 +335,7 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
         <ul className="mt-3 space-y-3">
           {order.items.map((item) => (
             <li key={item.id} className="flex items-center gap-3">
-              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-slate-100">
-                {item.product.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.product.image} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xl">📦</div>
-                )}
-              </div>
+              <ProductImage src={item.product.image} alt={item.product.name} className="h-12 w-12 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{item.product.name}</p>
                 <p className="text-xs text-slate-400">{item.product.unit}</p>
@@ -370,7 +379,7 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
       {/* Live map */}
       {showMap && (
         <div className="mx-4 mt-4">
-          <RabbitLiveMap
+          <GoogleOrderMap
             orderId={orderId}
             status={currentStatus}
             shopLat={order.shopLat}

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
+import { GeoLocationPanel } from '@/components/location/GeoLocationPanel'
 import { useAuth } from '@/context/AuthContext'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 
@@ -90,7 +91,11 @@ export function ProfileClient({ user: serverUser }: Props) {
         )}
       </div>
 
-      <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white">
+      <div className="mt-6">
+        <GeoLocationPanel />
+      </div>
+
+      <div className="mt-6 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white">
         {menu.map((item) => (
           <Link
             key={item.label}

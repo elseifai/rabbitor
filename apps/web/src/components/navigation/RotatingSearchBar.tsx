@@ -29,6 +29,8 @@ const PLACEHOLDER_LINE_PX = 20
 export type RotatingSearchBarProps = {
   value: string
   onChange: (value: string) => void
+  /** LIVE ECOSYSTEM UPGRADE — fires on Enter / search icon click */
+  onSubmit?: (value: string) => void
   onTrendingSelect?: (term: string) => void
   className?: string
   /** Shop or product matches rendered below the trending panel */
@@ -38,6 +40,7 @@ export type RotatingSearchBarProps = {
 export function RotatingSearchBar({
   value,
   onChange,
+  onSubmit,
   onTrendingSelect,
   className,
   results,
@@ -84,10 +87,17 @@ export function RotatingSearchBar({
     (term: string) => {
       onChange(term)
       onTrendingSelect?.(term)
+      onSubmit?.(term)
       inputRef.current?.focus()
     },
-    [onChange, onTrendingSelect],
+    [onChange, onTrendingSelect, onSubmit],
   )
+
+  const handleSubmitSearch = useCallback(() => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    onSubmit?.(trimmed)
+  }, [value, onSubmit])
 
   const activeKeyword = ROTATING_KEYWORDS[keywordIndex]
 
@@ -106,12 +116,27 @@ export function RotatingSearchBar({
           aria-label="Search products and stores"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              handleSubmitSearch()
+            }
+          }}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="relative z-[1] h-11 w-full rounded-xl border border-transparent bg-[#F0F0F0] pl-10 pr-3 text-[13px] text-[#1C1C1C] outline-none ring-[#FF6B35]/30 transition-[box-shadow,background-color,border-color] focus:border-[#FF6B35]/25 focus:bg-white focus:shadow-sm focus:ring-2"
+          className="relative z-[1] h-11 w-full rounded-xl border border-transparent bg-[#F0F0F0] pl-10 pr-10 text-[13px] text-[#1C1C1C] outline-none ring-[#FF6B35]/30 transition-[box-shadow,background-color,border-color] focus:border-[#FF6B35]/25 focus:bg-white focus:shadow-sm focus:ring-2"
           autoComplete="off"
           spellCheck={false}
         />
+
+        <button
+          type="button"
+          onClick={handleSubmitSearch}
+          className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#878787] hover:bg-white hover:text-[#FF6B35]"
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+        </button>
 
         {showRotatingPlaceholder && (
           <div

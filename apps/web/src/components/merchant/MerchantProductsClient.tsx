@@ -8,6 +8,7 @@ import {
   addProductAction,
   toggleProductAvailabilityAction,
 } from '@/actions/merchant'
+import { ProductImage } from '@/components/products/ProductImage'
 import { formatCurrency } from '@/lib/utils'
 
 type ShopData = NonNullable<Awaited<ReturnType<typeof getMerchantShopAction>>>
@@ -200,14 +201,7 @@ export function MerchantProductsClient() {
                 key={p.id}
                 className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3"
               >
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                  {p.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-lg">📦</div>
-                  )}
-                </div>
+                <ProductImage src={p.image} alt={p.name} className="h-14 w-14 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{p.name}</p>
                   <p className="text-sm text-gray-500">{p.unit ?? 'piece'}</p>

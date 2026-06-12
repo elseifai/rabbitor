@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { Minus, Plus } from 'lucide-react'
 import { useCartStore } from '@/store'
+import { ProductImage } from '@/components/products/ProductImage'
 import { cn, formatCurrency } from '@/lib/utils'
 
 export type ProductCardVariant = 'GROCERY' | 'RETAIL'
@@ -95,25 +96,13 @@ export function UnifiedProductCard({
           className,
         )}
       >
-        <div className="relative aspect-[3/4] overflow-hidden bg-[#F8F8F8]">
-          {product.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.image}
-              alt=""
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              className={cn(
-                'flex h-full w-full items-center justify-center text-5xl',
-                placeholder.bg,
-              )}
-            >
-              {placeholder.emoji}
-            </div>
-          )}
+        <div className="relative">
+          <ProductImage
+            src={product.image}
+            alt={product.name}
+            fallback={placeholder.emoji}
+            className={placeholder.bg}
+          />
 
           {originalPrice && discount > 0 && (
             <span className="absolute left-2 top-2 rounded-full bg-[#1C1C1C] px-2 py-0.5 text-[10px] font-bold text-white">
@@ -223,26 +212,14 @@ export function UnifiedProductCard({
         className,
       )}
     >
-      {/* Image container — pure white / light gray backdrop */}
-      <div className="relative mb-2 flex aspect-square w-full items-center justify-center overflow-visible rounded-xl bg-[#F7F9FA] p-2">
-        {product.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={product.image}
-            alt={product.name}
-            loading="lazy"
-            className="max-h-full max-w-full object-contain mix-blend-multiply transition-transform duration-200 group-hover:scale-105"
-          />
-        ) : (
-          <div
-            className={cn(
-              'flex h-full w-full items-center justify-center rounded-lg text-4xl',
-              placeholder.bg,
-            )}
-          >
-            {placeholder.emoji}
-          </div>
-        )}
+      {/* LIVE ECOSYSTEM UPGRADE — standardized square product image */}
+      <div className="relative mb-2 overflow-visible">
+        <ProductImage
+          src={product.image}
+          alt={product.name}
+          fallback={placeholder.emoji}
+          className={cn('transition-transform duration-200 group-hover:scale-[1.02]', placeholder.bg)}
+        />
 
         {originalPrice && discount > 0 && !outOfStock && (
           <span className="absolute left-2 top-2 rounded-md bg-[#0C831F] px-1.5 py-0.5 text-[9px] font-bold text-white">
