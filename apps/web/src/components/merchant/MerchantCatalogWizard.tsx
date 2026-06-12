@@ -1,12 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Search, X } from 'lucide-react'
 import type { StoreType } from '@rabbit/database'
 import { addProductFromCatalogAction } from '@/actions/merchant'
 import {
   CATALOG_CATEGORY_LABELS,
-  getCatalogCategories,
   searchCatalogTemplates,
   type CatalogTemplate,
 } from '@/config/master-catalog'
@@ -37,12 +36,45 @@ export function MerchantCatalogWizard({
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dbTemplates, setDbTemplates] = useState<CatalogTemplate[]>([])
 
-  const categories = useMemo(() => getCatalogCategories(storeType), [storeType])
-  const results = useMemo(
-    () => searchCatalogTemplates(storeType, query, category),
-    [storeType, query, category],
-  )
+  // PLATFORM CORE RESOLUTION — merge admin-uploaded global catalog
+  useEffect(() => {
+    if (!open) return
+    void fetch(`/api/merchant/master-catalog?storeType=${storeType}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setDbTemplates(json.data as CatalogTemplate[])
+        }
+      })
+      .catch(() => setDbTemplates([]))
+  }, [open, storeType])
+
+  const mergedTemplates = useMemo(() => {
+    const staticItems = searchCatalogTemplates(storeType, '', 'ALL')
+    const seen = new Set(staticItems.map((i) => i.name.toLowerCase()))
+    const extra = dbTemplates.filter((i) => !seen.has(i.name.toLowerCase()))
+    return [...staticItems, ...extra]
+  }, [storeType, dbTemplates])
+
+  const categories = useMemo(() => {
+    const cats = new Set(mergedTemplates.map((i) => i.category))
+    return ['ALL', ...Array.from(cats).sort()]
+  }, [mergedTemplates])
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return mergedTemplates.filter((item) => {
+      const matchCategory = category === 'ALL' || item.category === category
+      const matchQuery =
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q)
+      return matchCategory && matchQuery
+    })
+  }, [mergedTemplates, query, category])
 
   const resetCustomize = (item: CatalogTemplate) => {
     setSelected(item)

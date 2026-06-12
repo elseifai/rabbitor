@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { GeoLocationPanel } from '@/components/location/GeoLocationPanel'
+import { SupportChatDrawer } from '@/components/support/SupportChatDrawer'
 import { useAuth } from '@/context/AuthContext'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 
@@ -35,6 +37,7 @@ export function ProfileClient({ user: serverUser }: Props) {
   const router = useRouter()
   const { user: authUser, isLoggedIn, logout } = useAuth()
   const sandbox = isDevSandboxClient()
+  const [supportOpen, setSupportOpen] = useState(false)
 
   const user = serverUser ?? (authUser
     ? {
@@ -72,8 +75,8 @@ export function ProfileClient({ user: serverUser }: Props) {
     .toUpperCase()
 
   const menu = [
-    { label: 'My Orders', href: '/orders' },
-    { label: 'Help & Support', href: '#' },
+    { label: 'My Orders', href: '/orders', action: null as (() => void) | null },
+    { label: 'Help & Support', href: null, action: () => setSupportOpen(true) },
   ]
 
   return (
@@ -96,16 +99,28 @@ export function ProfileClient({ user: serverUser }: Props) {
       </div>
 
       <div className="mt-6 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white">
-        {menu.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className="flex items-center justify-between px-4 py-4 text-sm font-semibold text-gray-800"
-          >
-            {item.label}
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-          </Link>
-        ))}
+        {menu.map((item) =>
+          item.href ? (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="flex items-center justify-between px-4 py-4 text-sm font-semibold text-gray-800"
+            >
+              {item.label}
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            </Link>
+          ) : (
+            <button
+              key={item.label}
+              type="button"
+              onClick={item.action ?? undefined}
+              className="flex w-full items-center justify-between px-4 py-4 text-left text-sm font-semibold text-gray-800"
+            >
+              {item.label}
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            </button>
+          ),
+        )}
         <button
           type="button"
           onClick={() => void handleLogout()}
@@ -128,6 +143,8 @@ export function ProfileClient({ user: serverUser }: Props) {
           />
         </div>
       )}
+
+      <SupportChatDrawer open={supportOpen} onClose={() => setSupportOpen(false)} />
     </div>
   )
 }

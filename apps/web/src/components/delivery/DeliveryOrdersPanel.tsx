@@ -51,7 +51,7 @@ function OfferCountdown({
   }, [seconds, onExpire])
 
   return (
-    <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-bold tabular-nums">
+    <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-bold tabular-nums text-orange-700">
       {remaining}s
     </span>
   )
@@ -179,7 +179,7 @@ export function DeliveryOrdersPanel() {
   if (!mounted || loading) {
     return (
       <div className="flex justify-center py-24">
-        <Loader2 className="h-10 w-10 animate-spin text-rabbit-400" />
+        <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
       </div>
     )
   }
@@ -200,17 +200,17 @@ export function DeliveryOrdersPanel() {
     <div className="space-y-6 pb-28">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href="/delivery" className="text-sm text-gray-400">
+          <Link href="/delivery" className="text-sm text-gray-500 hover:text-orange-500">
             ← Jobs hub
           </Link>
-          <h1 className="mt-1 text-2xl font-bold">Active Delivery</h1>
+          <h1 className="mt-1 text-2xl font-bold text-gray-900">Active Delivery</h1>
         </div>
         <div
           className={cn(
             'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold',
             connectionState === 'connected'
-              ? 'bg-emerald-500/15 text-emerald-300'
-              : 'bg-gray-800 text-gray-400',
+              ? 'bg-orange-50 text-orange-600'
+              : 'bg-gray-100 text-gray-500',
           )}
         >
           {connectionState === 'connected' ? (
@@ -223,11 +223,11 @@ export function DeliveryOrdersPanel() {
       </div>
 
       {!activeDelivery ? (
-        <section className="rounded-3xl border border-gray-800 bg-gray-900 p-6">
-          <p className="text-sm text-gray-400">Duty status</p>
+        <section className="rounded-3xl border border-orange-100 bg-orange-50/30 p-6">
+          <p className="text-sm text-gray-500">Duty status</p>
           <div className="mt-4 flex items-center justify-between gap-4">
             <div>
-              <p className="text-2xl font-bold">{isOnline ? 'ONLINE' : 'OFFLINE'}</p>
+              <p className="text-2xl font-bold text-gray-900">{isOnline ? 'ONLINE' : 'OFFLINE'}</p>
               <p className="mt-1 text-sm text-gray-500">
                 {isOnline
                   ? 'Listening for delivery offers near you'
@@ -240,7 +240,7 @@ export function DeliveryOrdersPanel() {
               onClick={() => void toggleDuty()}
               className={cn(
                 'relative h-14 w-28 rounded-full transition-colors',
-                isOnline ? 'bg-[#0C831F]' : 'bg-gray-700',
+                isOnline ? 'bg-orange-500' : 'bg-gray-300',
               )}
               aria-pressed={isOnline}
             >
@@ -254,53 +254,53 @@ export function DeliveryOrdersPanel() {
           </div>
         </section>
       ) : (
-        <section className="space-y-4 rounded-3xl border border-rabbit-500/30 bg-gray-900 p-5">
+        <section className="space-y-4 rounded-3xl border border-orange-100 bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-rabbit-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">
                 Active task
               </p>
-              <p className="mt-1 text-xl font-bold">{activeDelivery.orderNumber}</p>
-              <p className="text-sm text-gray-400">{activeDelivery.shopName}</p>
+              <p className="mt-1 text-xl font-bold text-gray-900">{activeDelivery.orderNumber}</p>
+              <p className="text-sm text-gray-500">{activeDelivery.shopName}</p>
             </div>
-            <p className="text-lg font-bold text-rabbit-300">
+            <p className="text-lg font-bold text-orange-500">
               {formatCurrency(activeDelivery.payoutInr)}
             </p>
           </div>
 
-          <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
-            <div className="flex items-center gap-2 text-sm text-gray-300">
+          <div className="rounded-2xl border border-orange-100 bg-orange-50/30 p-4">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
               <Radio
                 className={cn(
                   'h-4 w-4',
-                  lastGpsAt ? 'animate-pulse text-rabbit-400' : 'text-gray-600',
+                  lastGpsAt ? 'animate-pulse text-orange-500' : 'text-gray-400',
                 )}
               />
               {lastGpsAt
                 ? 'GPS broadcasting every 8 seconds'
                 : 'Waiting for GPS lock…'}
             </div>
-            {gpsError && <p className="mt-2 text-xs text-red-400">{gpsError}</p>}
+            {gpsError && <p className="mt-2 text-xs text-red-600">{gpsError}</p>}
           </div>
 
           {destination && (
-            <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
+            <div className="rounded-2xl border border-orange-100 bg-white p-4">
               <p className="text-xs font-semibold uppercase text-gray-500">
                 Navigate to {destination.label}
               </p>
-              <p className="mt-2 text-sm text-gray-300">
+              <p className="mt-2 text-sm text-gray-700">
                 {stage === 'PICKED_UP'
                   ? activeDelivery.deliveryAddress
                   : activeDelivery.shopAddress}
               </p>
-              <div className="mt-4 h-36 rounded-xl border border-dashed border-gray-700 bg-gray-900/80 flex items-center justify-center text-gray-500 text-sm">
+              <div className="mt-4 flex h-36 items-center justify-center rounded-xl border border-dashed border-orange-200 bg-orange-50/50 text-sm text-gray-500">
                 Map preview
               </div>
               <a
                 href={mapsUrl(destination.lat, destination.lng)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold text-gray-900"
+                className="mt-4 flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600"
               >
                 <Navigation className="h-4 w-4" />
                 Open in Google Maps
@@ -322,7 +322,7 @@ export function DeliveryOrdersPanel() {
 
       {activeDelivery && (
         <div className="fixed inset-x-0 bottom-20 z-40 mx-auto max-w-lg px-4">
-          <div className="rounded-2xl border border-gray-800 bg-gray-950/95 p-4 shadow-2xl backdrop-blur">
+          <div className="rounded-2xl border border-orange-100 bg-white p-4 shadow-lg">
             {stage === 'ASSIGNED' && (
               <SwipeActionButton
                 label="Swipe to Arrive at Store"
@@ -333,12 +333,12 @@ export function DeliveryOrdersPanel() {
 
             {stage === 'ARRIVED_AT_STORE' && (
               <div className="space-y-3">
-                <label className="flex min-h-[48px] items-center gap-3 rounded-xl border border-gray-800 px-4 text-sm">
+                <label className="flex min-h-[48px] items-center gap-3 rounded-xl border border-orange-100 bg-orange-50/30 px-4 text-sm text-gray-800">
                   <input
                     type="checkbox"
                     checked={pickupVerified}
                     onChange={(e) => setPickupVerified(e.target.checked)}
-                    className="h-5 w-5 accent-rabbit-500"
+                    className="h-5 w-5 accent-orange-500"
                   />
                   <span>I verified all items in the bag</span>
                 </label>
@@ -346,7 +346,7 @@ export function DeliveryOrdersPanel() {
                   type="button"
                   disabled={!pickupVerified || busy}
                   onClick={() => void advanceStage('PICKED_UP')}
-                  className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-[#FF6B35] text-sm font-bold text-white disabled:opacity-40"
+                  className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-40"
                 >
                   Confirm Pickup
                 </button>
@@ -356,7 +356,7 @@ export function DeliveryOrdersPanel() {
             {stage === 'PICKED_UP' && (
               <SwipeActionButton
                 label="Swipe to Complete Delivery"
-                tone="dark"
+                tone="orange"
                 disabled={busy}
                 onConfirm={() => void advanceStage('DELIVERED')}
               />
@@ -366,22 +366,22 @@ export function DeliveryOrdersPanel() {
       )}
 
       {pendingOffer && !activeDelivery && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
-          <div className="w-full max-w-md rounded-3xl bg-gray-900 p-6 shadow-2xl border border-rabbit-500/40">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-3xl border border-orange-100 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-rabbit-400">
+                <p className="text-xs font-bold uppercase tracking-wide text-orange-500">
                   New delivery offer
                 </p>
-                <h2 className="mt-1 text-2xl font-bold">{pendingOffer.storeName}</h2>
+                <h2 className="mt-1 text-2xl font-bold text-gray-900">{pendingOffer.storeName}</h2>
               </div>
               <OfferCountdown
                 seconds={pendingOffer.expiresInSeconds}
                 onExpire={() => setPendingOffer(null)}
               />
             </div>
-            <p className="mt-2 text-sm text-gray-400">{pendingOffer.orderNumber}</p>
-            <p className="mt-4 text-3xl font-bold text-white">
+            <p className="mt-2 text-sm text-gray-500">{pendingOffer.orderNumber}</p>
+            <p className="mt-4 text-3xl font-bold text-orange-500">
               {formatCurrency(pendingOffer.payoutInr)}
             </p>
             <p className="mt-1 text-sm text-gray-500">Estimated payout (fee + tip)</p>
@@ -389,7 +389,7 @@ export function DeliveryOrdersPanel() {
               <button
                 type="button"
                 onClick={() => setPendingOffer(null)}
-                className="min-h-[52px] rounded-2xl border border-gray-700 text-sm font-bold"
+                className="min-h-[52px] rounded-2xl border border-orange-100 text-sm font-bold text-gray-700"
               >
                 Decline
               </button>
@@ -397,7 +397,7 @@ export function DeliveryOrdersPanel() {
                 type="button"
                 disabled={busy}
                 onClick={() => void acceptOffer()}
-                className="min-h-[52px] rounded-2xl bg-[#0C831F] text-sm font-bold text-white"
+                className="min-h-[52px] rounded-2xl bg-orange-500 text-sm font-bold text-white hover:bg-orange-600"
               >
                 Accept
               </button>
@@ -408,7 +408,7 @@ export function DeliveryOrdersPanel() {
 
       {busy && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30">
-          <Loader2 className="h-10 w-10 animate-spin text-white" />
+          <Loader2 className="h-10 w-10 animate-spin text-orange-500" />
         </div>
       )}
     </div>

@@ -20,6 +20,8 @@ import {
   updateProductPriceAction,
 } from '@/actions/merchant'
 import { MerchantCatalogWizard } from '@/components/merchant/MerchantCatalogWizard'
+import { MerchantManualProductModal } from '@/components/merchant/MerchantManualProductModal'
+import { BulkProductImport } from '@/components/shared/BulkProductImport'
 import { CATALOG_CATEGORY_LABELS } from '@/config/master-catalog'
 import { formatCurrency } from '@/lib/utils'
 
@@ -42,6 +44,7 @@ export function MerchantProductListing() {
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
   const [showWizard, setShowWizard] = useState(false)
+  const [showManual, setShowManual] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
   const [stockWarnings, setStockWarnings] = useState<Set<string>>(new Set())
@@ -162,12 +165,24 @@ export function MerchantProductListing() {
           <Plus className="h-4 w-4" />
           Add Product
         </button>
+        <button
+          type="button"
+          onClick={() => setShowManual(true)}
+          className="flex items-center gap-2 rounded-xl border-2 border-orange-500 bg-white px-4 py-2.5 text-sm font-bold text-orange-500 hover:bg-orange-50"
+        >
+          <Plus className="h-4 w-4" />
+          Create Custom Product Manually
+        </button>
       </div>
 
       <p className="text-xs text-gray-500">
         {products.length} items in stock · Catalog templates for{' '}
         <span className="font-bold text-[#FF6B35]">{storeType}</span> store type
       </p>
+
+      {shopId && (
+        <BulkProductImport mode="merchant" shopId={shopId} onComplete={() => void load()} />
+      )}
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center">
@@ -266,6 +281,15 @@ export function MerchantProductListing() {
         onClose={() => setShowWizard(false)}
         onAdded={() => void load()}
       />
+
+      {shopId && (
+        <MerchantManualProductModal
+          shopId={shopId}
+          open={showManual}
+          onClose={() => setShowManual(false)}
+          onAdded={() => void load()}
+        />
+      )}
     </div>
   )
 }

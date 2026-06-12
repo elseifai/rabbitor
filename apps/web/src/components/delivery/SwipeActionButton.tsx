@@ -13,7 +13,7 @@ export function SwipeActionButton({
   label: string
   onConfirm: () => void
   disabled?: boolean
-  tone?: 'green' | 'dark'
+  tone?: 'green' | 'dark' | 'orange'
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragX, setDragX] = useState(0)
@@ -38,7 +38,7 @@ export function SwipeActionButton({
       ref={trackRef}
       className={cn(
         'relative h-14 overflow-hidden rounded-2xl select-none touch-none',
-        tone === 'green' ? 'bg-[#0C831F]' : 'bg-[#1C1C1C]',
+        tone === 'green' ? 'bg-[#0C831F]' : tone === 'orange' ? 'bg-orange-500' : 'bg-[#1C1C1C]',
         disabled && 'opacity-50',
       )}
       onPointerDown={(e) => {
@@ -68,7 +68,10 @@ export function SwipeActionButton({
         style={{ transform: `translateX(${dragX}px)` }}
       >
         <ChevronRight
-          className={cn('h-6 w-6', tone === 'green' ? 'text-[#0C831F]' : 'text-[#1C1C1C]')}
+          className={cn(
+            'h-6 w-6',
+            tone === 'green' ? 'text-[#0C831F]' : tone === 'orange' ? 'text-orange-500' : 'text-[#1C1C1C]',
+          )}
         />
       </div>
     </div>

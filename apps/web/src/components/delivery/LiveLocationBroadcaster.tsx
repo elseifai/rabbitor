@@ -5,6 +5,7 @@ import { MapPin, Radio } from 'lucide-react'
 import { socketClient } from '@/lib/socket-client'
 import { useAuth } from '@/context/AuthContext'
 
+// PLATFORM CORE RESOLUTION — white & orange live GPS broadcaster
 export function LiveLocationBroadcaster({
   orderId,
   destLat,
@@ -54,12 +55,12 @@ export function LiveLocationBroadcaster({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+      <div className="rounded-2xl border border-orange-100 bg-orange-50/30 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Radio className={`h-5 w-5 ${isTracking ? 'animate-pulse text-rabbit-400' : 'text-gray-500'}`} />
+            <Radio className={`h-5 w-5 ${isTracking ? 'animate-pulse text-orange-500' : 'text-gray-400'}`} />
             <div>
-              <p className="font-semibold">Live GPS tracking</p>
+              <p className="font-semibold text-gray-900">Live GPS tracking</p>
               <p className="text-xs text-gray-500">
                 {isTracking ? 'Broadcasting your location to customer' : 'Waiting for GPS signal…'}
               </p>
@@ -67,7 +68,7 @@ export function LiveLocationBroadcaster({
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-              isTracking ? 'bg-rabbit-600/20 text-rabbit-400' : 'bg-gray-800 text-gray-500'
+              isTracking ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
             }`}
           >
             {isTracking ? 'Live' : 'Offline'}
@@ -75,20 +76,20 @@ export function LiveLocationBroadcaster({
         </div>
 
         {lastSent && (
-          <p className="mt-3 font-mono text-xs text-gray-400">
+          <p className="mt-3 font-mono text-xs text-gray-500">
             {lastSent.lat.toFixed(5)}, {lastSent.lng.toFixed(5)}
           </p>
         )}
 
-        {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
       </div>
 
-      <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+      <div className="rounded-2xl border border-orange-100 bg-white p-4">
         <div className="flex items-start gap-2 text-sm">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-rabbit-400" />
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
           <div>
-            <p className="font-medium">Drop-off coordinates</p>
-            <p className="mt-1 font-mono text-xs text-gray-400">
+            <p className="font-medium text-gray-900">Drop-off coordinates</p>
+            <p className="mt-1 font-mono text-xs text-gray-500">
               {destLat.toFixed(5)}, {destLng.toFixed(5)}
             </p>
           </div>

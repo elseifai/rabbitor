@@ -27,6 +27,24 @@ enum StoreType {
   GENERAL
 }
 
+/// PLATFORM CORE RESOLUTION — admin-uploaded global master catalog items
+model MasterCatalogItem {
+  id           String    @id @default(uuid())
+  storeType    StoreType @default(GENERAL)
+  name         String
+  description  String?
+  category     String    @default("general")
+  defaultUnit  String    @default("piece")
+  basePrice    Float
+  imageUrl     String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([storeType, isActive])
+  @@index([category])
+}
+
 enum DeliveryMethod {
   SELF
   RABBITOR

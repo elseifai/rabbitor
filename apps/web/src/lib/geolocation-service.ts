@@ -2,6 +2,7 @@
 
 import { useLocationStore } from '@/store'
 import { getAuthHeader } from '@/lib/session'
+import { gpsHttpHint, isUnencryptedHttp } from '@/lib/permission-prime'
 
 export type GeoProfileRole = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
@@ -72,6 +73,21 @@ export async function detectAndSaveLocation(options?: { syncDb?: boolean }) {
   setFetching(true)
   setError(null)
 
+  // PLATFORM CORE RESOLUTION — skip GPS probe on plain HTTP (VPS dev hosts)
+  if (isUnencryptedHttp()) {
+    const message = gpsHttpHint()
+    setPermission('denied')
+    setError(message)
+    setFetching(false)
+    return {
+      ok: false as const,
+      error: message,
+      denied: true,
+      showManualFallback: true,
+      httpBlocked: true,
+    }
+  }
+
   try {
     const pos = await detectLivePosition()
     const { latitude, longitude } = pos.coords
@@ -87,18 +103,27 @@ export async function detectAndSaveLocation(options?: { syncDb?: boolean }) {
     const geoErr = err as GeolocationPositionError
     const denied =
       typeof geoErr?.code === 'number' && geoErr.code === geoErr.PERMISSION_DENIED
-    const message = denied
-      ? 'Location permission denied'
-      : err instanceof Error
-        ? err.message
-        : 'Unable to detect location'
+    const httpBlocked = isUnencryptedHttp()
+    const message = httpBlocked
+      ? gpsHttpHint()
+      : denied
+        ? 'Location permission denied'
+        : err instanceof Error
+          ? err.message
+          : 'Unable to detect location'
 
-    if (denied) {
+    if (denied || httpBlocked) {
       setPermission('denied')
     }
     setError(message)
     setFetching(false)
-    return { ok: false as const, error: message, denied: message.includes('denied') }
+    return {
+      ok: false as const,
+      error: message,
+      denied: denied || httpBlocked,
+      showManualFallback: true,
+      httpBlocked,
+    }
   }
 }
 

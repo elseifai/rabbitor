@@ -16,11 +16,13 @@ import {
   Loader2,
   RefreshCw,
   X,
+  PackageOpen,
 } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
+import { AdminInventoryUpload } from '@/components/admin/AdminInventoryUpload'
 import type { AdPlacement, DiscountType, StoreType } from '@rabbit/database'
 
-type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue'
+type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue' | 'inventory'
 
 const TABS: { id: TabId; label: string; short: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', short: 'Home', icon: LayoutDashboard },
@@ -28,6 +30,7 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof LayoutDashbo
   { id: 'customers', label: 'Customers', short: 'Users', icon: Users },
   { id: 'riders', label: 'Riders', short: 'Riders', icon: Bike },
   { id: 'orders', label: 'Orders', short: 'Orders', icon: ShoppingBag },
+  { id: 'inventory', label: 'Global Inventory Upload', short: 'Catalog', icon: PackageOpen },
   { id: 'coupons', label: 'Coupons', short: 'Deals', icon: Ticket },
   { id: 'ads', label: 'Ads', short: 'Ads', icon: Megaphone },
   { id: 'revenue', label: 'Revenue', short: 'Rev', icon: IndianRupee },
@@ -190,6 +193,8 @@ export function AdminDashboard() {
         const json = await res.json()
         if (!json.success) throw new Error(json.error ?? 'Revenue failed')
         setRevenue(json.data ?? {})
+      } else if (t === 'inventory') {
+        /* AdminInventoryUpload loads its own data */
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
@@ -479,6 +484,8 @@ export function AdminDashboard() {
         </div>
       </div>
     )
+
+    if (tab === 'inventory') return <AdminInventoryUpload />
 
     if (tab === 'revenue') return (
       <div className="space-y-6">
