@@ -140,7 +140,13 @@ export const useCartStore = create<CartStore>()(
         activeStoreName: state.activeStoreName,
       }),
       migrate: (persisted, version) => {
-        if (version >= 1) return persisted as Partial<CartStore>
+        if (version >= 1) {
+          return persisted as {
+            items: CartLineItem[]
+            activeStoreId: string | null
+            activeStoreName: string | null
+          }
+        }
 
         const legacy = persisted as {
           items?: Array<{

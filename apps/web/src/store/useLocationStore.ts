@@ -55,7 +55,13 @@ export const useLocationStore = create<LocationStore>()(
         permissionStatus: state.permissionStatus,
       }),
       migrate: (persisted, version) => {
-        if (version >= 1) return persisted as Partial<LocationStore>
+        if (version >= 1) {
+          return persisted as {
+            coordinates: LocationCoordinates | null
+            formattedAddress: string | null
+            permissionStatus: LocationPermissionStatus
+          }
+        }
 
         const legacy = persisted as {
           location?: {
