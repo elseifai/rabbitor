@@ -337,6 +337,7 @@ export async function signInWithGoogle(
     googleId: string
     email: string
     name?: string | null
+    picture?: string | null
   },
   role?: Role,
 ): Promise<{ token: string; user: AuthUser }> {
@@ -345,20 +346,30 @@ export async function signInWithGoogle(
     where: { OR: [{ googleId: profile.googleId }, { email }] },
   })
 
+  const displayName = profile.name?.trim() || email.split('@')[0]
+
   if (!user) {
     user = await prisma.user.create({
       data: {
         googleId: profile.googleId,
         email,
         emailVerified: new Date(),
-        name: profile.name ?? email.split('@')[0],
+        name: displayName,
+        displayName,
+        avatarUrl: profile.picture ?? null,
         role: role ?? 'CUSTOMER',
       },
     })
-  } else if (!user.googleId) {
+  } else {
     user = await prisma.user.update({
       where: { id: user.id },
-      data: { googleId: profile.googleId, emailVerified: user.emailVerified ?? new Date() },
+      data: {
+        googleId: user.googleId ?? profile.googleId,
+        emailVerified: user.emailVerified ?? new Date(),
+        name: profile.name?.trim() || user.name,
+        displayName: profile.name?.trim() || user.displayName,
+        avatarUrl: profile.picture ?? user.avatarUrl,
+      },
     })
   }
 

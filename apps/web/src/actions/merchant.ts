@@ -265,6 +265,8 @@ export async function getMerchantSettingsAction() {
       name: true,
       slug: true,
       address: true,
+      latitude: true,
+      longitude: true,
       category: true,
       isActive: true,
       minOrderValue: true,

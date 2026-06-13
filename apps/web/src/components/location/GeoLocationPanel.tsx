@@ -11,7 +11,7 @@ import {
 import { gpsHttpHint } from '@/lib/permission-prime'
 import { cn } from '@/lib/utils'
 
-// PLATFORM CORE RESOLUTION — GPS bypass + smooth manual address slide-down
+// GOOGLE MAPS & AUTH ACTIVATION — GPS detect with Prisma sync
 export function GeoLocationPanel({
   compact = false,
   className,

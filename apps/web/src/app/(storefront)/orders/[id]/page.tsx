@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getOrderAction } from '@/actions/orders'
 import { OrderTracker } from '@/components/orders/OrderTracker'
-import { TrackingMap } from '@/components/orders/TrackingMap'
+import { OrderGoogleMapSection } from '@/components/orders/OrderGoogleMapSection'
 import { formatCurrency } from '@/lib/utils'
 import { ArrowLeft } from 'lucide-react'
 
@@ -37,9 +37,9 @@ export default async function OrderPage({ params }: Props) {
 
       {showLiveMap && (
         <section className="mt-6">
-          <TrackingMap
+          <OrderGoogleMapSection
             orderId={order.id}
-            initialStatus={order.status}
+            status={order.status}
             destLat={order.destLatitude ?? order.shop.latitude}
             destLng={order.destLongitude ?? order.shop.longitude}
             shopLat={order.shop.latitude}

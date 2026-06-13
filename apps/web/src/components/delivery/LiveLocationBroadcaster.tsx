@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import { MapPin, Radio } from 'lucide-react'
 import { socketClient } from '@/lib/socket-client'
 import { useAuth } from '@/context/AuthContext'
+import { useRiderLocationStream } from '@/hooks/useRiderLocationStream'
 
-// PLATFORM CORE RESOLUTION — white & orange live GPS broadcaster
+// GOOGLE MAPS & AUTH ACTIVATION — socket broadcast + DB coordinate streaming
 export function LiveLocationBroadcaster({
   orderId,
   destLat,
@@ -20,6 +21,12 @@ export function LiveLocationBroadcaster({
   const [isTracking, setIsTracking] = useState(false)
   const [lastSent, setLastSent] = useState<{ lat: number; lng: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useRiderLocationStream({
+    orderId,
+    enabled: true,
+    onError: (msg) => setError(msg),
+  })
 
   useEffect(() => {
     if (!orderId || !navigator.geolocation) {
@@ -62,7 +69,9 @@ export function LiveLocationBroadcaster({
             <div>
               <p className="font-semibold text-gray-900">Live GPS tracking</p>
               <p className="text-xs text-gray-500">
-                {isTracking ? 'Broadcasting your location to customer' : 'Waiting for GPS signal…'}
+                {isTracking
+                  ? 'Broadcasting to customers & syncing every 10s'
+                  : 'Waiting for GPS signal…'}
               </p>
             </div>
           </div>

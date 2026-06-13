@@ -7,7 +7,7 @@ export default async function ProfilePage() {
   const user = session
     ? await prisma.user.findUnique({
         where: { id: session.userId },
-        select: { name: true, phone: true, email: true, displayName: true },
+        select: { name: true, phone: true, email: true, displayName: true, avatarUrl: true },
       })
     : null
 

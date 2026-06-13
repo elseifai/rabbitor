@@ -23,6 +23,7 @@ import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { OrderSuccessScreen } from '@/components/checkout/OrderSuccessScreen'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
+import { detectAndSaveLocation } from '@/lib/geolocation-service'
 import { SAVED_LOCATIONS } from '@/lib/constants'
 import { loadRazorpayScript } from '@/lib/razorpay'
 import { authFetch } from '@/lib/session'
@@ -109,35 +110,15 @@ export default function DynamicCheckoutPage() {
   const lng = destLng ?? coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
 
   const detectDeliveryLocation = () => {
-    if (!navigator.geolocation) return
     setDetectingAddress(true)
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords
-        setDestLat(latitude)
-        setDestLng(longitude)
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { 'Accept-Language': 'en' } },
-          )
-          const data = await res.json()
-          const addr = data.address ?? {}
-          const parts = [
-            addr.road || addr.pedestrian,
-            addr.suburb || addr.neighbourhood,
-            addr.city || addr.town,
-            addr.postcode,
-          ].filter(Boolean)
-          setDeliveryAddress(parts.join(', '))
-        } catch {
-          setDeliveryAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)
-        }
-        setDetectingAddress(false)
-      },
-      () => setDetectingAddress(false),
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
+    void detectAndSaveLocation({ syncDb: true }).then((res) => {
+      if (res.ok) {
+        setDestLat(res.lat)
+        setDestLng(res.lng)
+        setDeliveryAddress(res.address)
+      }
+      setDetectingAddress(false)
+    })
   }
 
   // Pre-fill address from saved location
@@ -496,7 +477,7 @@ export default function DynamicCheckoutPage() {
               >
                 {detectingAddress
                   ? <><Loader2 className="h-3 w-3 animate-spin" /> Detecting...</>
-                  : <><MapPin className="h-3 w-3" /> Use GPS</>
+                  : <><MapPin className="h-3 w-3" /> Detect Live Location</>
                 }
               </button>
             </div>

@@ -20,6 +20,7 @@ import {
   type RiderStage,
 } from '@/actions/delivery'
 import { SwipeActionButton } from '@/components/delivery/SwipeActionButton'
+import { useRiderLocationStream } from '@/hooks/useRiderLocationStream'
 import { useRiderSocket, type DeliveryOfferEvent } from '@/hooks/useRiderSocket'
 import { formatCurrency, cn } from '@/lib/utils'
 
@@ -105,6 +106,13 @@ export function DeliveryOrdersPanel() {
     isOnline,
     handleOffer,
   )
+
+  // GOOGLE MAPS & AUTH ACTIVATION — persist rider coords to DB during active delivery
+  useRiderLocationStream({
+    orderId: activeDelivery?.id,
+    enabled: Boolean(activeDelivery),
+    onError: (msg) => setGpsError(msg),
+  })
 
   const toggleDuty = async () => {
     const next = !isOnline

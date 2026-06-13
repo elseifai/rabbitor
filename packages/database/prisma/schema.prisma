@@ -119,6 +119,8 @@ model User {
   passwordHash  String?
   role          UserRole  @default(CUSTOMER)
   displayName   String?
+  /// GOOGLE MAPS & AUTH ACTIVATION — Google profile photo URL
+  avatarUrl     String?
   locale        Locale    @default(en)
   fcmToken      String?
   /// LIVE ECOSYSTEM UPGRADE — last known delivery / profile coordinates

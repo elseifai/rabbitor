@@ -9,6 +9,7 @@ import {
   toggleShopOpenAction,
 } from '@/actions/merchant'
 import { formatCurrency } from '@/lib/utils'
+import { GeoLocationPanel } from '@/components/location/GeoLocationPanel'
 
 type Settings = NonNullable<Awaited<ReturnType<typeof getMerchantSettingsAction>>>
 
@@ -156,6 +157,19 @@ export function MerchantSettingsClient() {
         </div>
         <p className="mt-2 text-xs text-gray-500">
           Shop is {shop.isActive ? 'open and accepting orders' : 'closed'}
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-orange-100 bg-white p-4">
+        <h3 className="font-semibold text-gray-900">Store location</h3>
+        <p className="mt-1 text-sm text-gray-500">
+          Pin your shop on the map so customers and riders can navigate precisely
+        </p>
+        <div className="mt-4">
+          <GeoLocationPanel compact />
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Current: {shop.latitude.toFixed(5)}, {shop.longitude.toFixed(5)}
         </p>
       </div>
 

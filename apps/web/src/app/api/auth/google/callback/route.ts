@@ -74,13 +74,24 @@ export async function GET(request: Request) {
     sub: string
     email?: string
     name?: string
+    picture?: string
     email_verified?: boolean
   }
   if (!profile.email) return fail('Your Google account has no email')
 
-  await signInWithGoogle({ googleId: profile.sub, email: profile.email, name: profile.name }, role)
+  await signInWithGoogle(
+    {
+      googleId: profile.sub,
+      email: profile.email,
+      name: profile.name,
+      picture: profile.picture,
+    },
+    role,
+  )
 
-  const res = NextResponse.redirect(`${appUrl()}${redirectTo}`)
+  const res = NextResponse.redirect(
+    `${appUrl()}/auth/complete?redirect=${encodeURIComponent(redirectTo)}`,
+  )
   res.cookies.delete('g_oauth_nonce')
   return res
 }

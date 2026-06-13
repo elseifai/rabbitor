@@ -11,7 +11,7 @@ import { etaMinutesFromRider } from '@/lib/tracking-eta'
 import { trackingFromOrderStatus } from '@/lib/tracking-status'
 import { formatCurrency, cn } from '@/lib/utils'
 import { TrackingTimeline } from '@/components/track/TrackingTimeline'
-import { TrackingMapCanvas } from '@/components/track/TrackingMapCanvas'
+import { GoogleOrderMap } from '@/components/track/GoogleOrderMap'
 import { TrackingPageSkeleton } from '@/components/track/TrackingPageSkeleton'
 
 type OrderData = {
@@ -202,13 +202,13 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
 
       {showMap && (
         <div className="mx-4 mt-4 space-y-3">
-          <TrackingMapCanvas
+          <GoogleOrderMap
+            orderId={orderId}
+            status={currentStatus}
             shopLat={order.shopLat}
             shopLng={order.shopLng}
             destLat={destLat}
             destLng={destLng}
-            riderLocation={riderLocation}
-            status={currentStatus}
           />
           <a
             href={`https://www.google.com/maps/search/?api=1&query=${destLat},${destLng}`}
