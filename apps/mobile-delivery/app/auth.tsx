@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router'
 import { api, getErrorMessage } from '@/lib/api'
 import { saveToken } from '@/lib/auth'
+import { useGoogleSignIn } from '@/lib/google-auth'
 
 export default function AuthScreen() {
   const router = useRouter()
@@ -19,6 +20,21 @@ export default function AuthScreen() {
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
   const inputs = useRef<Array<TextInput | null>>([])
+
+  const onGoogleSuccess = useCallback(() => {
+    router.replace('/')
+  }, [router])
+
+  const onGoogleError = useCallback((message: string) => {
+    Alert.alert('Google sign-in', message)
+  }, [])
+
+  const { signInWithGoogle, ready: googleReady } = useGoogleSignIn(
+    'rabbit-delivery',
+    'RABBITOR',
+    onGoogleSuccess,
+    onGoogleError,
+  )
 
   const sendOtp = async () => {
     const digits = phone.replace(/\D/g, '')
@@ -74,6 +90,21 @@ export default function AuthScreen() {
     <View style={styles.container}>
       <Text style={styles.logo}>🐰 Rabbitor</Text>
       <Text style={styles.subtitle}>Delivery partner login</Text>
+
+      <Pressable
+        style={[styles.googleButton, !googleReady && styles.buttonDisabled]}
+        disabled={loading || !googleReady}
+        onPress={signInWithGoogle}
+      >
+        <Text style={styles.googleButtonText}>Continue with Google</Text>
+      </Pressable>
+
+      <View style={styles.dividerRow}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>OR</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
       <View style={styles.phoneRow}>
         <Text style={styles.prefix}>+91</Text>
         <TextInput
@@ -115,6 +146,19 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
   logo: { fontSize: 32, fontWeight: '800', textAlign: 'center' },
   subtitle: { textAlign: 'center', color: '#6b7280', marginBottom: 32 },
+  googleButton: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  googleButtonText: { color: '#374151', fontWeight: '700', fontSize: 16 },
+  buttonDisabled: { opacity: 0.5 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
+  dividerText: { marginHorizontal: 12, color: '#9ca3af', fontSize: 12, fontWeight: '600' },
   phoneRow: {
     flexDirection: 'row',
     alignItems: 'center',

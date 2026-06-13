@@ -1,7 +1,28 @@
 import { NextResponse } from 'next/server'
-import { signInWithGoogle } from '@/lib/auth'
+import { GoogleAuthRoleMismatchError, signInWithGoogle } from '@/lib/auth'
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
+
+const PERSONA_LOGIN: Record<Role, string> = {
+  CUSTOMER: '/auth',
+  VENDOR: '/merchant/login',
+  RABBITOR: '/delivery/login',
+  ADMIN: '/admin/login',
+}
+
+const ROLE_REDIRECT: Record<string, string> = {
+  CUSTOMER: '/',
+  VENDOR: '/merchant',
+  RABBITOR: '/delivery',
+  ADMIN: '/admin',
+}
+
+const PERSONA_ERROR: Record<Role, string> = {
+  CUSTOMER: 'Sign-in failed.',
+  VENDOR: 'This email is not registered as a merchant.',
+  RABBITOR: 'This email is not registered as a delivery partner.',
+  ADMIN: 'This email is not registered as admin.',
+}
 
 function appUrl(): string {
   return (
@@ -11,8 +32,10 @@ function appUrl(): string {
   )
 }
 
-function fail(reason: string) {
-  return NextResponse.redirect(`${appUrl()}/auth?error=${encodeURIComponent(reason)}`)
+function fail(reason: string, loginPath = '/auth') {
+  return NextResponse.redirect(
+    `${appUrl()}${loginPath}?error=${encodeURIComponent(reason)}`,
+  )
 }
 
 /** Handles Google's OAuth redirect: exchanges the code and signs the user in. */
@@ -42,15 +65,18 @@ export async function GET(request: Request) {
     return fail('Invalid sign-in state')
   }
 
+  const loginPath = PERSONA_LOGIN[role] ?? '/auth'
+
   const cookieNonce = request.headers
     .get('cookie')
     ?.split(';')
     .map((c) => c.trim())
     .find((c) => c.startsWith('g_oauth_nonce='))
     ?.split('=')[1]
-  if (!cookieNonce || cookieNonce !== nonce) return fail('Sign-in expired, please try again')
+  if (!cookieNonce || cookieNonce !== nonce) {
+    return fail('Sign-in expired, please try again', loginPath)
+  }
 
-  // Exchange the authorization code for tokens
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -62,14 +88,14 @@ export async function GET(request: Request) {
       grant_type: 'authorization_code',
     }),
   })
-  if (!tokenRes.ok) return fail('Could not verify your Google account')
+  if (!tokenRes.ok) return fail('Could not verify your Google account', loginPath)
   const tokens = (await tokenRes.json()) as { access_token?: string }
-  if (!tokens.access_token) return fail('Could not verify your Google account')
+  if (!tokens.access_token) return fail('Could not verify your Google account', loginPath)
 
   const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   })
-  if (!profileRes.ok) return fail('Could not read your Google profile')
+  if (!profileRes.ok) return fail('Could not read your Google profile', loginPath)
   const profile = (await profileRes.json()) as {
     sub: string
     email?: string
@@ -77,21 +103,32 @@ export async function GET(request: Request) {
     picture?: string
     email_verified?: boolean
   }
-  if (!profile.email) return fail('Your Google account has no email')
+  if (!profile.email) return fail('Your Google account has no email', loginPath)
 
-  await signInWithGoogle(
-    {
-      googleId: profile.sub,
-      email: profile.email,
-      name: profile.name,
-      picture: profile.picture,
-    },
-    role,
-  )
+  let authUser
+  try {
+    authUser = await signInWithGoogle(
+      {
+        googleId: profile.sub,
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+      },
+      role,
+    )
+  } catch (err) {
+    if (err instanceof GoogleAuthRoleMismatchError) {
+      return fail(PERSONA_ERROR[err.expectedRole], PERSONA_LOGIN[err.expectedRole])
+    }
+    throw err
+  }
 
-  const res = NextResponse.redirect(
-    `${appUrl()}/auth/complete?redirect=${encodeURIComponent(redirectTo)}`,
-  )
+  const destination =
+    redirectTo === '/'
+      ? (ROLE_REDIRECT[authUser.user.role] ?? '/')
+      : redirectTo
+
+  const res = NextResponse.redirect(`${appUrl()}${destination}`)
   res.cookies.delete('g_oauth_nonce')
   return res
 }

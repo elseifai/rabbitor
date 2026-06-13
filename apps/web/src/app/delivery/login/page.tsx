@@ -8,7 +8,7 @@ import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { useAuth } from '@/context/AuthContext'
 
-export default function MerchantLoginPage() {
+export default function DeliveryLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
@@ -22,7 +22,7 @@ export default function MerchantLoginPage() {
   const sendOtp = async () => {
     setError(null)
     setLoading(true)
-    const res = await requestEmailOtpAction(email, 'VENDOR')
+    const res = await requestEmailOtpAction(email, 'RABBITOR')
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed to send code')
     setDevCode(res.devCode ?? null)
@@ -32,27 +32,27 @@ export default function MerchantLoginPage() {
   const verify = async () => {
     setError(null)
     setLoading(true)
-    const res = await verifyEmailOtpAction(email, otp, 'VENDOR')
+    const res = await verifyEmailOtpAction(email, otp, 'RABBITOR')
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Verification failed')
-    if (res.user.role !== 'VENDOR') {
-      setError('This email is not registered as a merchant.')
+    if (res.user.role !== 'RABBITOR') {
+      setError('This email is not registered as a delivery partner.')
       return
     }
     login(res.token, res.user)
-    router.push('/merchant')
+    router.push('/delivery')
     router.refresh()
   }
 
   return (
     <div className="mx-auto max-w-md px-4 py-12">
-      <h1 className="font-display text-2xl font-bold">Merchant login</h1>
+      <h1 className="font-display text-2xl font-bold">Delivery partner login</h1>
       <p className="mt-1 text-sm text-gray-500">Sign in with your email or Google</p>
 
       <GoogleSignInButton
-        role="VENDOR"
-        redirect="/merchant"
-        className="mt-8 border-gray-200 font-semibold hover:bg-gray-50"
+        role="RABBITOR"
+        redirect="/delivery"
+        className="mt-8"
       />
 
       <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
@@ -69,7 +69,7 @@ export default function MerchantLoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@shop.com"
+              placeholder="you@example.com"
               className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4"
             />
           </div>
@@ -77,7 +77,7 @@ export default function MerchantLoginPage() {
             type="button"
             onClick={() => void sendOtp()}
             disabled={loading || !email}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-rabbit-600 py-3 font-semibold text-white disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white disabled:opacity-40"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             Send code
@@ -86,7 +86,7 @@ export default function MerchantLoginPage() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            We sent a 6-digit code and a sign-in link to <strong>{email}</strong>.
+            We sent a 6-digit code to <strong>{email}</strong>.
           </p>
           {devCode && (
             <p className="rounded-lg bg-amber-50 p-3 text-sm">
@@ -104,10 +104,10 @@ export default function MerchantLoginPage() {
             type="button"
             onClick={() => void verify()}
             disabled={loading || otp.length !== 6}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-rabbit-600 py-3 font-semibold text-white disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 font-semibold text-white disabled:opacity-40"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Enter dashboard
+            Enter delivery dashboard
           </button>
           <button
             type="button"

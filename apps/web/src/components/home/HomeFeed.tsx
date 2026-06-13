@@ -20,7 +20,7 @@ import { useLocationStore, useCartStore } from '@/store'
 import { SAVED_LOCATIONS } from '@/lib/constants'
 import { HOME_CATEGORY_TABS } from '@/lib/categories'
 import { getNearbyShops, type ShopListItem } from '@/actions/shops'
-import { getSessionAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
 import { cn, formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
 
@@ -346,7 +346,7 @@ export function HomeFeed() {
   const [shops, setShops] = useState<ShopListItem[]>([])
   const [deals, setDeals] = useState<DealProduct[]>([])
   const [loadingShops, setLoadingShops] = useState(true)
-  const [loggedIn, setLoggedIn] = useState(false)
+  const { isLoggedIn: loggedIn } = useAuth()
   const [buyAgainTab, setBuyAgainTab] = useState('all')
 
   const dealsRef = useRef<HTMLDivElement>(null)
@@ -463,10 +463,6 @@ export function HomeFeed() {
       })
       .catch(() => {})
   }, [storeType])
-
-  useEffect(() => {
-    getSessionAction().then((s) => setLoggedIn(!!s))
-  }, [])
 
   const bannerProducts = useMemo(() => deals.slice(0, 4), [deals])
   const cartItems = useCartStore((s) => s.items)

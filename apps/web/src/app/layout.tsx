@@ -1,12 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Outfit } from 'next/font/google'
-import { CartProvider } from '@/context/CartContext'
-import { AuthProvider } from '@/context/AuthContext'
-import { SocketProvider } from '@/context/SocketContext'
-import { FcmInit } from '@/components/FcmInit'
-import { SplashGate } from '@/components/SplashGate'
-import { SandboxAuthGate } from '@/components/auth/SandboxAuthGate'
-import { AppStartupProvider } from '@/components/providers/AppStartupProvider'
+import { Providers } from '@/components/providers/Providers'
 import './globals.css'
 
 const dmSans = DM_Sans({
@@ -41,20 +35,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${dmSans.variable} ${outfit.variable}`}>
       <body className="min-h-screen font-sans">
-        <AuthProvider>
-          <SocketProvider>
-            <CartProvider>
-              <SplashGate>
-                <SandboxAuthGate>
-                  <AppStartupProvider>
-                    <FcmInit />
-                    {children}
-                  </AppStartupProvider>
-                </SandboxAuthGate>
-              </SplashGate>
-            </CartProvider>
-          </SocketProvider>
-        </AuthProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

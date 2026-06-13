@@ -70,6 +70,22 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
+const googleSignInSchema = z.object({
+  code: z.string().min(1),
+  redirectUri: z.string().min(1),
+  role: z.enum([UserRole.CUSTOMER, UserRole.RABBITOR]).optional(),
+});
+
+router.post("/google", async (req, res, next) => {
+  try {
+    const body = googleSignInSchema.parse(req.body);
+    const result = await authService.googleSignIn(body);
+    res.json({ success: true, data: result });
+  } catch (e) {
+    next(e);
+  }
+});
+
 const fcmTokenSchema = z.object({
   token: z.string().min(1),
 });

@@ -1,20 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Rabbit, ShoppingBag, MapPin, Menu, ClipboardList } from 'lucide-react'
 import { useLocationStore, useCartStore } from '@/store'
 import { cn } from '@/lib/utils'
-import { getSessionAction } from '@/actions/auth'
+import { useAuth } from '@/context/AuthContext'
 
 export function SiteHeader() {
   const formattedAddress = useLocationStore((s) => s.formattedAddress)
   const itemCount = useCartStore((s) => s.itemCount())
-  const [loggedIn, setLoggedIn] = useState(false)
-
-  useEffect(() => {
-    getSessionAction().then((session) => setLoggedIn(Boolean(session)))
-  }, [])
+  const { isLoggedIn: loggedIn } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-100 bg-white/90 backdrop-blur-md">

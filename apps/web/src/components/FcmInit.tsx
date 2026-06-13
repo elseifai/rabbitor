@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { getSessionAction } from '@/actions/auth'
+import { fetchCurrentAuth } from '@/lib/client-auth'
 import { requestNotificationPermission } from '@/lib/fcm-client'
 
 export function FcmInit() {
@@ -11,9 +11,9 @@ export function FcmInit() {
     if (requested.current) return
     requested.current = true
 
-    getSessionAction()
+    fetchCurrentAuth()
       .then((session) => {
-        if (session?.role === 'CUSTOMER') {
+        if (session?.user.role === 'CUSTOMER') {
           void requestNotificationPermission().catch(() => {})
         }
       })

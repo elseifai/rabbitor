@@ -16,6 +16,20 @@ const DEV_OTP = DEV_OTP_CODE
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
+const PRIVILEGED_ROLES: Role[] = ['VENDOR', 'RABBITOR', 'ADMIN']
+
+export class GoogleAuthRoleMismatchError extends Error {
+  readonly expectedRole: Role
+  readonly actualRole: string
+
+  constructor(expectedRole: Role, actualRole: string) {
+    super('ROLE_MISMATCH')
+    this.name = 'GoogleAuthRoleMismatchError'
+    this.expectedRole = expectedRole
+    this.actualRole = actualRole
+  }
+}
+
 export interface SessionPayload {
   userId: string
   phone?: string | null
@@ -352,6 +366,15 @@ export async function signInWithGoogle(
   })
 
   const displayName = profile.name?.trim() || email.split('@')[0]
+
+  if (
+    user &&
+    role &&
+    PRIVILEGED_ROLES.includes(role) &&
+    user.role !== role
+  ) {
+    throw new GoogleAuthRoleMismatchError(role, user.role)
+  }
 
   if (!user) {
     user = await prisma.user.create({

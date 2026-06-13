@@ -16,7 +16,8 @@ import {
   saveSession,
   type SessionUser,
 } from '@/lib/session'
-import { logoutAction, getCurrentUserAction } from '@/actions/auth'
+import { logoutAction } from '@/actions/auth'
+import { fetchCurrentAuth } from '@/lib/client-auth'
 
 type AuthContextValue = {
   user: SessionUser | null
@@ -38,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // DEV SANDBOX REFACTOR — hydrate from localStorage first, then httpOnly cookie fallback.
   useEffect(() => {
     const hydrateFromServer = () =>
-      getCurrentUserAction().then((current) => {
+      fetchCurrentAuth().then((current) => {
         if (current) {
           saveSession(current.token, current.user)
           setUser(current.user)

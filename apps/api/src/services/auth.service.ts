@@ -7,6 +7,11 @@ import { config } from "../config";
 import type { JwtPayload } from "../middleware/auth";
 import { conflict, unauthorized, badRequest } from "../lib/errors";
 import { sendSms } from "../lib/sms";
+import {
+  GoogleAuthRoleMismatchError,
+  isAllowedMobileRedirectUri,
+  isPrivilegedRole,
+} from "../lib/google-auth";
 
 const SALT_ROUNDS = 10;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -229,4 +234,152 @@ export async function saveFcmToken(userId: string, fcmToken: string) {
     data: { fcmToken },
   });
   return { saved: true };
+}
+
+type GoogleProfile = {
+  googleId: string;
+  email: string;
+  name?: string | null;
+  picture?: string | null;
+};
+
+async function upsertGoogleUser(profile: GoogleProfile, role?: UserRole) {
+  const email = profile.email.toLowerCase();
+  let user = await prisma.user.findFirst({
+    where: { OR: [{ googleId: profile.googleId }, { email }] },
+  });
+
+  if (user && role && isPrivilegedRole(role) && user.role !== role) {
+    throw new GoogleAuthRoleMismatchError(role, user.role);
+  }
+
+  const displayName = profile.name?.trim() || email.split("@")[0];
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        googleId: profile.googleId,
+        email,
+        emailVerified: new Date(),
+        name: displayName,
+        displayName,
+        avatarUrl: profile.picture ?? null,
+        role: role ?? "CUSTOMER",
+        ...(role === "RABBITOR" && { rabbitorProfile: { create: {} } }),
+      },
+    });
+  } else {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        googleId: user.googleId ?? profile.googleId,
+        emailVerified: user.emailVerified ?? new Date(),
+        name: profile.name?.trim() || user.name,
+        displayName: profile.name?.trim() || user.displayName,
+        avatarUrl: profile.picture ?? user.avatarUrl,
+      },
+    });
+  }
+
+  return user;
+}
+
+export async function googleSignIn(input: {
+  code: string;
+  redirectUri: string;
+  role?: "CUSTOMER" | "RABBITOR";
+}) {
+  if (!isAllowedMobileRedirectUri(input.redirectUri)) {
+    throw badRequest("Invalid redirect URI.");
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw badRequest("Google sign-in is not configured.");
+  }
+
+  const role = input.role ?? "CUSTOMER";
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code: input.code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: input.redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    throw unauthorized("Could not verify your Google account.");
+  }
+
+  const tokens = (await tokenRes.json()) as { access_token?: string };
+  if (!tokens.access_token) {
+    throw unauthorized("Could not verify your Google account.");
+  }
+
+  const profileRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  });
+
+  if (!profileRes.ok) {
+    throw unauthorized("Could not read your Google profile.");
+  }
+
+  const profile = (await profileRes.json()) as {
+    sub: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+  };
+
+  if (!profile.email) {
+    throw badRequest("Your Google account has no email.");
+  }
+
+  let user;
+  try {
+    user = await upsertGoogleUser(
+      {
+        googleId: profile.sub,
+        email: profile.email,
+        name: profile.name,
+        picture: profile.picture,
+      },
+      role,
+    );
+  } catch (err) {
+    if (err instanceof GoogleAuthRoleMismatchError) {
+      const messages: Record<UserRole, string> = {
+        CUSTOMER: "This app is for customers only.",
+        VENDOR: "This email is not registered as a merchant.",
+        RABBITOR: "This app is for Rabbit delivery partners only.",
+        ADMIN: "This email is not registered as admin.",
+      };
+      throw unauthorized(messages[err.expectedRole] ?? "Access denied for this role.");
+    }
+    throw err;
+  }
+
+  if (user.role !== role) {
+    const messages: Record<string, string> = {
+      CUSTOMER: "This app is for customers only.",
+      RABBITOR: "This app is for Rabbit delivery partners only.",
+    };
+    throw unauthorized(messages[role] ?? "Access denied for this role.");
+  }
+
+  return {
+    user: {
+      id: user.id,
+      phone: user.phone,
+      role: user.role,
+      displayName: user.displayName,
+    },
+    ...issueTokens(user),
+  };
 }

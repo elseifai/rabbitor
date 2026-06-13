@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import { getCurrentUserAction } from '@/actions/auth'
+import { fetchCurrentAuth } from '@/lib/client-auth'
 import { useAuth } from '@/context/AuthContext'
 
 const ROLE_REDIRECT: Record<string, string> = {
@@ -24,7 +24,7 @@ export default function AuthCompletePage() {
     const redirectTo = searchParams.get('redirect') ?? '/'
 
     void (async () => {
-      const current = await getCurrentUserAction()
+      const current = await fetchCurrentAuth()
       if (!current) {
         setError('Sign-in could not be completed. Please try again.')
         return

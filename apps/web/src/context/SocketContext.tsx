@@ -10,9 +10,17 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { socketClient, type SocketNetworkState } from '@/lib/socket-client'
+import type { SocketNetworkState } from '@/lib/socket-client'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
+
+type SocketClientManager = typeof import('@/lib/socket-client')['socketClient']
+
+const IDLE_NETWORK: SocketNetworkState = {
+  connected: false,
+  reconnecting: false,
+  latencyMs: null,
+}
 
 type SocketContextValue = SocketNetworkState & {
   unstable: boolean
@@ -54,21 +62,35 @@ function SocketNetworkToast({
 
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth()
-  const [network, setNetwork] = useState<SocketNetworkState>(() => socketClient.getState())
+  const clientRef = useRef<SocketClientManager | null>(null)
+  const [network, setNetwork] = useState<SocketNetworkState>(IDLE_NETWORK)
+  const [hasSubscriptions, setHasSubscriptions] = useState(false)
   const [toastVisible, setToastVisible] = useState(false)
   const hadConnectedRef = useRef(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    return socketClient.subscribeState(setNetwork)
+    let release: (() => void) | undefined
+
+    void import('@/lib/socket-client').then(({ socketClient }) => {
+      clientRef.current = socketClient
+      setNetwork(socketClient.getState())
+      setHasSubscriptions(socketClient.hasActiveSubscriptions())
+      release = socketClient.subscribeState((state) => {
+        setNetwork(state)
+        setHasSubscriptions(socketClient.hasActiveSubscriptions())
+      })
+    })
+
+    return () => release?.()
   }, [])
 
   useEffect(() => {
-    socketClient.updateToken(token)
+    clientRef.current?.updateToken(token)
   }, [token])
 
   useEffect(() => {
-    const purge = () => socketClient.disconnectAndPurge()
+    const purge = () => clientRef.current?.disconnectAndPurge()
     window.addEventListener('rabbit:logout', purge)
     return () => window.removeEventListener('rabbit:logout', purge)
   }, [])
@@ -77,7 +99,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     if (network.connected) hadConnectedRef.current = true
 
     const shouldShow =
-      socketClient.hasActiveSubscriptions() &&
+      hasSubscriptions &&
       hadConnectedRef.current &&
       (network.reconnecting || !network.connected)
 
@@ -94,12 +116,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     }
-  }, [network.connected, network.reconnecting, toastVisible])
+  }, [network.connected, network.reconnecting, toastVisible, hasSubscriptions])
 
   const dismissNetworkToast = useCallback(() => setToastVisible(false), [])
 
   const unstable =
-    socketClient.hasActiveSubscriptions() &&
+    hasSubscriptions &&
     hadConnectedRef.current &&
     (network.reconnecting || !network.connected)
 
