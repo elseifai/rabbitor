@@ -14,9 +14,16 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 export async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY
   const from = process.env.EMAIL_FROM ?? 'Rabbit <onboarding@resend.dev>'
+  const bypass =
+    process.env.ALLOW_DEV_OTP_BYPASS === 'true' ||
+    process.env.NODE_ENV !== 'production'
 
   if (!apiKey) {
     const msg = 'Email service is not configured (RESEND_API_KEY missing)'
+    if (bypass) {
+      console.warn(`[EMAIL] ${msg} — bypass enabled; OTP for ${to}: check server logs / dev UI`)
+      return
+    }
     if (process.env.NODE_ENV === 'production') {
       throw new Error(msg)
     }

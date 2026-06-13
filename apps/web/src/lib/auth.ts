@@ -230,7 +230,9 @@ export async function sendEmailOtp(
 ): Promise<{ success: boolean; devCode?: string; error?: string }> {
   const normalized = normalizeEmail(email)
   const isProd = process.env.NODE_ENV === 'production'
-  const code = isProd ? randomInt(100000, 999999).toString() : DEV_OTP
+  const bypass = isDevOtpBypassEnabled()
+  // GOOGLE MAPS & AUTH ACTIVATION — test-server email OTP without Resend
+  const code = bypass || !isProd ? DEV_OTP : randomInt(100000, 999999).toString()
   const token = randomBytes(32).toString('hex')
 
   await prisma.emailVerification.deleteMany({ where: { email: normalized, verified: false } })
@@ -257,7 +259,10 @@ export async function sendEmailOtp(
     return { success: false, error: message }
   }
 
-  return isProd ? { success: true } : { success: true, devCode: code }
+  if (bypass || !isProd) {
+    return { success: true, devCode: code }
+  }
+  return { success: true }
 }
 
 /** Verifies an email OTP, creating/returning the user and setting the session. */
