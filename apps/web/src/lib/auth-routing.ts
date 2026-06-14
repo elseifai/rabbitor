@@ -1,20 +1,12 @@
 import type { SessionUser } from '@/lib/session'
 import type { AuthRoleId } from '@/lib/auth-roles'
+import { parseAuthRoleParam } from '@/lib/auth-roles'
 
 export const AUTH_PUBLIC_PREFIXES = [
   '/auth',
   '/login',
   '/api',
   '/manifest.webmanifest',
-] as const
-
-export const AUTH_OPTIONAL_PREFIXES = [
-  '/',
-  '/shops',
-  '/shop',
-  '/product',
-  '/search',
-  '/cart',
 ] as const
 
 export const AUTH_PROTECTED_PREFIXES = [
@@ -46,6 +38,18 @@ export function loginPathForRole(roleId: AuthRoleId, redirect?: string): string 
   params.set('role', roleId)
   if (redirect) params.set('redirect', redirect)
   return `/auth?${params.toString()}`
+}
+
+export function roleHintFromPathname(pathname: string): AuthRoleId {
+  if (pathname.startsWith('/merchant')) return 'merchant'
+  if (
+    pathname.startsWith('/delivery') ||
+    pathname.startsWith('/rabbitor')
+  ) {
+    return 'rabbitor'
+  }
+  if (pathname.startsWith('/admin')) return 'admin'
+  return parseAuthRoleParam(null)
 }
 
 export function defaultDashboardForRole(role: SessionUser['role']): string {

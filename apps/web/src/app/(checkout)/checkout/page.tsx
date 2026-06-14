@@ -27,13 +27,13 @@ import { formatCustomerAddress } from '@/lib/customer-address'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
 import { loadRazorpayScript } from '@/lib/razorpay'
+import { resolveAppApiUrl } from '@/lib/app-api'
 import { authFetch } from '@/lib/session'
 import { getSession as getClientSession } from '@/lib/session'
 import { AdBanner } from '@/components/ads/AdBanner'
 
 const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
-const RAZORPAY_ENABLED = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
 
 function instructionLabel(key: string | null): string | undefined {
   if (key === 'gate') return 'Leave at Gate'
@@ -63,6 +63,8 @@ export default function DynamicCheckoutPage() {
   const [needsAuth, setNeedsAuth] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
+  const [paymentEnabled, setPaymentEnabled] = useState<boolean | null>(null)
+  const [runtimeRazorpayKey, setRuntimeRazorpayKey] = useState('')
 
   const itemTotal = total()
   const partnerTip = selectedTip ?? 0
@@ -85,6 +87,23 @@ export default function DynamicCheckoutPage() {
       router.push('/auth?redirect=/checkout')
     }
   }, [authHydrated, needsAuth, sandbox, router])
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch(resolveAppApiUrl('/api/payments/config'), { credentials: 'include' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled || !json.success) return
+        setPaymentEnabled(Boolean(json.data?.enabled))
+        setRuntimeRazorpayKey(String(json.data?.key ?? ''))
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!shopId || items.length === 0) return
@@ -166,7 +185,7 @@ export default function DynamicCheckoutPage() {
   const markPaymentFailed = async (intentId: string, reason: string) => {
     try {
       await authFetch(
-        '/api/payments/fail',
+        resolveAppApiUrl('/api/payments/fail'),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -201,7 +220,7 @@ export default function DynamicCheckoutPage() {
       setError('Please add and select a delivery address.')
       return
     }
-    if (!RAZORPAY_ENABLED) {
+    if (!paymentEnabled) {
       setError('Online payment is temporarily unavailable. Please try again later.')
       return
     }
@@ -214,7 +233,7 @@ export default function DynamicCheckoutPage() {
 
     try {
       const intentRes = await authFetch(
-        '/api/payments/intent',
+        resolveAppApiUrl('/api/payments/intent'),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -247,7 +266,11 @@ export default function DynamicCheckoutPage() {
       }
       activeIntentId = paymentData.intentId
 
-      const razorpayKey = paymentData.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
+      const razorpayKey =
+        paymentData.key ||
+        runtimeRazorpayKey ||
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+        ''
       if (!razorpayKey) {
         await markPaymentFailed(paymentData.intentId, 'Razorpay is not configured')
         setError('Online payment is temporarily unavailable. Please try again later.')
@@ -273,7 +296,7 @@ export default function DynamicCheckoutPage() {
           handler: async (razorpayResponse) => {
             try {
               const confirmRes = await authFetch(
-                '/api/payments/confirm',
+                resolveAppApiUrl('/api/payments/confirm'),
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -328,7 +351,7 @@ export default function DynamicCheckoutPage() {
       setError('Please add and select a delivery address.')
       return
     }
-    if (!RAZORPAY_ENABLED) {
+    if (!paymentEnabled) {
       setError('Online payment is temporarily unavailable. Please try again later.')
       return
     }
@@ -543,7 +566,7 @@ export default function DynamicCheckoutPage() {
               </p>
             </div>
           </div>
-          {!RAZORPAY_ENABLED && (
+          {paymentEnabled === false && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               Online payment is temporarily unavailable. Checkout is disabled until payment is
@@ -599,7 +622,12 @@ export default function DynamicCheckoutPage() {
         <button
           type="button"
           onClick={requestPlaceOrder}
-          disabled={isPlacing || items.length === 0 || !hasDeliveryAddress || !RAZORPAY_ENABLED}
+          disabled={
+            isPlacing ||
+            items.length === 0 ||
+            !hasDeliveryAddress ||
+            paymentEnabled !== true
+          }
           className="flex w-full items-center justify-between rounded-2xl bg-[#FF6B35] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-base font-black">₹{grandTotal}</span>

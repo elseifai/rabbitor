@@ -9,7 +9,9 @@ import { DEV_OTP_CODE, isDevOtpBypassEnabled } from './dev-auth'
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ?? 'rabbit-dev-secret-change-in-production',
 )
-const SESSION_COOKIE = 'rabbit_session'
+import { SESSION_COOKIE } from './auth-session'
+
+export { SESSION_COOKIE }
 const OTP_TTL_MS = 5 * 60 * 1000
 const EMAIL_TTL_MS = 10 * 60 * 1000
 const DEV_OTP = DEV_OTP_CODE

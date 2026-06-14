@@ -1,3 +1,5 @@
+import { resolveAppApiUrl } from '@/lib/app-api'
+
 export type SessionUser = {
   id: string
   name: string
@@ -82,7 +84,14 @@ export async function authFetch(
     headers.set('Authorization', auth.Authorization)
   }
 
-  const res = await fetch(input, { ...init, headers, credentials: 'include' })
+  const url =
+    typeof input === 'string'
+      ? resolveAppApiUrl(input)
+      : input instanceof URL
+        ? resolveAppApiUrl(input.pathname + input.search)
+        : input
+
+  const res = await fetch(url, { ...init, headers, credentials: 'include' })
 
   if (
     res.status === 401 &&

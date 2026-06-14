@@ -5,17 +5,15 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import {
-  isProtectedAuthPath,
   isPublicAuthPath,
   loginPathForRole,
+  roleHintFromPathname,
 } from '@/lib/auth-routing'
-import { parseAuthRoleParam } from '@/lib/auth-roles'
 import { RoleOnboardingGate } from '@/components/auth/RoleOnboardingGate'
 
 /**
- * Production + sandbox auth guard.
- * - Sandbox: redirect unauthenticated users to /auth (legacy dev flow).
- * - Production: protected routes require sign-in via the multi-role /auth page.
+ * Client-side auth guard — complements edge middleware.
+ * Production: every non-public route requires a session.
  */
 export function AppAuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -24,21 +22,11 @@ export function AppAuthGate({ children }: { children: React.ReactNode }) {
   const sandbox = isDevSandboxClient()
 
   const isPublic = isPublicAuthPath(pathname)
-  const isProtected = isProtectedAuthPath(pathname)
-  const shouldGate = sandbox ? !isPublic : isProtected
+  const shouldGate = sandbox ? !isPublic : !isPublic
 
   useEffect(() => {
     if (!hydrated || isLoggedIn || !shouldGate) return
-
-    const roleHint = pathname.startsWith('/merchant')
-      ? 'merchant'
-      : pathname.startsWith('/delivery') || pathname.startsWith('/rabbitor')
-        ? 'rabbitor'
-        : pathname.startsWith('/admin')
-          ? 'admin'
-          : parseAuthRoleParam(null)
-
-    router.replace(loginPathForRole(roleHint, pathname))
+    router.replace(loginPathForRole(roleHintFromPathname(pathname), pathname))
   }, [hydrated, isLoggedIn, shouldGate, pathname, router])
 
   if (shouldGate && (!hydrated || !isLoggedIn)) {
