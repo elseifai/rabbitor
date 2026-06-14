@@ -57,6 +57,22 @@ function toRazorpayAmountPaise(grandTotal: number): number {
   return amountPaise
 }
 
+export function formatPaymentError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  if (error && typeof error === 'object') {
+    const payload = error as {
+      error?: { description?: string; reason?: string; code?: string }
+      description?: string
+      message?: string
+    }
+    const nested = payload.error?.description ?? payload.error?.reason
+    if (nested) return nested
+    if (payload.description) return payload.description
+    if (payload.message) return payload.message
+  }
+  return 'Could not start payment. Please verify payment gateway configuration.'
+}
+
 export async function expireStalePaymentIntents(): Promise<number> {
   const result = await prisma.paymentIntent.updateMany({
     where: {
@@ -143,26 +159,39 @@ export async function createPaymentIntent(customerId: string, input: CheckoutInp
     },
   })
 
-  const razorpay = getRazorpayClient()
-  const razorpayOrder = await razorpay.orders.create({
-    amount: amountPaise,
-    currency: 'INR',
-    receipt: intent.id.slice(0, 36),
-    notes: {
-      paymentIntentId: intent.id,
-      customerId,
-      shopCount: String(checkout.shops.length),
-    },
-  })
+  let razorpayOrderId: string
+  try {
+    const razorpay = getRazorpayClient()
+    const razorpayOrder = await razorpay.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      receipt: intent.id.slice(0, 36),
+      notes: {
+        paymentIntentId: intent.id,
+        customerId,
+        shopCount: String(checkout.shops.length),
+      },
+    })
+    razorpayOrderId = razorpayOrder.id
+  } catch (error) {
+    await prisma.paymentIntent.update({
+      where: { id: intent.id },
+      data: {
+        status: 'FAILED',
+        failureReason: formatPaymentError(error).slice(0, 500),
+      },
+    })
+    throw new Error(formatPaymentError(error))
+  }
 
   const updated = await prisma.paymentIntent.update({
     where: { id: intent.id },
-    data: { razorpayOrderId: razorpayOrder.id },
+    data: { razorpayOrderId },
   })
 
   return {
     intentId: updated.id,
-    razorpayOrderId: razorpayOrder.id,
+    razorpayOrderId: updated.razorpayOrderId!,
     amount: amountPaise,
     currency: 'INR' as const,
     key: razorpayKeyId,

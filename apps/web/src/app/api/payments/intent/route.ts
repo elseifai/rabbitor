@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { createPaymentIntent, isRazorpayConfigured } from '@/lib/payment-intent-server'
+import { createPaymentIntent, formatPaymentError, isRazorpayConfigured } from '@/lib/payment-intent-server'
 import type { CheckoutInput } from '@/lib/checkout-order'
 
 export async function POST(request: Request) {
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, data: result })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not start payment'
+    const message = formatPaymentError(error)
     const status = message.includes('not configured') ? 503 : 400
     return NextResponse.json({ success: false, error: message }, { status })
   }

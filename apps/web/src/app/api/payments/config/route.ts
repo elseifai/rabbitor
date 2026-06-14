@@ -5,8 +5,8 @@ import { getPlatformSettings } from '@/lib/platform-settings'
 /** GET /api/payments/config — runtime payment + platform checkout thresholds. */
 export async function GET() {
   const key =
-    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ??
     process.env.RAZORPAY_KEY_ID ??
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ??
     ''
 
   const platform = await getPlatformSettings()
