@@ -67,6 +67,13 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentIntentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
 enum SubscriptionTier {
   FREE
   SILVER
@@ -142,6 +149,7 @@ model User {
   orders          Order[] @relation("CustomerOrders")
   deliveries      Order[] @relation("DeliveryPartnerOrders")
   addresses       CustomerAddress[]
+  paymentIntents  PaymentIntent[]
 
   @@index([role])
   @@index([phone])
@@ -250,9 +258,10 @@ model Shop {
   openingHours      Json?
   preferredDelivery DeliveryMethod @default(SELF)
 
-  products  Product[]
-  orders    Order[]
-  coupons   ShopCoupon[]
+  products       Product[]
+  orders         Order[]
+  paymentIntents PaymentIntent[]
+  coupons        ShopCoupon[]
   ads       Ad[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -344,10 +353,12 @@ model Order {
   deliveredAt         DateTime?
 
   paymentStatus      PaymentStatus @default(PENDING)
-  razorpayOrderId    String?
+  razorpayOrderId    String?       @unique
   razorpayPaymentId  String?
   appliedCouponCode  String?
   discountAmount     Float         @default(0)
+  paymentIntentId    String?       @unique
+  paymentIntent      PaymentIntent? @relation(fields: [paymentIntentId], references: [id])
 
   items         OrderItem[]
   statusHistory OrderStatusEvent[]
@@ -369,6 +380,36 @@ model OrderItem {
   price     Float
 
   @@index([orderId])
+}
+
+/// Pre-payment checkout snapshot — order is created only after Razorpay confirms payment.
+model PaymentIntent {
+  id                  String              @id @default(uuid())
+  customerId          String
+  customer            User                @relation(fields: [customerId], references: [id])
+  shopId              String
+  shop                Shop                @relation(fields: [shopId], references: [id])
+  status              PaymentIntentStatus @default(PENDING)
+  razorpayOrderId     String?             @unique
+  totalPrice          Float
+  deliveryFee         Float
+  riderTip            Float               @default(0)
+  discountAmount      Float               @default(0)
+  appliedCouponCode   String?
+  deliveryAddress     String
+  deliveryInstruction String?
+  destLatitude        Float?
+  destLongitude       Float?
+  /// [{ productId, quantity, price }]
+  itemsJson           Json
+  failureReason       String?
+  order               Order?
+  expiresAt           DateTime
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([customerId, status])
+  @@index([status, expiresAt])
 }
 
 model Coupon {

@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useRouter } from 'expo-router'
-import { api, getErrorMessage } from '@/lib/api'
 import { useCartStore } from '@/store/cart'
 
 export default function CheckoutScreen() {
-  const router = useRouter()
   const items = useCartStore((s) => s.items)
   const shopId = useCartStore((s) => s.shopId)
   const total = useCartStore((s) => s.total)
-  const clearCart = useCartStore((s) => s.clearCart)
   const [loading, setLoading] = useState(false)
 
   const deliveryFee = 35
@@ -20,38 +16,12 @@ export default function CheckoutScreen() {
     if (!shopId || items.length === 0) return
     setLoading(true)
     try {
-      const { data: orderRes } = await api.post<{
-        success: boolean
-        data: { id: string }
-      }>('/orders', {
-        storeId: shopId,
-        deliveryMethod: 'RABBITOR',
-        deliveryAddress: address,
-        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-      })
-
-      const orderId = orderRes.data.id
-
-      const { data: paymentRes } = await api.post<{
-        success: boolean
-        data: { razorpayOrderId: string; amount: number; key: string }
-      }>('/payments/create', { orderId })
-
       Alert.alert(
-        'Payment',
-        `Razorpay order ${paymentRes.data.razorpayOrderId} created for ₹${paymentRes.data.amount / 100}. Complete payment in production with react-native-razorpay.`,
-        [
-          {
-            text: 'Continue (dev)',
-            onPress: () => {
-              clearCart()
-              router.replace(`/track/${orderId}`)
-            },
-          },
-        ],
+        'Prepaid checkout required',
+        'Orders are placed only after successful online payment. Use the web checkout flow until mobile Razorpay is integrated.',
       )
-    } catch (err) {
-      Alert.alert('Checkout failed', getErrorMessage(err))
+    } catch {
+      Alert.alert('Checkout failed', 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -59,29 +29,37 @@ export default function CheckoutScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.section}>Deliver to</Text>
-      <Text style={styles.address}>{address}</Text>
+      <Text style={styles.title}>Checkout</Text>
+      <Text style={styles.subtitle}>Pay online to confirm your order</Text>
 
-      <View style={styles.summary}>
-        <View style={styles.row}>
-          <Text>Items</Text>
-          <Text>₹{total()}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text>Delivery</Text>
-          <Text>₹{deliveryFee}</Text>
-        </View>
-        <View style={[styles.row, styles.grand]}>
-          <Text style={styles.grandLabel}>To pay</Text>
-          <Text style={styles.grandValue}>₹{grandTotal}</Text>
-        </View>
+      <View style={styles.card}>
+        <Text style={styles.label}>Delivery address</Text>
+        <Text style={styles.value}>{address}</Text>
       </View>
 
-      <Pressable style={styles.button} disabled={loading} onPress={() => void placeOrder()}>
+      <View style={styles.card}>
+        <Text style={styles.label}>Items ({items.length})</Text>
+        {items.map((item) => (
+          <Text key={item.productId} style={styles.line}>
+            {item.name} x{item.quantity}
+          </Text>
+        ))}
+      </View>
+
+      <View style={styles.totalRow}>
+        <Text style={styles.totalLabel}>Total payable</Text>
+        <Text style={styles.totalValue}>₹{grandTotal}</Text>
+      </View>
+
+      <Pressable
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={() => void placeOrder()}
+        disabled={loading}
+      >
         {loading ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Pay ₹{grandTotal}</Text>
+          <Text style={styles.buttonText}>Pay & place order</Text>
         )}
       </Pressable>
     </View>
@@ -89,19 +67,34 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f9fafb', padding: 16 },
-  section: { fontSize: 12, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase' },
-  address: { marginTop: 4, fontSize: 15, color: '#111827', marginBottom: 20 },
-  summary: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  grand: { borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 12, marginTop: 4 },
-  grandLabel: { fontWeight: '800', fontSize: 16 },
-  grandValue: { fontWeight: '800', fontSize: 16, color: '#16a34a' },
-  button: {
-    backgroundColor: '#16a34a',
-    paddingVertical: 16,
+  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  title: { fontSize: 24, fontWeight: '800', color: '#1C1C1C' },
+  subtitle: { marginTop: 4, fontSize: 14, color: '#878787' },
+  card: {
+    marginTop: 16,
+    padding: 16,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  label: { fontSize: 12, fontWeight: '700', color: '#878787', textTransform: 'uppercase' },
+  value: { marginTop: 6, fontSize: 14, color: '#1C1C1C' },
+  line: { marginTop: 4, fontSize: 14, color: '#1C1C1C' },
+  totalRow: {
+    marginTop: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  buttonText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  totalLabel: { fontSize: 16, fontWeight: '700', color: '#1C1C1C' },
+  totalValue: { fontSize: 20, fontWeight: '800', color: '#FF6B35' },
+  button: {
+    marginTop: 24,
+    backgroundColor: '#FF6B35',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 })

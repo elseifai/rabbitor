@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Minus, Plus, Banknote, CreditCard } from 'lucide-react'
+import { Minus, Plus, CreditCard, AlertCircle } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
@@ -49,8 +49,8 @@ export default function CartPage() {
     }
   }
 
-  const goToCheckout = (payment: 'cod' | 'upi') => {
-    router.push(`/checkout?payment=${payment}`)
+  const goToCheckout = () => {
+    router.push('/checkout')
   }
 
   if (items.length === 0) {
@@ -182,22 +182,21 @@ export default function CartPage() {
             Total payable · <span className="text-gray-900">{formatCurrency(grandTotal)}</span>
           </p>
 
-          <button
-            type="button"
-            onClick={() => goToCheckout('cod')}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#0C831F] bg-white py-3.5 text-sm font-bold text-[#0C831F] transition active:scale-[0.98]"
-          >
-            <Banknote className="h-4 w-4" />
-            Cash on Delivery
-          </button>
+          {!RAZORPAY_ENABLED && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              Online payment is temporarily unavailable
+            </div>
+          )}
 
           <button
             type="button"
-            onClick={() => goToCheckout(RAZORPAY_ENABLED ? 'upi' : 'cod')}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF6B35] py-3.5 text-sm font-bold text-white shadow-lg transition active:scale-[0.98]"
+            onClick={goToCheckout}
+            disabled={!RAZORPAY_ENABLED}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF6B35] py-3.5 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <CreditCard className="h-4 w-4" />
-            {RAZORPAY_ENABLED ? 'Proceed to Payment' : 'Proceed to Checkout'}
+            Pay &amp; Checkout
           </button>
         </div>
       </div>

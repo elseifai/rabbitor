@@ -1,12 +1,13 @@
 import crypto from 'crypto'
 import Razorpay from 'razorpay'
 import { prisma } from './prisma'
+import { confirmPaymentIntent, isRazorpayConfigured } from './payment-intent-server'
 
 const razorpayKeyId = process.env.RAZORPAY_KEY_ID ?? process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ''
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET ?? ''
 
 function getRazorpayClient(): Razorpay {
-  if (!razorpayKeyId || !razorpayKeySecret) {
+  if (!isRazorpayConfigured()) {
     throw new Error('Razorpay is not configured')
   }
   return new Razorpay({
@@ -22,6 +23,7 @@ export async function assertCustomerOwnsOrder(orderId: string, customerId: strin
   return order
 }
 
+/** @deprecated Use payment-intent flow instead of order-first payments. */
 export async function createRazorpayOrder(orderId: string, amount: number) {
   const order = await prisma.order.findUnique({ where: { id: orderId } })
   if (!order) throw new Error('Order not found')
@@ -53,34 +55,31 @@ export async function createRazorpayOrder(orderId: string, amount: number) {
   }
 }
 
+/** @deprecated Use confirmPaymentIntent from payment-intent-server. */
 export async function verifyPayment(
   customerId: string,
   razorpayOrderId: string,
   razorpayPaymentId: string,
   razorpaySignature: string,
 ) {
-  if (!razorpayKeySecret) throw new Error('Razorpay is not configured')
+  const { order } = await confirmPaymentIntent({
+    customerId,
+    razorpayOrderId,
+    razorpayPaymentId,
+    razorpaySignature,
+  })
+  return order
+}
 
+export function verifyRazorpayPaymentSignatureLegacy(
+  razorpayOrderId: string,
+  razorpayPaymentId: string,
+  razorpaySignature: string,
+): boolean {
+  if (!razorpayKeySecret) return false
   const expectedSignature = crypto
     .createHmac('sha256', razorpayKeySecret)
     .update(`${razorpayOrderId}|${razorpayPaymentId}`)
     .digest('hex')
-
-  if (expectedSignature !== razorpaySignature) {
-    throw new Error('Invalid payment signature')
-  }
-
-  const order = await prisma.order.findFirst({
-    where: { razorpayOrderId, customerId },
-  })
-  if (!order) throw new Error('Order not found')
-  if (order.paymentStatus === 'PAID') return order
-
-  return prisma.order.update({
-    where: { id: order.id },
-    data: {
-      paymentStatus: 'PAID',
-      razorpayPaymentId,
-    },
-  })
+  return expectedSignature === razorpaySignature
 }

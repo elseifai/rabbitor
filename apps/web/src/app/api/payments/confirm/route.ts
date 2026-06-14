@@ -3,7 +3,6 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { confirmPaymentIntent } from '@/lib/payment-intent-server'
 
-/** Legacy route — delegates to prepaid confirm flow. */
 export async function POST(request: Request) {
   try {
     const session = await getSession()
@@ -14,7 +13,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({ where: { id: session.userId } })
     if (!user || user.role !== 'CUSTOMER') {
       return NextResponse.json(
-        { success: false, error: 'Only customers can verify payments' },
+        { success: false, error: 'Only customers can confirm payments' },
         { status: 403 },
       )
     }
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Payment verification failed'
+    const message = error instanceof Error ? error.message : 'Payment confirmation failed'
     return NextResponse.json({ success: false, error: message }, { status: 400 })
   }
 }

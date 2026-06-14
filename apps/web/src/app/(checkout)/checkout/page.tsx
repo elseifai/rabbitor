@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useCart } from '@/context/CartContext'
 import {
   ArrowLeft,
@@ -12,9 +12,8 @@ import {
   BellOff,
   Milestone,
   ShoppingBag,
-  Banknote,
-  Smartphone,
   Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { getDeliveryQuote } from '@/actions/shops'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
@@ -36,34 +35,6 @@ const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
 const RAZORPAY_ENABLED = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
 
-type PaymentMethod = 'cod' | 'upi' | 'card'
-
-const PAYMENT_OPTIONS: {
-  id: PaymentMethod
-  label: string
-  description: string
-  icon: typeof Banknote
-}[] = [
-  {
-    id: 'cod',
-    label: 'Cash on Delivery',
-    description: 'Pay when your order arrives',
-    icon: Banknote,
-  },
-  {
-    id: 'upi',
-    label: 'UPI',
-    description: 'Pay instantly via UPI',
-    icon: Smartphone,
-  },
-  {
-    id: 'card',
-    label: 'Card',
-    description: 'Debit or credit card',
-    icon: CreditCard,
-  },
-]
-
 function instructionLabel(key: string | null): string | undefined {
   if (key === 'gate') return 'Leave at Gate'
   if (key === 'bell') return "Don't Ring Bell"
@@ -72,7 +43,6 @@ function instructionLabel(key: string | null): string | undefined {
 
 export default function DynamicCheckoutPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { isLoggedIn, hydrated: authHydrated } = useAuth()
   const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
   const sandbox = isDevSandboxClient()
@@ -87,18 +57,12 @@ export default function DynamicCheckoutPage() {
   const [discountAmount, setDiscountAmount] = useState(0)
   const [couponError, setCouponError] = useState<string | null>(null)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [selectedAddress, setSelectedAddress] = useState<CustomerAddressRecord | null>(null)
   const [hasDeliveryAddress, setHasDeliveryAddress] = useState(false)
   const [showConfirmLocation, setShowConfirmLocation] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
   const [needsAuth, setNeedsAuth] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
-
-  const visiblePaymentOptions = PAYMENT_OPTIONS.filter(
-    (o) => o.id === 'cod' || RAZORPAY_ENABLED,
-  )
 
   const itemTotal = total()
   const partnerTip = selectedTip ?? 0
@@ -108,15 +72,6 @@ export default function DynamicCheckoutPage() {
   const lat = selectedAddress?.latitude ?? 19.1364
   const lng = selectedAddress?.longitude ?? 72.8296
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
-
-  useEffect(() => {
-    const paymentParam = searchParams.get('payment')
-    if (paymentParam === 'cod') {
-      setPaymentMethod('cod')
-    } else if (paymentParam === 'upi' || paymentParam === 'card') {
-      setPaymentMethod(paymentParam === 'card' ? 'card' : 'upi')
-    }
-  }, [searchParams])
 
   // DEV SANDBOX REFACTOR — trust localStorage + AuthContext; avoid re-prompting when session exists.
   useEffect(() => {
@@ -130,13 +85,6 @@ export default function DynamicCheckoutPage() {
       router.push('/auth?redirect=/checkout')
     }
   }, [authHydrated, needsAuth, sandbox, router])
-
-  useEffect(() => {
-    if (toast) {
-      const t = setTimeout(() => setToast(null), 4000)
-      return () => clearTimeout(t)
-    }
-  }, [toast])
 
   useEffect(() => {
     if (!shopId || items.length === 0) return
@@ -215,7 +163,23 @@ export default function DynamicCheckoutPage() {
     router.replace(`/track/${orderPlacedId}`)
   }, [orderPlacedId, router])
 
-  const orderPayload = {
+  const markPaymentFailed = async (intentId: string, reason: string) => {
+    try {
+      await authFetch(
+        '/api/payments/fail',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intentId, reason }),
+        },
+        { skipLogoutRedirect: true },
+      )
+    } catch {
+      // Best-effort cleanup — webhook may still mark the intent failed.
+    }
+  }
+
+  const checkoutPayload = {
     shopId,
     deliveryFee,
     riderTip: partnerTip,
@@ -224,7 +188,6 @@ export default function DynamicCheckoutPage() {
     destLatitude: lat,
     destLongitude: lng,
     couponCode: appliedCoupon ?? undefined,
-    paymentMethod,
     items: items.map((item) => ({
       productId: item.id,
       quantity: item.quantity,
@@ -238,20 +201,20 @@ export default function DynamicCheckoutPage() {
       setError('Please add and select a delivery address.')
       return
     }
+    if (!RAZORPAY_ENABLED) {
+      setError('Online payment is temporarily unavailable. Please try again later.')
+      return
+    }
+
     setIsPlacing(true)
     setError(null)
 
-    let method = paymentMethod
-    if ((method === 'upi' || method === 'card') && !RAZORPAY_ENABLED) {
-      setToast('Online payment not available. Defaulting to Cash on Delivery.')
-      method = 'cod'
-    }
-
-    const payload = { ...orderPayload, address: deliveryAddress.trim(), paymentMethod: method }
+    const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
+    let activeIntentId: string | null = null
 
     try {
-      const response = await authFetch(
-        '/api/orders',
+      const intentRes = await authFetch(
+        '/api/payments/intent',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -260,10 +223,10 @@ export default function DynamicCheckoutPage() {
         { skipLogoutRedirect: true },
       )
 
-      const json = await response.json()
-      if (!json.success) {
-        if (response.status === 401) {
-          setError(json.error ?? 'Please log in again.')
+      const intentJson = await intentRes.json()
+      if (!intentJson.success) {
+        if (intentRes.status === 401) {
+          setError(intentJson.error ?? 'Please log in again.')
           if (sandbox) {
             setNeedsAuth(true)
             return
@@ -271,102 +234,89 @@ export default function DynamicCheckoutPage() {
           router.push('/auth?redirect=/checkout')
           return
         }
-        setError(json.error ?? 'Order failed. Please try again.')
+        setError(intentJson.error ?? 'Could not start payment. Please try again.')
         return
       }
 
-      const orderId = json.orderId as string
-      const placedNum = json.orderNumber as string | undefined
+      const paymentData = intentJson.data as {
+        intentId: string
+        razorpayOrderId: string
+        amount: number
+        currency: string
+        key: string
+      }
+      activeIntentId = paymentData.intentId
 
-      if (method === 'cod') {
-        finishOrder(orderId, placedNum)
+      const razorpayKey = paymentData.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
+      if (!razorpayKey) {
+        await markPaymentFailed(paymentData.intentId, 'Razorpay is not configured')
+        setError('Online payment is temporarily unavailable. Please try again later.')
         return
       }
 
-      try {
-        const paymentRes = await authFetch(
-          '/api/payments/create',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId }),
-          },
-          { skipLogoutRedirect: true },
-        )
-        const paymentJson = await paymentRes.json()
+      const scriptLoaded = await loadRazorpayScript()
+      if (!scriptLoaded) {
+        await markPaymentFailed(paymentData.intentId, 'Could not load payment gateway')
+        setError('Could not load payment gateway. Please try again.')
+        return
+      }
 
-        if (!paymentJson.success) {
-          finishOrder(orderId, placedNum)
-          return
-        }
-
-        const paymentData = paymentJson.data as {
-          razorpayOrderId: string
-          amount: number
-          currency: string
-          key: string
-        }
-
-        const razorpayKey =
-          paymentData.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ''
-        if (!razorpayKey) {
-          finishOrder(orderId, placedNum)
-          return
-        }
-
-        const scriptLoaded = await loadRazorpayScript()
-        if (!scriptLoaded) {
-          finishOrder(orderId, placedNum)
-          return
-        }
-
-        await new Promise<void>((resolve, reject) => {
-          const rzp = new window.Razorpay({
-            key: razorpayKey,
-            amount: paymentData.amount,
-            currency: paymentData.currency,
-            name: 'Rabbit',
-            description: 'Order payment',
-            order_id: paymentData.razorpayOrderId,
-            theme: { color: '#FF6B35' },
-            handler: async (razorpayResponse) => {
-              try {
-                const verifyRes = await authFetch(
-                  '/api/payments/verify',
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      razorpayOrderId: razorpayResponse.razorpay_order_id,
-                      razorpayPaymentId: razorpayResponse.razorpay_payment_id,
-                      razorpaySignature: razorpayResponse.razorpay_signature,
-                    }),
-                  },
-                  { skipLogoutRedirect: true },
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: razorpayKey,
+          amount: paymentData.amount,
+          currency: paymentData.currency,
+          name: 'Rabbit',
+          description: 'Order payment',
+          order_id: paymentData.razorpayOrderId,
+          theme: { color: '#FF6B35' },
+          handler: async (razorpayResponse) => {
+            try {
+              const confirmRes = await authFetch(
+                '/api/payments/confirm',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    razorpayOrderId: razorpayResponse.razorpay_order_id,
+                    razorpayPaymentId: razorpayResponse.razorpay_payment_id,
+                    razorpaySignature: razorpayResponse.razorpay_signature,
+                  }),
+                },
+                { skipLogoutRedirect: true },
+              )
+              const confirmJson = await confirmRes.json()
+              if (!confirmJson.success) {
+                reject(
+                  new Error(
+                    confirmJson.error?.message ?? confirmJson.error ?? 'Payment confirmation failed',
+                  ),
                 )
-                const verifyJson = await verifyRes.json()
-                if (!verifyJson.success) {
-                  reject(new Error(verifyJson.error?.message ?? verifyJson.error ?? 'Payment verification failed'))
-                  return
-                }
-                finishOrder(orderId, placedNum)
-                resolve()
-              } catch (err) {
-                reject(err)
+                return
               }
-            },
-            modal: {
-              ondismiss: () => reject(new Error('Payment cancelled')),
-            },
-          })
-          rzp.open()
+              const confirmedOrderId = confirmJson.data.orderId as string
+              const confirmedOrderNumber = confirmJson.data.orderNumber as string | undefined
+              finishOrder(confirmedOrderId, confirmedOrderNumber)
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
+          },
+          modal: {
+            ondismiss: () => reject(new Error('Payment cancelled')),
+          },
         })
-      } catch {
-        finishOrder(orderId, placedNum)
-      }
+        rzp.on('payment.failed', () => {
+          reject(new Error('Payment failed. Please try again.'))
+        })
+        rzp.open()
+      })
     } catch (err) {
-      console.error('Order processing failed:', err)
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+      const message = err instanceof Error ? err.message : 'Payment failed. Please try again.'
+      if (activeIntentId) {
+        await markPaymentFailed(activeIntentId, message)
+      }
+      setError(message)
     } finally {
       setIsPlacing(false)
       setShowConfirmLocation(false)
@@ -378,12 +328,15 @@ export default function DynamicCheckoutPage() {
       setError('Please add and select a delivery address.')
       return
     }
+    if (!RAZORPAY_ENABLED) {
+      setError('Online payment is temporarily unavailable. Please try again later.')
+      return
+    }
     setError(null)
     setShowConfirmLocation(true)
   }
 
-  const paymentConfirmLabel =
-    paymentMethod === 'cod' ? 'Pay on Delivery' : paymentMethod === 'upi' ? 'Pay via UPI' : 'Pay by Card'
+  const paymentConfirmLabel = 'Pay now'
 
   if (!hydrated || !authHydrated) {
     return (
@@ -576,41 +529,25 @@ export default function DynamicCheckoutPage() {
 
         <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
-            Payment Method
+            Payment
           </h3>
-          <div className="space-y-2">
-            {visiblePaymentOptions.map((option) => {
-              const Icon = option.icon
-              const selected = paymentMethod === option.id
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setPaymentMethod(option.id)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-all ${
-                    selected
-                      ? 'border-[#FF6B35] bg-[#FFF8F5]'
-                      : 'border-slate-100 bg-slate-50/50'
-                  }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                      selected ? 'bg-[#FF6B35] text-white' : 'bg-white text-slate-500'
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black text-slate-900">{option.label}</p>
-                    <p className="text-[11px] font-semibold text-slate-500">{option.description}</p>
-                  </div>
-                </button>
-              )
-            })}
+          <div className="flex items-start gap-3 rounded-2xl border border-[#FF6B35]/20 bg-[#FFF8F5] p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FF6B35] text-white">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">Pay online to confirm your order</p>
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                UPI, cards, netbanking and wallets via Razorpay. Your order is placed only after
+                successful payment.
+              </p>
+            </div>
           </div>
-          {paymentMethod === 'cod' && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-              Pay on Delivery — you&apos;ll pay ₹{grandTotal} in cash when your order arrives.
+          {!RAZORPAY_ENABLED && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              Online payment is temporarily unavailable. Checkout is disabled until payment is
+              restored.
             </div>
           )}
         </div>
@@ -655,11 +592,6 @@ export default function DynamicCheckoutPage() {
         {error && (
           <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-sm text-red-600">{error}</p>
         )}
-        {toast && (
-          <p className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-xl rounded-xl bg-[#0C831F] px-4 py-3 text-center text-sm font-bold text-white shadow-lg">
-            {toast}
-          </p>
-        )}
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-xl border-t bg-white p-4 shadow-md">
@@ -667,7 +599,7 @@ export default function DynamicCheckoutPage() {
         <button
           type="button"
           onClick={requestPlaceOrder}
-          disabled={isPlacing || items.length === 0 || !hasDeliveryAddress}
+          disabled={isPlacing || items.length === 0 || !hasDeliveryAddress || !RAZORPAY_ENABLED}
           className="flex w-full items-center justify-between rounded-2xl bg-[#FF6B35] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-base font-black">₹{grandTotal}</span>
@@ -677,13 +609,9 @@ export default function DynamicCheckoutPage() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Processing...
               </>
-            ) : paymentMethod === 'cod' ? (
-              <>
-                Place Order · Pay on Delivery <Banknote className="h-4 w-4" />
-              </>
             ) : (
               <>
-                Pay Now <CreditCard className="h-4 w-4" />
+                Pay &amp; Place Order <CreditCard className="h-4 w-4" />
               </>
             )}
           </span>

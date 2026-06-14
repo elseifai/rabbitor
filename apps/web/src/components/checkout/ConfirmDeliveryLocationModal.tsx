@@ -155,7 +155,7 @@ export function ConfirmDeliveryLocationModal({
               disabled={isPlacing}
               className="w-full rounded-2xl bg-[#FF6B35] py-4 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-[#FF6B35]/25 disabled:opacity-70"
             >
-              {isPlacing ? 'Placing order…' : `Yes, deliver here · ${paymentLabel}`}
+              {isPlacing ? 'Processing payment…' : `Yes, deliver here · ${paymentLabel}`}
             </button>
             <button
               type="button"
