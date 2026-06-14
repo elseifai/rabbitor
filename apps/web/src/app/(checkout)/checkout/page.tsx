@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCart } from '@/context/CartContext'
 import {
   ArrowLeft,
-  MapPin,
   CreditCard,
   ShieldCheck,
   Smile,
@@ -17,14 +16,17 @@ import {
   Smartphone,
   Loader2,
 } from 'lucide-react'
-import { useLocationStore } from '@/store'
 import { getDeliveryQuote } from '@/actions/shops'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { OrderSuccessScreen } from '@/components/checkout/OrderSuccessScreen'
+import {
+  CheckoutAddressSection,
+  type CustomerAddressRecord,
+} from '@/components/checkout/CheckoutAddressSection'
+import { ConfirmDeliveryLocationModal } from '@/components/checkout/ConfirmDeliveryLocationModal'
+import { formatCustomerAddress } from '@/lib/customer-address'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
-import { detectAndSaveLocation } from '@/lib/geolocation-service'
-import { SAVED_LOCATIONS } from '@/lib/constants'
 import { loadRazorpayScript } from '@/lib/razorpay'
 import { authFetch } from '@/lib/session'
 import { getSession as getClientSession } from '@/lib/session'
@@ -74,8 +76,6 @@ export default function DynamicCheckoutPage() {
   const { isLoggedIn, hydrated: authHydrated } = useAuth()
   const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
   const sandbox = isDevSandboxClient()
-  const coordinates = useLocationStore((s) => s.coordinates)
-  const formattedAddress = useLocationStore((s) => s.formattedAddress)
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
   const [selectedInstruction, setSelectedInstruction] = useState<string | null>(null)
@@ -88,10 +88,9 @@ export default function DynamicCheckoutPage() {
   const [couponError, setCouponError] = useState<string | null>(null)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
-  const [deliveryAddress, setDeliveryAddress] = useState('')
-  const [destLat, setDestLat] = useState<number | null>(null)
-  const [destLng, setDestLng] = useState<number | null>(null)
-  const [detectingAddress, setDetectingAddress] = useState(false)
+  const [selectedAddress, setSelectedAddress] = useState<CustomerAddressRecord | null>(null)
+  const [hasDeliveryAddress, setHasDeliveryAddress] = useState(false)
+  const [showConfirmLocation, setShowConfirmLocation] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [needsAuth, setNeedsAuth] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
@@ -105,30 +104,9 @@ export default function DynamicCheckoutPage() {
   const partnerTip = selectedTip ?? 0
   const grandTotal = Math.max(0, itemTotal - discountAmount) + deliveryFee + partnerTip
 
-  const addressLine = deliveryAddress
-  const lat = destLat ?? coordinates?.lat ?? SAVED_LOCATIONS[0].latitude
-  const lng = destLng ?? coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
-
-  const detectDeliveryLocation = () => {
-    setDetectingAddress(true)
-    void detectAndSaveLocation({ syncDb: true }).then((res) => {
-      if (res.ok) {
-        setDestLat(res.lat)
-        setDestLng(res.lng)
-        setDeliveryAddress(res.address)
-      }
-      setDetectingAddress(false)
-    })
-  }
-
-  // Pre-fill address from saved location
-  useEffect(() => {
-    if (!deliveryAddress && formattedAddress) {
-      setDeliveryAddress(formattedAddress)
-      if (coordinates?.lat) setDestLat(coordinates.lat)
-      if (coordinates?.lng) setDestLng(coordinates.lng)
-    }
-  }, [coordinates, formattedAddress, deliveryAddress])
+  const deliveryAddress = selectedAddress ? formatCustomerAddress(selectedAddress) : ''
+  const lat = selectedAddress?.latitude ?? 19.1364
+  const lng = selectedAddress?.longitude ?? 72.8296
   const shopBackHref = shopId ? `/shops/${shopId}` : '/'
 
   useEffect(() => {
@@ -241,7 +219,7 @@ export default function DynamicCheckoutPage() {
     shopId,
     deliveryFee,
     riderTip: partnerTip,
-    address: addressLine,
+    address: deliveryAddress,
     instruction: instructionLabel(selectedInstruction),
     destLatitude: lat,
     destLongitude: lng,
@@ -256,8 +234,8 @@ export default function DynamicCheckoutPage() {
 
   const handlePlaceOrder = async () => {
     if (items.length === 0 || !shopId) return
-    if (!deliveryAddress.trim()) {
-      setError('Please enter a delivery address.')
+    if (!selectedAddress || !deliveryAddress.trim()) {
+      setError('Please add and select a delivery address.')
       return
     }
     setIsPlacing(true)
@@ -391,8 +369,21 @@ export default function DynamicCheckoutPage() {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setIsPlacing(false)
+      setShowConfirmLocation(false)
     }
   }
+
+  const requestPlaceOrder = () => {
+    if (!selectedAddress || !deliveryAddress.trim()) {
+      setError('Please add and select a delivery address.')
+      return
+    }
+    setError(null)
+    setShowConfirmLocation(true)
+  }
+
+  const paymentConfirmLabel =
+    paymentMethod === 'cod' ? 'Pay on Delivery' : paymentMethod === 'upi' ? 'Pay via UPI' : 'Pay by Card'
 
   if (!hydrated || !authHydrated) {
     return (
@@ -462,38 +453,11 @@ export default function DynamicCheckoutPage() {
       </div>
 
       <div className="space-y-5 p-5">
-        <div className="flex items-start gap-4 rounded-[2rem] border bg-white p-5 shadow-xs">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[#FF6B35]/10 bg-[#FFF8F5] text-[#FF6B35]">
-            <MapPin className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-900">Delivery Address</h3>
-              <button
-                type="button"
-                onClick={detectDeliveryLocation}
-                disabled={detectingAddress}
-                className="flex items-center gap-1 rounded-lg bg-orange-50 px-2 py-1 text-xs font-bold text-[#FF6B35]"
-              >
-                {detectingAddress
-                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Detecting...</>
-                  : <><MapPin className="h-3 w-3" /> Detect Live Location</>
-                }
-              </button>
-            </div>
-            <textarea
-              value={deliveryAddress}
-              onChange={(e) => setDeliveryAddress(e.target.value)}
-              rows={2}
-              required
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-[#FF6B35] focus:outline-none"
-              placeholder="House no, Street, Area, City"
-            />
-            {destLat && (
-              <p className="text-[10px] text-green-600">✓ GPS coordinates captured for accurate delivery</p>
-            )}
-          </div>
-        </div>
+        <CheckoutAddressSection
+          selectedId={selectedAddress?.id ?? null}
+          onSelect={setSelectedAddress}
+          onAddressResolved={setHasDeliveryAddress}
+        />
 
         <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
@@ -702,8 +666,8 @@ export default function DynamicCheckoutPage() {
         <AdBanner placement="CHECKOUT_PAGE" className="mb-3 h-20 w-full" />
         <button
           type="button"
-          onClick={() => void handlePlaceOrder()}
-          disabled={isPlacing || items.length === 0 || !deliveryAddress.trim()}
+          onClick={requestPlaceOrder}
+          disabled={isPlacing || items.length === 0 || !hasDeliveryAddress}
           className="flex w-full items-center justify-between rounded-2xl bg-[#FF6B35] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl disabled:bg-slate-300 disabled:shadow-none"
         >
           <span className="text-base font-black">₹{grandTotal}</span>
@@ -725,6 +689,17 @@ export default function DynamicCheckoutPage() {
           </span>
         </button>
       </div>
+
+      <ConfirmDeliveryLocationModal
+        open={showConfirmLocation}
+        address={selectedAddress}
+        grandTotal={grandTotal}
+        paymentLabel={paymentConfirmLabel}
+        isPlacing={isPlacing}
+        onConfirm={() => void handlePlaceOrder()}
+        onChangeAddress={() => setShowConfirmLocation(false)}
+        onClose={() => !isPlacing && setShowConfirmLocation(false)}
+      />
     </div>
   )
 }

@@ -109,6 +109,12 @@ enum AdPlacement {
   CHECKOUT_PAGE
 }
 
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
 model User {
   id            String    @id @default(uuid())
   name          String
@@ -135,9 +141,33 @@ model User {
   shops           Shop[]
   orders          Order[] @relation("CustomerOrders")
   deliveries      Order[] @relation("DeliveryPartnerOrders")
+  addresses       CustomerAddress[]
 
   @@index([role])
   @@index([phone])
+}
+
+/// Saved delivery addresses — Swiggy/Zomato-style multi-address book
+model CustomerAddress {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       AddressLabel @default(HOME)
+  customLabel String?
+  line1       String
+  line2       String?
+  landmark    String?
+  area        String?
+  city        String       @default("Mumbai")
+  pincode     String?
+  latitude    Float
+  longitude   Float
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([userId, isDefault])
 }
 
 /// Vendor business data — KYC fields never exposed on customer UI

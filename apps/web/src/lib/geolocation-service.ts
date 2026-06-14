@@ -27,6 +27,47 @@ export async function reverseGeocodeLabel(lat: number, lng: number): Promise<str
   }
 }
 
+export type ReverseGeocodeDetails = {
+  formatted: string
+  area: string
+  city: string
+  pincode: string | null
+  line2: string | null
+}
+
+export async function reverseGeocodeDetails(lat: number, lng: number): Promise<ReverseGeocodeDetails> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en' } },
+    )
+    const data = await res.json()
+    const addr = data.address ?? {}
+    const area =
+      addr.suburb ||
+      addr.neighbourhood ||
+      addr.city_district ||
+      addr.residential ||
+      ''
+    const city = addr.city || addr.town || addr.state_district || addr.state || 'Mumbai'
+    const pincode = addr.postcode ?? null
+    const road = addr.road || addr.pedestrian || null
+    const formatted =
+      data.display_name?.split(',').slice(0, 4).join(', ') ||
+      [area, city].filter(Boolean).join(', ') ||
+      `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    return { formatted, area: area || city, city, pincode, line2: road }
+  } catch {
+    return {
+      formatted: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      area: '',
+      city: 'Mumbai',
+      pincode: null,
+      line2: null,
+    }
+  }
+}
+
 export function detectLivePosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
