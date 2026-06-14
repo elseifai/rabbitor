@@ -6,6 +6,7 @@ import {
   isPublicAuthPath,
   loginPathForRole,
   roleHintFromPathname,
+  roleMatchesPath,
 } from '@/lib/auth-routing'
 
 function isMiddlewareBypassed(): boolean {
@@ -49,6 +50,10 @@ export async function middleware(request: NextRequest) {
     const roleHint = roleHintFromPathname(pathname)
     const loginUrl = new URL(loginPathForRole(roleHint, pathname), request.url)
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (!roleMatchesPath(session.role, pathname)) {
+    return NextResponse.redirect(new URL(defaultDashboardForRole(session.role), request.url))
   }
 
   return NextResponse.next()

@@ -52,6 +52,20 @@ export function roleHintFromPathname(pathname: string): AuthRoleId {
   return parseAuthRoleParam(null)
 }
 
+/** Required DB role for privileged route prefixes — null means any authenticated user. */
+export function requiredRoleForPath(pathname: string): SessionUser['role'] | null {
+  if (pathname.startsWith('/merchant')) return 'VENDOR'
+  if (pathname.startsWith('/admin')) return 'ADMIN'
+  if (pathname.startsWith('/delivery') || pathname.startsWith('/rabbitor')) return 'RABBITOR'
+  return null
+}
+
+export function roleMatchesPath(userRole: string, pathname: string): boolean {
+  const required = requiredRoleForPath(pathname)
+  if (!required) return true
+  return userRole === required
+}
+
 export function defaultDashboardForRole(role: SessionUser['role']): string {
   switch (role) {
     case 'VENDOR':

@@ -6,79 +6,147 @@ import {
   productUnavailableMessage,
 } from '@/lib/resolve-cart-product'
 import { broadcastNewMerchantOrder } from '@/lib/order-events'
+import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
+import { getPlatformSettings } from '@/lib/platform-settings'
 
 export type CheckoutLineItem = { productId: string; quantity: number; price: number }
 
-export type CheckoutInput = {
+export type ShopCheckoutInput = {
   shopId: string
-  deliveryFee?: number
-  riderTip?: number
+  items: CheckoutLineItem[]
+}
+
+/** Supports legacy single-shop and multi-shop grouped payloads. */
+export type CheckoutInput = {
   address: string
   instruction?: string
-  items: { productId: string; quantity: number; price: number }[]
   destLatitude?: number
   destLongitude?: number
+  riderTip?: number
   couponCode?: string
+  deliveryFee?: number
+  /** Legacy single-shop */
+  shopId?: string
+  items?: CheckoutLineItem[]
+  /** Multi-store grouped checkout */
+  shops?: ShopCheckoutInput[]
+}
+
+export type ShopFulfillment = {
+  shopId: string
+  shopName: string
+  lineItems: CheckoutLineItem[]
+  orderItemTotal: number
+  deliveryFee: number
+  distanceKm: number
 }
 
 export type ValidatedCheckout = {
-  shopId: string
-  deliveryFee: number
+  shops: ShopFulfillment[]
   riderTip: number
   address: string
   instruction?: string
   destLatitude: number
   destLongitude: number
-  lineItems: CheckoutLineItem[]
   orderItemTotal: number
   discountAmount: number
   appliedCouponCode?: string
   couponId?: string
+  multiShopRoutingFee: number
+  totalDeliveryFee: number
   grandTotal: number
+  isMultiShop: boolean
+  primaryShopId: string
+}
+
+function normalizeShopInputs(input: CheckoutInput): ShopCheckoutInput[] {
+  if (input.shops?.length) {
+    return input.shops.filter((s) => s.shopId && s.items?.length)
+  }
+  if (input.shopId && input.items?.length) {
+    return [{ shopId: input.shopId, items: input.items }]
+  }
+  return []
+}
+
+export function parseValidatedCheckoutFromIntent(payload: unknown): ValidatedCheckout {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payment intent checkout snapshot')
+  }
+  return payload as ValidatedCheckout
 }
 
 export async function validateCheckoutInput(input: CheckoutInput): Promise<ValidatedCheckout> {
-  const { shopId, items, address } = input
+  const { address } = input
+  const shopInputs = normalizeShopInputs(input)
 
-  if (!shopId || !items?.length || !address?.trim()) {
-    throw new Error('shopId, items, and address are required')
+  if (!address?.trim() || shopInputs.length === 0) {
+    throw new Error('Address and at least one shop with items are required')
   }
 
-  const shop = await resolveShop(shopId)
-  if (!shop) throw new Error('Shop not found')
-  if (!shop.isActive) throw new Error('Shop is currently closed')
+  const platform = await getPlatformSettings()
+  const destLatitude = input.destLatitude ?? 19.076
+  const destLongitude = input.destLongitude ?? 72.8777
+  const riderTip = Math.max(0, input.riderTip ?? 0)
 
-  let verifiedTotal = 0
-  const lineItems: CheckoutLineItem[] = []
+  const shops: ShopFulfillment[] = []
+  let orderItemTotal = 0
 
-  for (const item of items) {
-    const product = await resolveProductForShop(shop.id, item.productId, shop.products)
+  for (const shopInput of shopInputs) {
+    const shop = await resolveShop(shopInput.shopId)
+    if (!shop) throw new Error('Shop not found')
+    if (!shop.isActive) throw new Error(`${shop.name} is currently closed`)
 
-    if (!product || !product.isAvailable) {
-      throw new Error(productUnavailableMessage(item.productId, product?.name))
+    let shopSubtotal = 0
+    const lineItems: CheckoutLineItem[] = []
+
+    for (const item of shopInput.items) {
+      const product = await resolveProductForShop(shop.id, item.productId, shop.products)
+      if (!product || !product.isAvailable) {
+        throw new Error(productUnavailableMessage(item.productId, product?.name))
+      }
+      if (product.stock < item.quantity) {
+        throw new Error(`Insufficient stock for ${product.name}`)
+      }
+      shopSubtotal += product.price * item.quantity
+      lineItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        price: product.price,
+      })
     }
 
-    if (product.stock < item.quantity) {
-      throw new Error(`Insufficient stock for ${product.name}`)
+    if (shopSubtotal < shop.minOrderValue) {
+      throw new Error(`Minimum order for ${shop.name} is ₹${shop.minOrderValue}`)
     }
 
-    verifiedTotal += product.price * item.quantity
-    lineItems.push({
-      productId: product.id,
-      quantity: item.quantity,
-      price: product.price,
+    const dist = distanceKm(destLatitude, destLongitude, shop.latitude, shop.longitude)
+    const deliveryFee = calculateDeliveryFee(
+      shop.baseDeliveryFee,
+      dist,
+      shopSubtotal,
+      platform.freeDeliveryThreshold,
+    )
+
+    shops.push({
+      shopId: shop.id,
+      shopName: shop.name,
+      lineItems,
+      orderItemTotal: shopSubtotal,
+      deliveryFee,
+      distanceKm: Math.round(dist * 10) / 10,
     })
+    orderItemTotal += shopSubtotal
   }
 
-  if (verifiedTotal < shop.minOrderValue) {
-    throw new Error(`Minimum order is ₹${shop.minOrderValue}`)
+  if (orderItemTotal < platform.globalMinCartValue) {
+    throw new Error(
+      `Minimum cart value of ₹${platform.globalMinCartValue} required to checkout`,
+    )
   }
 
-  const resolvedDeliveryFee = input.deliveryFee ?? 35
-  const resolvedTip = Math.max(0, input.riderTip ?? 0)
   let appliedCouponCode: string | undefined
   let discountAmount = 0
-  let orderItemTotal = verifiedTotal
   let couponId: string | undefined
 
   if (input.couponCode) {
@@ -95,37 +163,47 @@ export async function validateCheckoutInput(input: CheckoutInput): Promise<Valid
     if (coupon.usedCount >= coupon.maxUses) {
       throw new Error('This coupon has reached its usage limit')
     }
-    if (verifiedTotal < coupon.minOrderValue) {
+    if (orderItemTotal < coupon.minOrderValue) {
       throw new Error(`Minimum order value of ₹${coupon.minOrderValue} required for this coupon`)
     }
 
     if (coupon.discountType === 'FLAT') {
-      discountAmount = Math.min(coupon.discountValue, verifiedTotal)
+      discountAmount = Math.min(coupon.discountValue, orderItemTotal)
     } else {
-      discountAmount = Math.min(verifiedTotal, (verifiedTotal * coupon.discountValue) / 100)
+      discountAmount = Math.min(orderItemTotal, (orderItemTotal * coupon.discountValue) / 100)
     }
 
     appliedCouponCode = coupon.code
-    orderItemTotal = Math.max(0, verifiedTotal - discountAmount)
     couponId = coupon.id
   }
 
-  const grandTotal = orderItemTotal + resolvedDeliveryFee + resolvedTip
+  const perShopDeliveryTotal = shops.reduce((sum, s) => sum + s.deliveryFee, 0)
+  const multiShopRoutingFee =
+    shops.length > 1 ? (shops.length - 1) * platform.multiShopRoutingFeePerLeg : 0
+  const totalDeliveryFee = perShopDeliveryTotal + multiShopRoutingFee
+  const discountedItemsTotal = Math.max(0, orderItemTotal - discountAmount)
+  const grandTotal = discountedItemsTotal + totalDeliveryFee + riderTip
+
+  if (!Number.isFinite(grandTotal) || grandTotal <= 0) {
+    throw new Error('Order total must be greater than zero')
+  }
 
   return {
-    shopId: shop.id,
-    deliveryFee: resolvedDeliveryFee,
-    riderTip: resolvedTip,
+    shops,
+    riderTip,
     address: address.trim(),
     instruction: input.instruction?.trim() || undefined,
-    destLatitude: input.destLatitude ?? 19.076,
-    destLongitude: input.destLongitude ?? 72.8777,
-    lineItems,
-    orderItemTotal,
+    destLatitude,
+    destLongitude,
+    orderItemTotal: discountedItemsTotal,
     discountAmount,
     appliedCouponCode,
     couponId,
+    multiShopRoutingFee,
+    totalDeliveryFee,
     grandTotal,
+    isMultiShop: shops.length > 1,
+    primaryShopId: shops[0]!.shopId,
   }
 }
 
@@ -138,16 +216,18 @@ export async function createPaidOrderFromCheckout(params: {
 }) {
   const { customerId, checkout, paymentIntentId, razorpayOrderId, razorpayPaymentId } = params
 
-  const existingOrder = await prisma.order.findFirst({
-    where: { paymentIntentId },
+  const existingParent = await prisma.order.findFirst({
+    where: { paymentIntentId, orderKind: { in: ['STANDARD', 'PARENT'] } },
   })
-  if (existingOrder) return existingOrder
+  if (existingParent) return existingParent
 
   const result = await prisma.$transaction(async (tx) => {
     const intent = await tx.paymentIntent.findUnique({ where: { id: paymentIntentId } })
     if (!intent) throw new Error('Payment intent not found')
     if (intent.status === 'COMPLETED') {
-      const linked = await tx.order.findFirst({ where: { paymentIntentId } })
+      const linked = await tx.order.findFirst({
+        where: { paymentIntentId, orderKind: { in: ['STANDARD', 'PARENT'] } },
+      })
       if (linked) return { order: linked, isNew: false as const }
     }
     if (intent.status !== 'PENDING') {
@@ -165,20 +245,26 @@ export async function createPaidOrderFromCheckout(params: {
       })
     }
 
-    for (const item of checkout.lineItems) {
-      const product = await tx.product.findUnique({ where: { id: item.productId } })
-      if (!product || !product.isAvailable || product.stock < item.quantity) {
-        throw new Error(`Insufficient stock for ${product?.name ?? 'an item'}`)
+    for (const shop of checkout.shops) {
+      for (const item of shop.lineItems) {
+        const product = await tx.product.findUnique({ where: { id: item.productId } })
+        if (!product || !product.isAvailable || product.stock < item.quantity) {
+          throw new Error(`Insufficient stock for ${product?.name ?? 'an item'}`)
+        }
       }
     }
 
-    const created = await tx.order.create({
+    const isMulti = checkout.isMultiShop
+    const orderKind = isMulti ? 'PARENT' : 'STANDARD'
+
+    const parent = await tx.order.create({
       data: {
         orderNumber: generateOrderNumber(),
+        orderKind,
         customerId,
-        shopId: checkout.shopId,
+        shopId: checkout.primaryShopId,
         totalPrice: checkout.orderItemTotal,
-        deliveryFee: checkout.deliveryFee,
+        deliveryFee: checkout.totalDeliveryFee,
         riderTip: checkout.riderTip,
         deliveryAddress: checkout.address,
         deliveryInstruction: checkout.instruction ?? null,
@@ -191,18 +277,62 @@ export async function createPaidOrderFromCheckout(params: {
         razorpayOrderId,
         razorpayPaymentId,
         paymentIntentId,
-        items: { create: checkout.lineItems },
         statusHistory: {
-          create: { status: 'PENDING', note: 'Prepaid order placed after Razorpay confirmation' },
+          create: {
+            status: 'PENDING',
+            note: isMulti
+              ? 'Multi-store prepaid order placed after Razorpay confirmation'
+              : 'Prepaid order placed after Razorpay confirmation',
+          },
         },
+        ...(isMulti
+          ? {}
+          : {
+              items: { create: checkout.shops[0]!.lineItems },
+            }),
       },
     })
 
-    for (const item of checkout.lineItems) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      })
+    const childOrders = []
+
+    if (isMulti) {
+      for (const shop of checkout.shops) {
+        const child = await tx.order.create({
+          data: {
+            orderNumber: generateOrderNumber(),
+            orderKind: 'CHILD',
+            parentOrderId: parent.id,
+            customerId,
+            shopId: shop.shopId,
+            totalPrice: shop.orderItemTotal,
+            deliveryFee: shop.deliveryFee,
+            riderTip: 0,
+            deliveryAddress: checkout.address,
+            deliveryInstruction: checkout.instruction ?? null,
+            destLatitude: checkout.destLatitude,
+            destLongitude: checkout.destLongitude,
+            status: 'PENDING',
+            paymentStatus: 'PAID',
+            items: { create: shop.lineItems },
+            statusHistory: {
+              create: {
+                status: 'PENDING',
+                note: `Fulfillment for ${shop.shopName}`,
+              },
+            },
+          },
+        })
+        childOrders.push(child)
+      }
+    }
+
+    for (const shop of checkout.shops) {
+      for (const item of shop.lineItems) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        })
+      }
     }
 
     await tx.paymentIntent.update({
@@ -210,11 +340,17 @@ export async function createPaidOrderFromCheckout(params: {
       data: { status: 'COMPLETED' },
     })
 
-    return { order: created, isNew: true as const }
+    return { order: parent, childOrders, isNew: true as const }
   })
 
   if (result.isNew) {
-    await broadcastNewMerchantOrder(result.order.id)
+    if (result.childOrders.length > 0) {
+      for (const child of result.childOrders) {
+        await broadcastNewMerchantOrder(child.id)
+      }
+    } else {
+      await broadcastNewMerchantOrder(result.order.id)
+    }
   }
 
   return result.order

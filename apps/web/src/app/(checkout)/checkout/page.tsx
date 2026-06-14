@@ -15,7 +15,7 @@ import {
   Loader2,
   AlertCircle,
 } from 'lucide-react'
-import { getDeliveryQuote } from '@/actions/shops'
+import { getDeliveryQuote, getMultiShopDeliveryQuote } from '@/actions/shops'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { OrderSuccessScreen } from '@/components/checkout/OrderSuccessScreen'
 import {
@@ -44,7 +44,7 @@ function instructionLabel(key: string | null): string | undefined {
 export default function DynamicCheckoutPage() {
   const router = useRouter()
   const { isLoggedIn, hydrated: authHydrated } = useAuth()
-  const { items, shopId, total, clearCart, removeItem, hydrated } = useCart()
+  const { items, shopIds, itemsByShop, total, subtotalForShop, clearCart, removeItem, hydrated } = useCart()
   const sandbox = isDevSandboxClient()
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
@@ -52,6 +52,7 @@ export default function DynamicCheckoutPage() {
   const [isPlacing, setIsPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deliveryFee, setDeliveryFee] = useState(DEFAULT_DELIVERY_FEE)
+  const [multiShopRoutingFee, setMultiShopRoutingFee] = useState(0)
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null)
   const [discountAmount, setDiscountAmount] = useState(0)
@@ -73,7 +74,7 @@ export default function DynamicCheckoutPage() {
   const deliveryAddress = selectedAddress ? formatCustomerAddress(selectedAddress) : ''
   const lat = selectedAddress?.latitude ?? 19.1364
   const lng = selectedAddress?.longitude ?? 72.8296
-  const shopBackHref = shopId ? `/shops/${shopId}` : '/'
+  const shopBackHref = shopIds.length === 1 ? `/shops/${shopIds[0]}` : '/cart'
 
   // DEV SANDBOX REFACTOR — trust localStorage + AuthContext; avoid re-prompting when session exists.
   useEffect(() => {
@@ -106,34 +107,48 @@ export default function DynamicCheckoutPage() {
   }, [])
 
   useEffect(() => {
-    if (!shopId || items.length === 0) return
-    getDeliveryQuote({ shopId, lat, lng, subtotal: itemTotal })
-      .then((q) => setDeliveryFee(q.deliveryFee))
+    if (items.length === 0 || shopIds.length === 0) return
+    const shopPayload = shopIds.map((id) => ({
+      shopId: id,
+      subtotal: items
+        .filter((i) => i.storeId === id)
+        .reduce((sum, i) => sum + i.price * i.quantity, 0),
+    }))
+    getMultiShopDeliveryQuote({ shops: shopPayload, lat, lng })
+      .then((q) => {
+        setDeliveryFee(q.totalDeliveryFee)
+        setMultiShopRoutingFee(q.multiShopRoutingFee)
+      })
       .catch(() => setDeliveryFee(DEFAULT_DELIVERY_FEE))
-  }, [shopId, lat, lng, itemTotal, items.length])
+  }, [shopIds, lat, lng, items])
 
   useEffect(() => {
-    if (!hydrated || !shopId || items.length === 0) return
+    if (!hydrated || items.length === 0) return
 
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`)
-        const json = await res.json()
-        if (!json.success || cancelled) return
+        for (const shopId of shopIds) {
+          const shopItems = itemsByShop[shopId] ?? []
+          if (shopItems.length === 0) continue
 
-        const validIds = new Set(
-          (json.data as Array<{ id: string; isAvailable: boolean }>)
-            .filter((p) => p.isAvailable)
-            .map((p) => p.id),
-        )
+          const res = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`)
+          const json = await res.json()
+          if (!json.success || cancelled) return
 
-        const stale = items.filter((item) => !validIds.has(item.id))
-        if (stale.length > 0 && !cancelled) {
-          stale.forEach((item) => removeItem(item.id))
-          setError(
-            'Some items in your cart are no longer available and were removed. Add items again from the shop.',
+          const validIds = new Set(
+            (json.data as Array<{ id: string; isAvailable: boolean }>)
+              .filter((p) => p.isAvailable)
+              .map((p) => p.id),
           )
+
+          const stale = shopItems.filter((item) => !validIds.has(item.id))
+          if (stale.length > 0 && !cancelled) {
+            stale.forEach((item) => removeItem(item.id))
+            setError(
+              'Some items in your cart are no longer available and were removed.',
+            )
+          }
         }
       } catch {
         // ignore validation errors — order API will validate again
@@ -143,7 +158,7 @@ export default function DynamicCheckoutPage() {
     return () => {
       cancelled = true
     }
-  }, [hydrated, shopId, items, removeItem])
+  }, [hydrated, shopIds, itemsByShop, items.length, removeItem])
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
@@ -199,23 +214,24 @@ export default function DynamicCheckoutPage() {
   }
 
   const checkoutPayload = {
-    shopId,
-    deliveryFee,
     riderTip: partnerTip,
     address: deliveryAddress,
     instruction: instructionLabel(selectedInstruction),
     destLatitude: lat,
     destLongitude: lng,
     couponCode: appliedCoupon ?? undefined,
-    items: items.map((item) => ({
-      productId: item.id,
-      quantity: item.quantity,
-      price: item.price,
+    shops: shopIds.map((shopId) => ({
+      shopId,
+      items: (itemsByShop[shopId] ?? []).map((item) => ({
+        productId: item.id,
+        quantity: item.quantity,
+        price: item.price,
+      })),
     })),
   }
 
   const handlePlaceOrder = async () => {
-    if (items.length === 0 || !shopId) return
+    if (items.length === 0 || shopIds.length === 0) return
     if (!selectedAddress || !deliveryAddress.trim()) {
       setError('Please add and select a delivery address.')
       return
@@ -590,10 +606,30 @@ export default function DynamicCheckoutPage() {
                 <span className="font-extrabold">-₹{discountAmount}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span>Delivery Partner Fee</span>
-              <span className="font-extrabold text-slate-900">₹{deliveryFee}</span>
-            </div>
+            {multiShopRoutingFee > 0 && (
+              <>
+                <div className="flex justify-between">
+                  <span>Store delivery fees</span>
+                  <span className="font-extrabold text-slate-900">₹{deliveryFee - multiShopRoutingFee}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Multi-store routing</span>
+                  <span className="font-extrabold text-slate-900">₹{multiShopRoutingFee}</span>
+                </div>
+              </>
+            )}
+            {multiShopRoutingFee <= 0 && (
+              <div className="flex justify-between">
+                <span>Delivery Partner Fee</span>
+                <span className="font-extrabold text-slate-900">₹{deliveryFee}</span>
+              </div>
+            )}
+            {multiShopRoutingFee > 0 && (
+              <div className="flex justify-between border-t border-dashed pt-2">
+                <span>Total delivery</span>
+                <span className="font-extrabold text-slate-900">₹{deliveryFee}</span>
+              </div>
+            )}
             {partnerTip > 0 && (
               <div className="flex justify-between text-[#FF6B35]">
                 <span>Delivery Boy Tip</span>

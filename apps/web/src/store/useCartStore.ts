@@ -13,32 +13,18 @@ export interface CartLineItem {
 
 export type CartItemInput = Omit<CartLineItem, 'quantity'>
 
-export interface CartConflict {
-  incomingItem: CartItemInput
-  existingStoreName: string
-}
-
 interface CartStore {
   items: CartLineItem[]
-  activeStoreId: string | null
-  activeStoreName: string | null
-  cartConflict: CartConflict | null
   addItem: (item: CartItemInput, qty?: number) => void
-  clearAndAddItem: (item: CartItemInput, qty?: number) => void
-  clearConflict: () => void
   removeItem: (id: string) => void
   updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
+  itemsByShop: () => Record<string, CartLineItem[]>
+  shopIds: () => string[]
   subtotal: () => number
+  subtotalForShop: (shopId: string) => number
   total: () => number
   itemCount: () => number
-}
-
-const emptyCart = {
-  items: [] as CartLineItem[],
-  activeStoreId: null as string | null,
-  activeStoreName: null as string | null,
-  cartConflict: null as CartConflict | null,
 }
 
 function appendItem(
@@ -55,64 +41,24 @@ function appendItem(
   return [...items, { ...item, quantity: qty }]
 }
 
-function resetIfEmpty(items: CartLineItem[]) {
-  if (items.length === 0) {
-    return { ...emptyCart, cartConflict: null }
-  }
-  return { items }
-}
-
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
-      ...emptyCart,
+      items: [],
 
       addItem: (item, qty = 1) => {
-        set((state) => {
-          if (state.activeStoreId === null) {
-            return {
-              items: appendItem([], item, qty),
-              activeStoreId: item.storeId,
-              activeStoreName: item.storeName,
-              cartConflict: null,
-            }
-          }
-
-          if (state.activeStoreId !== item.storeId) {
-            return {
-              cartConflict: {
-                incomingItem: item,
-                existingStoreName:
-                  state.activeStoreName ?? 'your current store',
-              },
-            }
-          }
-
-          return {
-            items: appendItem(state.items, item, qty),
-            cartConflict: null,
-          }
-        })
+        set((state) => ({
+          items: appendItem(state.items, item, qty),
+        }))
       },
-
-      clearAndAddItem: (item, qty = 1) => {
-        set({
-          items: appendItem([], item, qty),
-          activeStoreId: item.storeId,
-          activeStoreName: item.storeName,
-          cartConflict: null,
-        })
-      },
-
-      clearConflict: () => set({ cartConflict: null }),
 
       removeItem: (id) =>
-        set((state) => resetIfEmpty(state.items.filter((i) => i.id !== id))),
+        set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
 
       updateQuantity: (id, quantity) =>
         set((state) => {
           if (quantity <= 0) {
-            return resetIfEmpty(state.items.filter((i) => i.id !== id))
+            return { items: state.items.filter((i) => i.id !== id) }
           }
           return {
             items: state.items.map((i) =>
@@ -121,10 +67,26 @@ export const useCartStore = create<CartStore>()(
           }
         }),
 
-      clearCart: () => set({ ...emptyCart }),
+      clearCart: () => set({ items: [] }),
+
+      itemsByShop: () => {
+        const grouped: Record<string, CartLineItem[]> = {}
+        for (const item of get().items) {
+          if (!grouped[item.storeId]) grouped[item.storeId] = []
+          grouped[item.storeId]!.push(item)
+        }
+        return grouped
+      },
+
+      shopIds: () => [...new Set(get().items.map((i) => i.storeId))],
 
       subtotal: () =>
         get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+
+      subtotalForShop: (shopId) =>
+        get()
+          .items.filter((i) => i.storeId === shopId)
+          .reduce((sum, i) => sum + i.price * i.quantity, 0),
 
       total: () => get().subtotal(),
 
@@ -133,21 +95,9 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: 'rabbit-cart',
-      version: 1,
-      partialize: (state) => ({
-        items: state.items,
-        activeStoreId: state.activeStoreId,
-        activeStoreName: state.activeStoreName,
-      }),
+      version: 2,
+      partialize: (state) => ({ items: state.items }),
       migrate: (persisted, version) => {
-        if (version >= 1) {
-          return persisted as {
-            items: CartLineItem[]
-            activeStoreId: string | null
-            activeStoreName: string | null
-          }
-        }
-
         const legacy = persisted as {
           items?: Array<{
             productId?: string
@@ -161,9 +111,8 @@ export const useCartStore = create<CartStore>()(
             storeName?: string
             image?: string
           }>
-          shopId?: string | null
           activeStoreId?: string | null
-          activeStoreName?: string | null
+          shopId?: string | null
         }
 
         const items = (legacy.items ?? []).map((item) => ({
@@ -176,12 +125,11 @@ export const useCartStore = create<CartStore>()(
           image: item.image,
         }))
 
-        const activeStoreId =
-          legacy.activeStoreId ?? legacy.shopId ?? items[0]?.storeId ?? null
-        const activeStoreName =
-          legacy.activeStoreName ?? items[0]?.storeName ?? null
+        if (version >= 2) {
+          return { items } as { items: CartLineItem[] }
+        }
 
-        return { items, activeStoreId, activeStoreName }
+        return { items }
       },
     },
   ),

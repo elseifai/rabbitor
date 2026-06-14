@@ -39,9 +39,9 @@ export function calculateDeliveryFee(
   baseFee: number,
   distanceKm: number,
   subtotal: number,
+  freeDeliveryAbove = 499,
 ): number {
   const distanceSurcharge = distanceKm > 2 ? Math.ceil((distanceKm - 2) * 5) : 0
-  const freeDeliveryAbove = 499
   if (subtotal >= freeDeliveryAbove) return Math.max(0, distanceSurcharge)
   return baseFee + distanceSurcharge
 }

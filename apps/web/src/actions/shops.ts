@@ -8,6 +8,7 @@ import {
   estimateDeliveryMinutes,
   calculateDeliveryFee,
 } from '@/lib/geo'
+import { getPlatformSettings } from '@/lib/platform-settings'
 import { CATEGORY_SLUG_MAP } from '@/lib/order-pipeline'
 
 export interface ShopListItem {
@@ -114,7 +115,13 @@ export async function getDeliveryQuote(params: {
     if (!shop) return fallback
 
     const dist = distanceKm(params.lat, params.lng, shop.latitude, shop.longitude)
-    const fee = calculateDeliveryFee(shop.baseDeliveryFee, dist, params.subtotal)
+    const platform = await getPlatformSettings()
+    const fee = calculateDeliveryFee(
+      shop.baseDeliveryFee,
+      dist,
+      params.subtotal,
+      platform.freeDeliveryThreshold,
+    )
     const eta = estimateDeliveryMinutes(dist, shop.avgPrepMinutes)
 
     return {
@@ -126,5 +133,38 @@ export async function getDeliveryQuote(params: {
     }
   } catch {
     return fallback
+  }
+}
+
+export async function getMultiShopDeliveryQuote(params: {
+  shops: { shopId: string; subtotal: number }[]
+  lat: number
+  lng: number
+}) {
+  const platform = await getPlatformSettings()
+  const quotes = await Promise.all(
+    params.shops.map((s) =>
+      getDeliveryQuote({
+        shopId: s.shopId,
+        lat: params.lat,
+        lng: params.lng,
+        subtotal: s.subtotal,
+      }),
+    ),
+  )
+
+  const perShopDelivery = quotes.reduce((sum, q) => sum + q.deliveryFee, 0)
+  const multiShopRoutingFee =
+    params.shops.length > 1
+      ? (params.shops.length - 1) * platform.multiShopRoutingFeePerLeg
+      : 0
+
+  return {
+    perShopDelivery,
+    multiShopRoutingFee,
+    totalDeliveryFee: perShopDelivery + multiShopRoutingFee,
+    shopCount: params.shops.length,
+    quotes,
+    globalMinCartValue: platform.globalMinCartValue,
   }
 }

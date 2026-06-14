@@ -4,8 +4,8 @@ import type { PaymentIntent } from '@rabbit/database'
 import { prisma } from '@/lib/prisma'
 import {
   type CheckoutInput,
-  type CheckoutLineItem,
   createPaidOrderFromCheckout,
+  parseValidatedCheckoutFromIntent,
   validateCheckoutInput,
 } from '@/lib/checkout-order'
 
@@ -14,6 +14,7 @@ const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET ?? ''
 const razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET ?? ''
 
 export const PAYMENT_INTENT_TTL_MS = 15 * 60 * 1000
+const RAZORPAY_MIN_PAISE = 100
 
 export function isRazorpayConfigured(): boolean {
   return Boolean(razorpayKeyId && razorpayKeySecret)
@@ -48,6 +49,14 @@ export function verifyRazorpayWebhookSignature(body: string, signature: string):
   return expected === signature
 }
 
+function toRazorpayAmountPaise(grandTotal: number): number {
+  const amountPaise = Math.round(grandTotal * 100)
+  if (!Number.isFinite(amountPaise) || amountPaise < RAZORPAY_MIN_PAISE) {
+    throw new Error('Order total must be at least ₹1 to proceed with payment')
+  }
+  return amountPaise
+}
+
 export async function expireStalePaymentIntents(): Promise<number> {
   const result = await prisma.paymentIntent.updateMany({
     where: {
@@ -75,13 +84,16 @@ async function expireCustomerPendingIntents(customerId: string): Promise<void> {
   })
 }
 
-function parseLineItems(itemsJson: unknown): CheckoutLineItem[] {
-  if (!Array.isArray(itemsJson)) throw new Error('Invalid payment intent cart')
-  return itemsJson as CheckoutLineItem[]
-}
+async function checkoutFromIntent(intent: PaymentIntent) {
+  if (intent.shopsJson) {
+    return parseValidatedCheckoutFromIntent(intent.shopsJson)
+  }
 
-function checkoutFromIntent(intent: PaymentIntent): CheckoutInput {
-  return {
+  if (intent.isMultiShop) {
+    throw new Error('Invalid multi-shop payment intent snapshot')
+  }
+
+  return validateCheckoutInput({
     shopId: intent.shopId,
     deliveryFee: intent.deliveryFee,
     riderTip: intent.riderTip,
@@ -90,8 +102,10 @@ function checkoutFromIntent(intent: PaymentIntent): CheckoutInput {
     destLatitude: intent.destLatitude ?? undefined,
     destLongitude: intent.destLongitude ?? undefined,
     couponCode: intent.appliedCouponCode ?? undefined,
-    items: parseLineItems(intent.itemsJson),
-  }
+    items: Array.isArray(intent.itemsJson)
+      ? (intent.itemsJson as { productId: string; quantity: number; price: number }[])
+      : [],
+  })
 }
 
 export async function createPaymentIntent(customerId: string, input: CheckoutInput) {
@@ -104,15 +118,17 @@ export async function createPaymentIntent(customerId: string, input: CheckoutInp
 
   const checkout = await validateCheckoutInput(input)
   const expiresAt = new Date(Date.now() + PAYMENT_INTENT_TTL_MS)
-  const amountPaise = Math.round(checkout.grandTotal * 100)
+  const amountPaise = toRazorpayAmountPaise(checkout.grandTotal)
+
+  const flatItems = checkout.shops.flatMap((shop) => shop.lineItems)
 
   const intent = await prisma.paymentIntent.create({
     data: {
       customerId,
-      shopId: checkout.shopId,
+      shopId: checkout.primaryShopId,
       status: 'PENDING',
       totalPrice: checkout.orderItemTotal,
-      deliveryFee: checkout.deliveryFee,
+      deliveryFee: checkout.totalDeliveryFee,
       riderTip: checkout.riderTip,
       discountAmount: checkout.discountAmount,
       appliedCouponCode: checkout.appliedCouponCode,
@@ -120,7 +136,9 @@ export async function createPaymentIntent(customerId: string, input: CheckoutInp
       deliveryInstruction: checkout.instruction ?? null,
       destLatitude: checkout.destLatitude,
       destLongitude: checkout.destLongitude,
-      itemsJson: checkout.lineItems,
+      itemsJson: flatItems,
+      isMultiShop: checkout.isMultiShop,
+      shopsJson: checkout as unknown as object,
       expiresAt,
     },
   })
@@ -130,7 +148,11 @@ export async function createPaymentIntent(customerId: string, input: CheckoutInp
     amount: amountPaise,
     currency: 'INR',
     receipt: intent.id.slice(0, 36),
-    notes: { paymentIntentId: intent.id, customerId },
+    notes: {
+      paymentIntentId: intent.id,
+      customerId,
+      shopCount: String(checkout.shops.length),
+    },
   })
 
   const updated = await prisma.paymentIntent.update({
@@ -145,6 +167,8 @@ export async function createPaymentIntent(customerId: string, input: CheckoutInp
     currency: 'INR' as const,
     key: razorpayKeyId,
     expiresAt: updated.expiresAt.toISOString(),
+    shopCount: checkout.shops.length,
+    grandTotal: checkout.grandTotal,
   }
 }
 
@@ -208,7 +232,10 @@ export async function confirmPaymentIntent(params: {
     throw new Error('Payment window expired. Please try checkout again.')
   }
 
-  const checkout = await validateCheckoutInput(checkoutFromIntent(intent))
+  const checkout =
+    intent.shopsJson != null
+      ? parseValidatedCheckoutFromIntent(intent.shopsJson)
+      : await checkoutFromIntent(intent)
 
   const order = await createPaidOrderFromCheckout({
     customerId,
@@ -254,7 +281,11 @@ export async function handleRazorpayWebhookEvent(event: string, payload: Record<
     })
     if (!intent || intent.expiresAt <= new Date()) return { handled: false }
 
-    const checkout = await validateCheckoutInput(checkoutFromIntent(intent))
+    const checkout =
+      intent.shopsJson != null
+        ? parseValidatedCheckoutFromIntent(intent.shopsJson)
+        : await checkoutFromIntent(intent)
+
     const order = await createPaidOrderFromCheckout({
       customerId: intent.customerId,
       checkout,

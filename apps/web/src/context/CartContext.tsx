@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { CartConflictModal } from '@/components/cart/CartConflictModal'
 import { useCartStore } from '@/store'
 import type { CartItemInput, CartLineItem } from '@/store'
 
@@ -16,16 +15,14 @@ type CartContextValue = {
   hydrated: boolean
   items: CartLineItem[]
   shopId: string | null
-  activeStoreId: string | null
-  activeStoreName: string | null
-  cartConflict: ReturnType<typeof useCartStore.getState>['cartConflict']
+  shopIds: string[]
+  itemsByShop: Record<string, CartLineItem[]>
   addItem: (item: CartItemInput, qty?: number) => void
-  clearAndAddItem: (item: CartItemInput, qty?: number) => void
-  clearConflict: () => void
   removeItem: (id: string) => void
   updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
   subtotal: () => number
+  subtotalForShop: (shopId: string) => number
   total: () => number
   itemCount: () => number
 }
@@ -36,16 +33,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
 
   const items = useCartStore((s) => s.items)
-  const activeStoreId = useCartStore((s) => s.activeStoreId)
-  const activeStoreName = useCartStore((s) => s.activeStoreName)
-  const cartConflict = useCartStore((s) => s.cartConflict)
   const addItem = useCartStore((s) => s.addItem)
-  const clearAndAddItem = useCartStore((s) => s.clearAndAddItem)
-  const clearConflict = useCartStore((s) => s.clearConflict)
   const removeItem = useCartStore((s) => s.removeItem)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const clearCart = useCartStore((s) => s.clearCart)
+  const itemsByShopFn = useCartStore((s) => s.itemsByShop)
+  const shopIdsFn = useCartStore((s) => s.shopIds)
   const subtotal = useCartStore((s) => s.subtotal)
+  const subtotalForShop = useCartStore((s) => s.subtotalForShop)
   const total = useCartStore((s) => s.total)
   const itemCount = useCartStore((s) => s.itemCount)
 
@@ -56,48 +51,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return unsub
   }, [])
 
+  const itemsByShop = itemsByShopFn()
+  const shopIds = shopIdsFn()
+  const shopId = shopIds[0] ?? null
+
   const value = useMemo(
     () => ({
       hydrated,
       items,
-      shopId: activeStoreId,
-      activeStoreId,
-      activeStoreName,
-      cartConflict,
+      shopId,
+      shopIds,
+      itemsByShop,
       addItem,
-      clearAndAddItem,
-      clearConflict,
       removeItem,
       updateQuantity,
       clearCart,
       subtotal,
+      subtotalForShop,
       total,
       itemCount,
     }),
     [
       hydrated,
       items,
-      activeStoreId,
-      activeStoreName,
-      cartConflict,
+      shopId,
+      shopIds,
+      itemsByShop,
       addItem,
-      clearAndAddItem,
-      clearConflict,
       removeItem,
       updateQuantity,
       clearCart,
       subtotal,
+      subtotalForShop,
       total,
       itemCount,
     ],
   )
 
-  return (
-    <CartContext.Provider value={value}>
-      {children}
-      <CartConflictModal />
-    </CartContext.Provider>
-  )
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
 
 export function useCart() {

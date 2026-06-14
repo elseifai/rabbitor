@@ -145,18 +145,32 @@ export function AdminDashboard() {
   const [revenue, setRevenue] = useState<Record<string, unknown>>({})
   const [revenueRange, setRevenueRange] = useState('week')
 
+  const [platformSettings, setPlatformSettings] = useState({
+    globalMinCartValue: 0,
+    multiShopRoutingFeePerLeg: 25,
+    freeDeliveryThreshold: 499,
+  })
+  const [savingPlatform, setSavingPlatform] = useState(false)
+
   const fetchTab = useCallback(async (t: TabId) => {
     setRefreshing(true)
     setError(null)
     try {
       if (t === 'overview') {
-        const res = await fetch('/api/admin/metrics')
-        const json = await res.json()
+        const [metricsRes, settingsRes] = await Promise.all([
+          fetch('/api/admin/metrics'),
+          fetch('/api/admin/platform-settings'),
+        ])
+        const json = await metricsRes.json()
         if (!json.success) throw new Error(json.error ?? 'Metrics failed')
         setMetrics(json.metrics ?? {})
         setOrdersLast7Days(json.ordersLast7Days ?? [])
         setOrdersByStoreType(json.ordersByStoreType ?? [])
         setRecentOrders(json.recentOrders ?? [])
+        const settingsJson = await settingsRes.json()
+        if (settingsJson.success && settingsJson.data) {
+          setPlatformSettings(settingsJson.data)
+        }
       } else if (t === 'stores') {
         const res = await fetch('/api/admin/shops')
         const json = await res.json()
@@ -303,6 +317,82 @@ export function AdminDashboard() {
             <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Stores by Type</h3>
             <TypeLegend items={ordersByStoreType.map((s) => ({ label: s.type, count: s.count }))} />
           </div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">
+            Platform checkout rules
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-xs font-semibold text-gray-600">
+              Global min cart (₹)
+              <input
+                type="number"
+                min={0}
+                value={platformSettings.globalMinCartValue}
+                onChange={(e) =>
+                  setPlatformSettings((s) => ({
+                    ...s,
+                    globalMinCartValue: Number(e.target.value),
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Multi-store routing fee / leg (₹)
+              <input
+                type="number"
+                min={0}
+                value={platformSettings.multiShopRoutingFeePerLeg}
+                onChange={(e) =>
+                  setPlatformSettings((s) => ({
+                    ...s,
+                    multiShopRoutingFeePerLeg: Number(e.target.value),
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs font-semibold text-gray-600">
+              Free delivery above (₹)
+              <input
+                type="number"
+                min={0}
+                value={platformSettings.freeDeliveryThreshold}
+                onChange={(e) =>
+                  setPlatformSettings((s) => ({
+                    ...s,
+                    freeDeliveryThreshold: Number(e.target.value),
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={savingPlatform}
+            onClick={async () => {
+              setSavingPlatform(true)
+              try {
+                const res = await fetch('/api/admin/platform-settings', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(platformSettings),
+                })
+                const json = await res.json()
+                if (!json.success) throw new Error(json.error ?? 'Save failed')
+                setPlatformSettings(json.data)
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Save failed')
+              } finally {
+                setSavingPlatform(false)
+              }
+            }}
+            className="mt-4 rounded-xl bg-[#FF6B35] px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+          >
+            {savingPlatform ? 'Saving…' : 'Save platform rules'}
+          </button>
         </div>
         <div className="overflow-hidden rounded-2xl border bg-white">
           <h3 className="border-b px-4 py-3 text-xs font-black uppercase tracking-wider text-gray-400">Recent Orders</h3>

@@ -45,6 +45,12 @@ model MasterCatalogItem {
   @@index([category])
 }
 
+enum OrderKind {
+  STANDARD
+  PARENT
+  CHILD
+}
+
 enum DeliveryMethod {
   SELF
   RABBITOR
@@ -229,6 +235,17 @@ model RabbitorProfile {
   updatedAt   DateTime @updatedAt
 }
 
+model PlatformSettings {
+  id                        String   @id @default("default")
+  /// Global minimum cart subtotal before checkout is allowed (₹)
+  globalMinCartValue        Float    @default(0)
+  /// Extra routing fee per additional shop in a multi-store checkout (₹)
+  multiShopRoutingFeePerLeg Float    @default(25)
+  /// Subtotal threshold for waiving base delivery fee (₹)
+  freeDeliveryThreshold     Float    @default(499)
+  updatedAt                 DateTime @updatedAt
+}
+
 model Shop {
   id       String  @id @default(uuid())
   name     String
@@ -249,6 +266,7 @@ model Shop {
   longitude        Float
 
   deliveryRadiusKm  Float          @default(5)
+  /// Merchant-defined minimum order value (₹) — alias: minimumOrderValue
   minOrderValue     Float          @default(0)
   baseDeliveryFee   Float          @default(20)
   avgPrepMinutes    Int            @default(15)
@@ -331,6 +349,10 @@ model Review {
 model Order {
   id                String  @id @default(uuid())
   orderNumber       String  @unique
+  orderKind         OrderKind @default(STANDARD)
+  parentOrderId     String?
+  parentOrder       Order?  @relation("OrderGroup", fields: [parentOrderId], references: [id], onDelete: SetNull)
+  childOrders       Order[] @relation("OrderGroup")
   customerId        String
   customer          User    @relation("CustomerOrders", fields: [customerId], references: [id])
   shopId            String
@@ -368,6 +390,7 @@ model Order {
   @@index([customerId])
   @@index([shopId, status])
   @@index([deliveryPartnerId, status])
+  @@index([parentOrderId])
 }
 
 model OrderItem {
@@ -400,8 +423,11 @@ model PaymentIntent {
   deliveryInstruction String?
   destLatitude        Float?
   destLongitude       Float?
-  /// [{ productId, quantity, price }]
+  /// Legacy flat items [{ productId, quantity, price }] or multi-shop snapshot
   itemsJson           Json
+  isMultiShop         Boolean             @default(false)
+  /// Full validated checkout snapshot for multi-shop replay on payment confirm
+  shopsJson           Json?
   failureReason       String?
   order               Order?
   expiresAt           DateTime

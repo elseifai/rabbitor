@@ -236,6 +236,7 @@ async function purge() {
   await prisma.orderStatusEvent.deleteMany()
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  await prisma.platformSettings.deleteMany()
   await prisma.review.deleteMany()
   await prisma.ad.deleteMany()
   await prisma.kycDocument.deleteMany()
@@ -471,6 +472,44 @@ async function main() {
       },
     })
     productCount += shop.products.length
+  }
+
+  console.log('⚙️  Platform settings…')
+  await prisma.platformSettings.create({
+    data: {
+      id: 'default',
+      globalMinCartValue: 0,
+      multiShopRoutingFeePerLeg: 25,
+      freeDeliveryThreshold: 499,
+    },
+  })
+
+  console.log('🧪 Sandbox test product (₹1)…')
+  const kiranaShop = await prisma.shop.findUnique({ where: { slug: 'sharma-kirana' } })
+  if (kiranaShop) {
+    await prisma.product.upsert({
+      where: {
+        id: `${kiranaShop.id}-sandbox-test`,
+      },
+      create: {
+        id: `${kiranaShop.id}-sandbox-test`,
+        shopId: kiranaShop.id,
+        name: 'Testing Sandbox Product',
+        description: '₹1 Razorpay checkout test item',
+        price: 1,
+        mrp: 5,
+        unit: 'piece',
+        stock: 999,
+        isAvailable: true,
+        category: 'general',
+      },
+      update: {
+        price: 1,
+        isAvailable: true,
+        stock: 999,
+      },
+    })
+    productCount += 1
   }
 
   console.log('🎟️ Creating coupons…')
