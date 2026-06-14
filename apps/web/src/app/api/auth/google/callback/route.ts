@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { GoogleAuthRoleMismatchError, signInWithGoogle } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
 const PERSONA_LOGIN: Record<Role, string> = {
-  CUSTOMER: '/auth',
-  VENDOR: '/merchant/login',
-  RABBITOR: '/delivery/login',
-  ADMIN: '/admin/login',
+  CUSTOMER: '/auth?role=customer',
+  VENDOR: '/auth?role=merchant',
+  RABBITOR: '/auth?role=rabbitor',
+  ADMIN: '/auth?role=admin',
 }
 
 const ROLE_REDIRECT: Record<string, string> = {
@@ -123,10 +124,24 @@ export async function GET(request: Request) {
     throw err
   }
 
-  const destination =
+  let destination =
     redirectTo === '/'
       ? (ROLE_REDIRECT[authUser.user.role] ?? '/')
       : redirectTo
+
+  if (authUser.user.role === 'VENDOR') {
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: authUser.user.id },
+      select: { id: true },
+    })
+    if (!shop) destination = '/merchant/onboarding'
+  } else if (authUser.user.role === 'RABBITOR') {
+    const profile = await prisma.rabbitorProfile.findUnique({
+      where: { userId: authUser.user.id },
+      select: { id: true },
+    })
+    if (!profile) destination = '/delivery/login?setup=1'
+  }
 
   const res = NextResponse.redirect(`${appUrl()}${destination}`)
   res.cookies.delete('g_oauth_nonce')

@@ -6,17 +6,30 @@ import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { isDevSandboxClient } from '@/lib/dev-auth'
+import {
+  getAuthRoleOption,
+  parseAuthRoleParam,
+  type AuthRoleId,
+  type AuthRoleOption,
+} from '@/lib/auth-roles'
+import { getOnboardingStatusAction } from '@/actions/onboarding'
+import { defaultDashboardForRole } from '@/lib/auth-routing'
 import { useAuth } from '@/context/AuthContext'
 
-const REDIRECT: Record<string, string> = {
-  CUSTOMER: '/',
-  VENDOR: '/merchant',
-  RABBITOR: '/delivery',
-  ADMIN: '/admin',
-}
-
 const RESEND_SECONDS = 60
+
+async function resolveDestination(
+  role: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+  returnTo: string,
+  selectedRedirect: string,
+) {
+  if (returnTo !== '/') return returnTo
+  const onboarding = await getOnboardingStatusAction()
+  if (onboarding?.nextPath) return onboarding.nextPath
+  return defaultDashboardForRole(role) || selectedRedirect
+}
 
 // GOOGLE MAPS & AUTH ACTIVATION — production Google-first auth with email OTP fallback
 export default function AuthPage() {
@@ -26,6 +39,13 @@ export default function AuthPage() {
   const sandbox = isDevSandboxClient()
   const returnTo = searchParams.get('redirect') ?? '/'
   const oauthError = searchParams.get('error')
+  const roleParam = searchParams.get('role')
+
+  const [selectedRoleId, setSelectedRoleId] = useState<AuthRoleId>(() =>
+    parseAuthRoleParam(roleParam),
+  )
+  const selectedRole = getAuthRoleOption(selectedRoleId)
+  const ssoRedirect = returnTo !== '/' ? returnTo : selectedRole.redirect
 
   const [showDevLogin, setShowDevLogin] = useState(false)
   const [step, setStep] = useState<1 | 2>(1)
@@ -57,7 +77,7 @@ export default function AuthPage() {
     if (!emailValid) return
     setLoading(true)
     setError(null)
-    const res = await requestEmailOtpAction(email)
+    const res = await requestEmailOtpAction(email, selectedRole.role)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
     setDevCode(res.devCode ?? null)
@@ -69,7 +89,7 @@ export default function AuthPage() {
     if (otp.length < 6) return
     setLoading(true)
     setError(null)
-    const res = await verifyEmailOtpAction(email, otp)
+    const res = await verifyEmailOtpAction(email, otp, selectedRole.role)
     setLoading(false)
     if (!res.ok) {
       setError(res.error ?? 'Invalid code. Please try again.')
@@ -77,8 +97,23 @@ export default function AuthPage() {
       setTimeout(() => inputRefs.current[0]?.focus(), 50)
       return
     }
+    if (selectedRole.role !== 'CUSTOMER' && res.user.role !== selectedRole.role) {
+      setError(
+        selectedRole.role === 'VENDOR'
+          ? 'This email is not registered as a merchant.'
+          : selectedRole.role === 'RABBITOR'
+            ? 'This email is not registered as a delivery partner.'
+            : 'This email is not registered as admin.',
+      )
+      return
+    }
     login(res.token, res.user)
-    router.push(returnTo !== '/' ? returnTo : (REDIRECT[res.user.role] ?? '/'))
+    const destination = await resolveDestination(
+      res.user.role as 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+      returnTo,
+      selectedRole.redirect,
+    )
+    router.push(destination)
     router.refresh()
   }
 
@@ -111,7 +146,7 @@ export default function AuthPage() {
     setDigits(['', '', '', '', '', ''])
     setError(null)
     setLoading(true)
-    const res = await requestEmailOtpAction(email)
+    const res = await requestEmailOtpAction(email, selectedRole.role)
     setLoading(false)
     if (!res.ok) { setError(res.error); return }
     setDevCode(res.devCode ?? null)
@@ -139,7 +174,7 @@ export default function AuthPage() {
           mode="page"
           resolveRedirect={(account, user) => {
             if (returnTo && user.role === 'CUSTOMER') return returnTo
-            return REDIRECT[user.role] ?? account.redirect
+            return defaultDashboardForRole(user.role) || account.redirect
           }}
         />
       </div>
@@ -169,11 +204,17 @@ export default function AuthPage() {
           <>
             <h1 className="text-2xl font-black text-gray-900">Sign in to Rabbit</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Use your Google account or email OTP to continue
+              Choose how you&apos;ll use Rabbit, then sign in with Google or email
             </p>
 
+            <AuthRolePicker
+              className="mt-6"
+              value={selectedRoleId}
+              onChange={(id: AuthRoleId, _option: AuthRoleOption) => setSelectedRoleId(id)}
+            />
+
             <div className="mt-6">
-              <GoogleSignInButton redirect={returnTo} />
+              <GoogleSignInButton role={selectedRole.role} redirect={ssoRedirect} />
             </div>
 
             <div className="my-5 flex items-center gap-3 text-xs text-gray-400">

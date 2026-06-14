@@ -13,7 +13,7 @@ export default async function DeliveryHomePage() {
   }
 
   return (
-    <RoleGate role="RABBITOR" redirectTo="/delivery/login">
+    <RoleGate role="RABBITOR" redirectTo="/auth?role=rabbitor">
       <div className="space-y-6 pb-24">
         <div className="flex items-center justify-between">
           <div>

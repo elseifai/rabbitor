@@ -9,7 +9,7 @@ export default function DeliveryLayout({
   children: React.ReactNode
 }) {
   return (
-    <RoleGate role="RABBITOR" redirectTo="/auth">
+    <RoleGate role="RABBITOR" redirectTo="/auth?role=rabbitor">
       <div className="min-h-screen bg-white text-gray-900">
         <header className="border-b border-orange-100 bg-white">
           <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-4">

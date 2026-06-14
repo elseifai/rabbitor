@@ -6,7 +6,9 @@ import Link from 'next/link'
 import { Mail, Loader2 } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { useAuth } from '@/context/AuthContext'
+import { getAuthRoleOption, type AuthRoleId } from '@/lib/auth-roles'
 
 export default function MerchantLoginPage() {
   const router = useRouter()
@@ -18,11 +20,13 @@ export default function MerchantLoginPage() {
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(searchParams.get('error'))
+  const [selectedRoleId, setSelectedRoleId] = useState<AuthRoleId>('merchant')
+  const selectedRole = getAuthRoleOption(selectedRoleId)
 
   const sendOtp = async () => {
     setError(null)
     setLoading(true)
-    const res = await requestEmailOtpAction(email, 'VENDOR')
+    const res = await requestEmailOtpAction(email, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed to send code')
     setDevCode(res.devCode ?? null)
@@ -32,27 +36,40 @@ export default function MerchantLoginPage() {
   const verify = async () => {
     setError(null)
     setLoading(true)
-    const res = await verifyEmailOtpAction(email, otp, 'VENDOR')
+    const res = await verifyEmailOtpAction(email, otp, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Verification failed')
-    if (res.user.role !== 'VENDOR') {
-      setError('This email is not registered as a merchant.')
+    if (res.user.role !== selectedRole.role) {
+      setError(
+        selectedRole.role === 'VENDOR'
+          ? 'This email is not registered as a merchant.'
+          : selectedRole.role === 'RABBITOR'
+            ? 'This email is not registered as a delivery partner.'
+            : 'This email is not registered as admin.',
+      )
       return
     }
     login(res.token, res.user)
-    router.push('/merchant')
+    router.push(selectedRole.redirect)
     router.refresh()
   }
 
   return (
     <div className="mx-auto max-w-md px-4 py-12">
       <h1 className="font-display text-2xl font-bold">Merchant login</h1>
-      <p className="mt-1 text-sm text-gray-500">Sign in with your email or Google</p>
+      <p className="mt-1 text-sm text-gray-500">Choose your role, then sign in with Google or email</p>
+
+      <AuthRolePicker
+        className="mt-6"
+        compact
+        value={selectedRoleId}
+        onChange={(id) => setSelectedRoleId(id)}
+      />
 
       <GoogleSignInButton
-        role="VENDOR"
-        redirect="/merchant"
-        className="mt-8 border-gray-200 font-semibold hover:bg-gray-50"
+        role={selectedRole.role}
+        redirect={selectedRole.redirect}
+        className="mt-6 border-gray-200 font-semibold hover:bg-gray-50"
       />
 
       <div className="my-6 flex items-center gap-3 text-xs text-gray-400">

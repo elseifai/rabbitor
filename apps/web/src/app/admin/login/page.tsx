@@ -6,7 +6,9 @@ import Link from 'next/link'
 import { Mail, Loader2, Shield } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { useAuth } from '@/context/AuthContext'
+import { getAuthRoleOption, type AuthRoleId } from '@/lib/auth-roles'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -18,13 +20,15 @@ export default function AdminLoginPage() {
   const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(searchParams.get('error'))
+  const [selectedRoleId, setSelectedRoleId] = useState<AuthRoleId>('admin')
+  const selectedRole = getAuthRoleOption(selectedRoleId)
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
   const sendOtp = async () => {
     setLoading(true)
     setError(null)
-    const res = await requestEmailOtpAction(email)
+    const res = await requestEmailOtpAction(email, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed to send code')
     setDevCode(res.devCode ?? null)
@@ -34,15 +38,21 @@ export default function AdminLoginPage() {
   const verify = async () => {
     setLoading(true)
     setError(null)
-    const res = await verifyEmailOtpAction(email, otp)
+    const res = await verifyEmailOtpAction(email, otp, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Invalid code')
-    if (res.user.role !== 'ADMIN') {
-      setError('This email is not registered as admin.')
+    if (res.user.role !== selectedRole.role) {
+      setError(
+        selectedRole.role === 'VENDOR'
+          ? 'This email is not registered as a merchant.'
+          : selectedRole.role === 'RABBITOR'
+            ? 'This email is not registered as a delivery partner.'
+            : 'This email is not registered as admin.',
+      )
       return
     }
     login(res.token, res.user)
-    router.push('/admin')
+    router.push(selectedRole.redirect)
     router.refresh()
   }
 
@@ -57,6 +67,13 @@ export default function AdminLoginPage() {
           <p className="text-sm text-slate-500">Platform super-admin access</p>
         </div>
       </div>
+
+      <AuthRolePicker
+        className="mb-6"
+        compact
+        value={selectedRoleId}
+        onChange={(id) => setSelectedRoleId(id)}
+      />
 
       {step === 'email' ? (
         <div className="space-y-4 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
@@ -82,8 +99,8 @@ export default function AdminLoginPage() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send code'}
           </button>
           <GoogleSignInButton
-            role="ADMIN"
-            redirect="/admin"
+            role={selectedRole.role}
+            redirect={selectedRole.redirect}
             className="h-auto border-slate-200 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
           />
         </div>

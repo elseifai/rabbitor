@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -9,6 +9,7 @@ import { GeoLocationPanel } from '@/components/location/GeoLocationPanel'
 import { SupportChatDrawer } from '@/components/support/SupportChatDrawer'
 import { useAuth } from '@/context/AuthContext'
 import { isDevSandboxClient } from '@/lib/dev-auth'
+import { loginPathForRole } from '@/lib/auth-routing'
 
 type Props = {
   user: {
@@ -38,6 +39,7 @@ export function ProfileClient({ user: serverUser }: Props) {
   const { user: authUser, isLoggedIn, logout } = useAuth()
   const sandbox = isDevSandboxClient()
   const [supportOpen, setSupportOpen] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
 
   const user = serverUser ?? (authUser
     ? {
@@ -54,15 +56,29 @@ export function ProfileClient({ user: serverUser }: Props) {
     router.refresh()
   }
 
-  // DEV SANDBOX REFACTOR — profile entry is the role picker; no Google / email OTP here.
+  useEffect(() => {
+    if (isLoggedIn && user) return
+    if (sandbox) return
+    setRedirecting(true)
+    router.replace(loginPathForRole('customer', '/profile'))
+  }, [isLoggedIn, user, sandbox, router])
+
   if (!isLoggedIn || !user) {
+    if (sandbox) {
+      return (
+        <div className="mx-auto max-w-[480px] px-4 py-6">
+          <DevRoleLoginPanel
+            mode="page"
+            redirectOnSuccess={false}
+            onSuccess={() => router.refresh()}
+          />
+        </div>
+      )
+    }
+
     return (
-      <div className="mx-auto max-w-[480px] px-4 py-6">
-        <DevRoleLoginPanel
-          mode="page"
-          redirectOnSuccess={false}
-          onSuccess={() => router.refresh()}
-        />
+      <div className="mx-auto flex max-w-[480px] items-center justify-center px-4 py-20 text-sm font-semibold text-slate-400">
+        {redirecting ? 'Opening sign in…' : 'Loading profile…'}
       </div>
     )
   }

@@ -6,7 +6,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { SocketProvider } from '@/context/SocketContext'
 import { CartProvider } from '@/context/CartContext'
 import { SplashGate } from '@/components/SplashGate'
-import { SandboxAuthGate } from '@/components/auth/SandboxAuthGate'
+import { AppAuthGate } from '@/components/auth/AppAuthGate'
 import { AppStartupProvider } from '@/components/providers/AppStartupProvider'
 
 const FcmInit = dynamic(
@@ -20,12 +20,12 @@ export function Providers({ children }: { children: ReactNode }) {
       <SocketProvider>
         <CartProvider>
           <SplashGate>
-            <SandboxAuthGate>
+            <AppAuthGate>
               <AppStartupProvider>
                 <FcmInit />
                 {children}
               </AppStartupProvider>
-            </SandboxAuthGate>
+            </AppAuthGate>
           </SplashGate>
         </CartProvider>
       </SocketProvider>

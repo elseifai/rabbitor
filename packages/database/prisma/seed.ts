@@ -232,14 +232,20 @@ const TEST_PHONES = [
 ]
 
 async function purge() {
+  await prisma.paymentIntent.deleteMany()
   await prisma.orderStatusEvent.deleteMany()
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
+  await prisma.review.deleteMany()
+  await prisma.ad.deleteMany()
   await prisma.kycDocument.deleteMany()
   await prisma.coupon.deleteMany()
   await prisma.otpChallenge.deleteMany()
+  await prisma.emailVerification.deleteMany()
+  await prisma.customerAddress.deleteMany()
   await prisma.product.deleteMany()
   await prisma.shop.deleteMany()
+  await prisma.masterCatalogItem.deleteMany()
   await prisma.vendorProfile.deleteMany()
   await prisma.rabbitorProfile.deleteMany()
   await prisma.user.deleteMany()
@@ -531,10 +537,27 @@ async function main() {
   console.log('🔐 Seeding OTP challenges (123456)…')
   await seedOtpChallenges()
 
+  console.log('📦 Creating master catalog templates…')
+  const masterCatalogItems = [
+    { storeType: StoreType.KIRANA, name: 'Maggi 2-Minute Noodles', category: 'instant', basePrice: 14, defaultUnit: '70g pack' },
+    { storeType: StoreType.KIRANA, name: 'Tata Salt 1kg', category: 'staples', basePrice: 28, defaultUnit: '1 kg' },
+    { storeType: StoreType.KIRANA, name: 'Fortune Sunflower Oil 1L', category: 'oils', basePrice: 145, defaultUnit: '1 L' },
+    { storeType: StoreType.FISH, name: 'Surmai (Kingfish)', category: 'premium', basePrice: 650, defaultUnit: '500g' },
+    { storeType: StoreType.FISH, name: 'Jumbo Prawns', category: 'shellfish', basePrice: 480, defaultUnit: '500g' },
+    { storeType: StoreType.VEGETABLE, name: 'Tomato (Tamatar)', category: 'vegetables', basePrice: 40, defaultUnit: '1 kg' },
+    { storeType: StoreType.VEGETABLE, name: 'Onion (Pyaz)', category: 'vegetables', basePrice: 35, defaultUnit: '1 kg' },
+    { storeType: StoreType.PHARMACY, name: 'Paracetamol 500mg', category: 'otc', basePrice: 25, defaultUnit: 'strip of 15' },
+    { storeType: StoreType.BAKERY, name: 'Pav Bread', category: 'bread', basePrice: 30, defaultUnit: '6 pcs' },
+    { storeType: StoreType.DAIRY, name: 'Amul Taaza Milk', category: 'milk', basePrice: 58, defaultUnit: '1L pouch' },
+    { storeType: StoreType.MEAT, name: 'Chicken Curry Cut', category: 'poultry', basePrice: 220, defaultUnit: '1 kg' },
+    { storeType: StoreType.GENERAL, name: 'Bisleri Water', category: 'beverages', basePrice: 20, defaultUnit: '1L bottle' },
+  ]
+  await prisma.masterCatalogItem.createMany({ data: masterCatalogItems })
+
   console.log('')
   console.log('✅ Seed complete!')
   console.log(`   Admin:     ${admin.phone}`)
-  console.log(`   Shops:     ${SHOPS.length} | Products: ${productCount} | Coupons: 3`)
+  console.log(`   Shops:     ${SHOPS.length} | Products: ${productCount} | Master catalog: ${masterCatalogItems.length} | Coupons: 3`)
   console.log('   OTP:       123456 (all test phones)')
   console.log('   Password:  rabbit123 (admin, vendors, rabbitors)')
   console.log('')
