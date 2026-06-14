@@ -143,7 +143,9 @@ export async function GET(request: Request) {
     if (!profile) destination = '/delivery/login?setup=1'
   }
 
-  const res = NextResponse.redirect(`${appUrl()}${destination}`)
+  const res = NextResponse.redirect(
+    `${appUrl()}/auth/complete?redirect=${encodeURIComponent(destination)}`,
+  )
   res.cookies.delete('g_oauth_nonce')
   return res
 }

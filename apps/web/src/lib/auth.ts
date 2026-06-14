@@ -18,7 +18,55 @@ const DEV_OTP = DEV_OTP_CODE
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
-const PRIVILEGED_ROLES: Role[] = ['VENDOR', 'RABBITOR', 'ADMIN']
+/** Emails allowed to sign in as platform admin via OAuth / OTP. */
+export const ADMIN_BOOTSTRAP_EMAILS = new Set(['dreamsight11@gmail.com'])
+
+function mergeGoogleProfile(
+  user: {
+    id: string
+    googleId: string | null
+    name: string
+    displayName: string | null
+    avatarUrl: string | null
+    emailVerified: Date | null
+  },
+  profile: { googleId: string; name?: string | null; picture?: string | null },
+) {
+  return {
+    googleId: user.googleId ?? profile.googleId,
+    emailVerified: user.emailVerified ?? new Date(),
+    name: profile.name?.trim() || user.name,
+    displayName: profile.name?.trim() || user.displayName,
+    avatarUrl: profile.picture ?? user.avatarUrl,
+  }
+}
+
+/**
+ * Partner OAuth JIT — allow CUSTOMER → VENDOR/RABBITOR upgrade when profile tables
+ * are not set up yet. RoleOnboardingGate handles store/rider setup after sign-in.
+ */
+function resolveOAuthUserRole(
+  email: string,
+  existingRole: string | null | undefined,
+  requestedRole?: Role,
+): Role {
+  const target = requestedRole ?? 'CUSTOMER'
+  const normalizedEmail = email.toLowerCase()
+
+  if (target === 'ADMIN') {
+    if (ADMIN_BOOTSTRAP_EMAILS.has(normalizedEmail)) return 'ADMIN'
+    throw new GoogleAuthRoleMismatchError('ADMIN', existingRole ?? 'CUSTOMER')
+  }
+
+  if (target === 'VENDOR' || target === 'RABBITOR') {
+    if (!existingRole || existingRole === 'CUSTOMER' || existingRole === target) {
+      return target
+    }
+    throw new GoogleAuthRoleMismatchError(target, existingRole)
+  }
+
+  return (existingRole as Role) ?? 'CUSTOMER'
+}
 
 export class GoogleAuthRoleMismatchError extends Error {
   readonly expectedRole: Role
@@ -332,19 +380,40 @@ async function finalizeEmailChallenge(
   await prisma.emailVerification.update({ where: { id: challengeId }, data: { verified: true } })
 
   let user = await prisma.user.findUnique({ where: { email } })
+  let effectiveRole: Role
+  try {
+    effectiveRole = resolveOAuthUserRole(email, user?.role, requestedRole ?? storedRole ?? undefined)
+  } catch (err) {
+    if (err instanceof GoogleAuthRoleMismatchError) {
+      return {
+        success: false,
+        error:
+          err.expectedRole === 'ADMIN'
+            ? 'This email is not registered as admin.'
+            : err.expectedRole === 'VENDOR'
+              ? 'This email is not registered as a merchant.'
+              : 'This email is not registered as a delivery partner.',
+      }
+    }
+    throw err
+  }
+
   if (!user) {
     user = await prisma.user.create({
       data: {
         email,
         emailVerified: new Date(),
         name: email.split('@')[0],
-        role: requestedRole ?? storedRole ?? 'CUSTOMER',
+        role: effectiveRole,
       },
     })
-  } else if (!user.emailVerified) {
+  } else {
     user = await prisma.user.update({
       where: { id: user.id },
-      data: { emailVerified: new Date() },
+      data: {
+        emailVerified: user.emailVerified ?? new Date(),
+        ...(user.role !== effectiveRole ? { role: effectiveRole } : {}),
+      },
     })
   }
 
@@ -368,15 +437,7 @@ export async function signInWithGoogle(
   })
 
   const displayName = profile.name?.trim() || email.split('@')[0]
-
-  if (
-    user &&
-    role &&
-    PRIVILEGED_ROLES.includes(role) &&
-    user.role !== role
-  ) {
-    throw new GoogleAuthRoleMismatchError(role, user.role)
-  }
+  const effectiveRole = resolveOAuthUserRole(email, user?.role, role)
 
   if (!user) {
     user = await prisma.user.create({
@@ -387,18 +448,15 @@ export async function signInWithGoogle(
         name: displayName,
         displayName,
         avatarUrl: profile.picture ?? null,
-        role: role ?? 'CUSTOMER',
+        role: effectiveRole,
       },
     })
   } else {
     user = await prisma.user.update({
       where: { id: user.id },
       data: {
-        googleId: user.googleId ?? profile.googleId,
-        emailVerified: user.emailVerified ?? new Date(),
-        name: profile.name?.trim() || user.name,
-        displayName: profile.name?.trim() || user.displayName,
-        avatarUrl: profile.picture ?? user.avatarUrl,
+        ...mergeGoogleProfile(user, profile),
+        ...(user.role !== effectiveRole ? { role: effectiveRole } : {}),
       },
     })
   }
