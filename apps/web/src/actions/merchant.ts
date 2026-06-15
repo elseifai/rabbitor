@@ -5,6 +5,14 @@ import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 import { mintApiAccessToken } from '@/lib/api-jwt'
 
+function resolveStoredImage(url?: string | null): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith('http') || url.startsWith('/media/') || url.startsWith('data:image/')) {
+    return url
+  }
+  return undefined
+}
+
 export async function getMerchantShopAction() {
   try {
     const session = await requireSession(['VENDOR', 'ADMIN'])
@@ -91,7 +99,7 @@ export async function addProductFromCatalogAction(input: {
         price: input.price,
         unit: input.unit.trim() || 'piece',
         stock: input.stock ?? 10,
-        image: input.imageUrl?.startsWith('http') ? input.imageUrl : undefined,
+        image: resolveStoredImage(input.imageUrl),
         isAvailable: input.isAvailable,
       },
     })
@@ -132,10 +140,8 @@ export async function addProductAction(input: {
       return { ok: false as const, error: 'Enter a valid price' }
     }
 
-    let image: string | undefined
-    if (input.imageUrl?.startsWith('http')) {
-      image = input.imageUrl
-    } else if (input.imageDataUrl?.startsWith('data:image/')) {
+    let image = resolveStoredImage(input.imageUrl)
+    if (!image && input.imageDataUrl?.startsWith('data:image/')) {
       if (input.imageDataUrl.length > 600_000) {
         return { ok: false as const, error: 'Image too large — use a smaller photo' }
       }

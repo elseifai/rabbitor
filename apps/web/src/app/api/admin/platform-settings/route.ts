@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth'
 import {
   getPlatformSettings,
   updatePlatformSettings,
+  type PlatformSettingsData,
 } from '@/lib/platform-settings'
 
 /** GET /api/admin/platform-settings */
@@ -25,6 +26,9 @@ export async function PUT(request: Request) {
       globalMinCartValue?: number
       multiShopRoutingFeePerLeg?: number
       freeDeliveryThreshold?: number
+      surgePricingMultiplier?: number
+      platformServiceFee?: number
+      featureFlags?: Partial<PlatformSettingsData['featureFlags']>
     }
 
     const settings = await updatePlatformSettings({
@@ -37,6 +41,13 @@ export async function PUT(request: Request) {
       ...(body.freeDeliveryThreshold != null && {
         freeDeliveryThreshold: Math.max(0, body.freeDeliveryThreshold),
       }),
+      ...(body.surgePricingMultiplier != null && {
+        surgePricingMultiplier: Math.max(1, Math.min(3, body.surgePricingMultiplier)),
+      }),
+      ...(body.platformServiceFee != null && {
+        platformServiceFee: Math.max(0, body.platformServiceFee),
+      }),
+      ...(body.featureFlags ? { featureFlags: body.featureFlags } : {}),
     })
 
     return NextResponse.json({ success: true, data: settings })

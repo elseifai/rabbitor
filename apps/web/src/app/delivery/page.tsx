@@ -1,37 +1,27 @@
-import { DeliveryJobsList, DeliveryZoneBanner } from '@/components/delivery/DeliveryJobsList'
-import { getAvailableDeliveryOrdersAction } from '@/actions/delivery'
-import { RoleGate } from '@/components/auth/RoleGate'
+import { redirect } from 'next/navigation'
+import { getSession, resolveSessionUser } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { roleCanAccessPortal } from '@/lib/auth-routing'
 
-// PLATFORM CORE RESOLUTION — white & orange delivery home
-export default async function DeliveryHomePage() {
-  let jobs: Awaited<ReturnType<typeof getAvailableDeliveryOrdersAction>> = []
-
-  try {
-    jobs = await getAvailableDeliveryOrdersAction()
-  } catch {
-    // Delivery partner may not be logged in
+export default async function DeliveryIndexPage() {
+  const session = await getSession()
+  if (!session) {
+    redirect('/delivery/login')
   }
 
-  return (
-    <RoleGate role="RABBITOR" redirectTo="/auth?role=rabbitor">
-      <div className="space-y-6 pb-24">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500">You are</p>
-            <p className="text-lg font-semibold text-orange-500">Available for deliveries</p>
-          </div>
-          <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-600">
-            Online
-          </span>
-        </div>
+  const user = await resolveSessionUser(session)
+  if (!user || !roleCanAccessPortal(user.role, 'RABBITOR')) {
+    redirect('/delivery/login')
+  }
 
-        <DeliveryZoneBanner />
+  const profile = await prisma.rabbitorProfile.findUnique({
+    where: { userId: user.id },
+    select: { isOnboarded: true },
+  })
 
-        <div>
-          <h2 className="mb-3 font-semibold text-gray-900">Available orders</h2>
-          <DeliveryJobsList jobs={jobs} />
-        </div>
-      </div>
-    </RoleGate>
-  )
+  if (!profile?.isOnboarded) {
+    redirect('/delivery/login?setup=1')
+  }
+
+  redirect('/delivery/dashboard')
 }

@@ -9,6 +9,7 @@ import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { useAuth } from '@/context/AuthContext'
 import { getAuthRoleOption, type AuthRoleId } from '@/lib/auth-roles'
+import { signInPortalMatches } from '@/lib/auth-routing'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -41,7 +42,7 @@ export default function AdminLoginPage() {
     const res = await verifyEmailOtpAction(email, otp, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Invalid code')
-    if (res.user.role !== selectedRole.role) {
+    if (!signInPortalMatches(res.user.role, selectedRole.role)) {
       setError(
         selectedRole.role === 'VENDOR'
           ? 'This email is not registered as a merchant.'

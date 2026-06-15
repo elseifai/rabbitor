@@ -14,6 +14,7 @@ import {
   ToggleRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LogoutButton } from '@/components/auth/LogoutButton'
 
 // MERCHANT SIDEBAR & CATALOG REFACTOR — persistent admin-style sidebar navigation
 const NAV: {
@@ -95,10 +96,15 @@ export function MerchantLayoutShell({
             </Link>
           ))}
         </nav>
-        <div className="border-t p-3">
+        <div className="space-y-1 border-t p-3">
           <Link href="/" className="block rounded-xl px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 hover:text-[#FF6B35]">
             ← Customer app
           </Link>
+          <LogoutButton
+            compact
+            label="Logout"
+            className="w-full rounded-xl px-3 py-2 text-xs font-medium hover:bg-red-50"
+          />
         </div>
       </aside>
 
@@ -110,20 +116,23 @@ export function MerchantLayoutShell({
               {shopName}
             </p>
           </div>
-          {onToggleShop && (
-            <button
-              type="button"
-              onClick={onToggleShop}
-              className="flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase lg:hidden"
-            >
-              {shopOpen ? (
-                <ToggleRight className="h-4 w-4 text-green-500" />
-              ) : (
-                <ToggleLeft className="h-4 w-4 text-gray-400" />
-              )}
-              {shopOpen ? 'Open' : 'Paused'}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onToggleShop && (
+              <button
+                type="button"
+                onClick={onToggleShop}
+                className="flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase lg:hidden"
+              >
+                {shopOpen ? (
+                  <ToggleRight className="h-4 w-4 text-green-500" />
+                ) : (
+                  <ToggleLeft className="h-4 w-4 text-gray-400" />
+                )}
+                {shopOpen ? 'Open' : 'Paused'}
+              </button>
+            )}
+            <LogoutButton compact label="Logout" />
+          </div>
         </header>
         <main className="flex-1 p-4 lg:p-8">{children}</main>
       </div>

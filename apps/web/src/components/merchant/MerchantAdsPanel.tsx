@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Plus } from 'lucide-react'
 import type { AdPlacement } from '@rabbit/database'
+import { FileUploader } from '@/components/ui/file-uploader'
 
 const PLACEMENTS: AdPlacement[] = ['SHOP_PAGE', 'HOME_STRIP', 'CART_PAGE']
 
-// MERCHANT SIDEBAR & CATALOG REFACTOR — store-specific promotional banners
 export function MerchantAdsPanel() {
   const [ads, setAds] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
-  const [imageUrl, setImageUrl] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [linkUrl, setLinkUrl] = useState('')
   const [placement, setPlacement] = useState<AdPlacement>('SHOP_PAGE')
   const [submitting, setSubmitting] = useState(false)
@@ -31,6 +31,10 @@ export function MerchantAdsPanel() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!imageUrl) {
+      setError('Upload a banner image')
+      return
+    }
     setSubmitting(true)
     setError(null)
     const res = await fetch('/api/merchant/ads', {
@@ -45,7 +49,7 @@ export function MerchantAdsPanel() {
       return
     }
     setTitle('')
-    setImageUrl('')
+    setImageUrl(null)
     setLinkUrl('')
     setShowForm(false)
     void load()
@@ -74,17 +78,38 @@ export function MerchantAdsPanel() {
       </div>
 
       {showForm && (
-        <form onSubmit={(e) => void handleCreate(e)} className="space-y-3 rounded-2xl border bg-white p-5">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Banner title" required className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Image URL" required type="url" className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="Link URL (optional)" type="url" className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <select value={placement} onChange={(e) => setPlacement(e.target.value as AdPlacement)} className="w-full rounded-xl border px-3 py-2 text-sm">
+        <form onSubmit={(e) => void handleCreate(e)} className="space-y-3 rounded-2xl border bg-white p-5 shadow-sm">
+          <FileUploader value={imageUrl} onChange={setImageUrl} label="Banner creative" aspect="banner" />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Banner title"
+            required
+            className="w-full rounded-xl border px-3 py-2 text-sm"
+          />
+          <input
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder="Deep link (optional) e.g. /shops/your-slug"
+            className="w-full rounded-xl border px-3 py-2 text-sm"
+          />
+          <select
+            value={placement}
+            onChange={(e) => setPlacement(e.target.value as AdPlacement)}
+            className="w-full rounded-xl border px-3 py-2 text-sm"
+          >
             {PLACEMENTS.map((p) => (
-              <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>
+              <option key={p} value={p}>
+                {p.replace(/_/g, ' ')}
+              </option>
             ))}
           </select>
           {error && <p className="text-xs text-red-600">{error}</p>}
-          <button type="submit" disabled={submitting} className="w-full rounded-xl bg-[#0C831F] py-2.5 text-sm font-bold text-white disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={submitting || !imageUrl}
+            className="w-full rounded-xl bg-[#0C831F] py-2.5 text-sm font-bold text-white disabled:opacity-50"
+          >
             {submitting ? 'Saving…' : 'Publish banner'}
           </button>
         </form>
@@ -103,7 +128,9 @@ export function MerchantAdsPanel() {
               <div className="p-3">
                 <p className="font-bold text-gray-900">{String(ad.title)}</p>
                 <p className="text-[10px] font-bold uppercase text-gray-400">{String(ad.placement)}</p>
-                <span className={`mt-1 inline-block rounded px-2 py-0.5 text-[9px] font-bold ${ad.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                <span
+                  className={`mt-1 inline-block rounded px-2 py-0.5 text-[9px] font-bold ${ad.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                >
                   {ad.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>

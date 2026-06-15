@@ -19,10 +19,16 @@ import {
   PackageOpen,
 } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
-import { AdminInventoryUpload } from '@/components/admin/AdminInventoryUpload'
-import type { AdPlacement, DiscountType, StoreType } from '@rabbit/database'
+import { AdminCatalogCommand } from '@/components/admin/AdminCatalogCommand'
+import { AdminStoresOpsPanel } from '@/components/admin/AdminStoresOpsPanel'
+import { AdminRidersOpsPanel } from '@/components/admin/AdminRidersOpsPanel'
+import { AdminFeatureFlagsPanel } from '@/components/admin/AdminFeatureFlagsPanel'
+import { AdminOverviewCommandCenter } from '@/components/admin/AdminOverviewCommandCenter'
+import { AdminAdsCommandPanel } from '@/components/admin/AdminAdsCommandPanel'
+import { LogoutButton } from '@/components/auth/LogoutButton'
+import type { DiscountType, StoreType } from '@rabbit/database'
 
-type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue' | 'inventory'
+type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue' | 'inventory' | 'settings'
 
 const TABS: { id: TabId; label: string; short: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', short: 'Home', icon: LayoutDashboard },
@@ -30,14 +36,14 @@ const TABS: { id: TabId; label: string; short: string; icon: typeof LayoutDashbo
   { id: 'customers', label: 'Customers', short: 'Users', icon: Users },
   { id: 'riders', label: 'Riders', short: 'Riders', icon: Bike },
   { id: 'orders', label: 'Orders', short: 'Orders', icon: ShoppingBag },
-  { id: 'inventory', label: 'Global Inventory Upload', short: 'Catalog', icon: PackageOpen },
+  { id: 'inventory', label: 'Global Catalog', short: 'Catalog', icon: PackageOpen },
+  { id: 'settings', label: 'Feature Flags', short: 'Flags', icon: Megaphone },
   { id: 'coupons', label: 'Coupons', short: 'Deals', icon: Ticket },
   { id: 'ads', label: 'Ads', short: 'Ads', icon: Megaphone },
   { id: 'revenue', label: 'Revenue', short: 'Rev', icon: IndianRupee },
 ]
 
 const STORE_TYPES: StoreType[] = ['KIRANA', 'FISH', 'VEGETABLE', 'PHARMACY', 'BAKERY', 'DAIRY', 'MEAT', 'GENERAL']
-const AD_PLACEMENTS: AdPlacement[] = ['HOME_BANNER', 'HOME_STRIP', 'SHOP_PAGE', 'CART_PAGE', 'CHECKOUT_PAGE']
 const ORDER_FILTERS = ['ALL', 'ACTIVE', 'PENDING', 'DELIVERED', 'CANCELLED'] as const
 const CHART_COLORS = ['#FF6B35', '#0C831F', '#3B82F6', '#8B5CF6', '#F59E0B', '#EC4899', '#14B8A6', '#64748B']
 
@@ -137,11 +143,6 @@ export function AdminDashboard() {
   const [couponForm, setCouponForm] = useState({ code: '', discountType: 'FLAT' as DiscountType, discountValue: '', minOrderValue: '0' })
   const [savingCoupon, setSavingCoupon] = useState(false)
 
-  const [ads, setAds] = useState<Record<string, unknown>[]>([])
-  const [adModal, setAdModal] = useState(false)
-  const [adForm, setAdForm] = useState({ title: '', imageUrl: '', linkUrl: '', placement: 'HOME_BANNER' as AdPlacement })
-  const [savingAd, setSavingAd] = useState(false)
-
   const [revenue, setRevenue] = useState<Record<string, unknown>>({})
   const [revenueRange, setRevenueRange] = useState('week')
 
@@ -153,39 +154,22 @@ export function AdminDashboard() {
   const [savingPlatform, setSavingPlatform] = useState(false)
 
   const fetchTab = useCallback(async (t: TabId) => {
+    const selfContained: TabId[] = ['overview', 'inventory', 'stores', 'riders', 'settings', 'ads']
+    if (selfContained.includes(t)) {
+      setLoading(false)
+      setRefreshing(false)
+      return
+    }
     setRefreshing(true)
     setError(null)
     try {
       if (t === 'overview') {
-        const [metricsRes, settingsRes] = await Promise.all([
-          fetch('/api/admin/metrics'),
-          fetch('/api/admin/platform-settings'),
-        ])
-        const json = await metricsRes.json()
-        if (!json.success) throw new Error(json.error ?? 'Metrics failed')
-        setMetrics(json.metrics ?? {})
-        setOrdersLast7Days(json.ordersLast7Days ?? [])
-        setOrdersByStoreType(json.ordersByStoreType ?? [])
-        setRecentOrders(json.recentOrders ?? [])
-        const settingsJson = await settingsRes.json()
-        if (settingsJson.success && settingsJson.data) {
-          setPlatformSettings(settingsJson.data)
-        }
-      } else if (t === 'stores') {
-        const res = await fetch('/api/admin/shops')
-        const json = await res.json()
-        if (!json.success) throw new Error(json.error ?? 'Shops failed')
-        setShops(json.data ?? [])
+        /* AdminOverviewCommandCenter loads its own data */
       } else if (t === 'customers') {
         const res = await fetch('/api/admin/customers')
         const json = await res.json()
         if (!json.success) throw new Error(json.error ?? 'Customers failed')
         setCustomers(json.data ?? [])
-      } else if (t === 'riders') {
-        const res = await fetch('/api/admin/riders')
-        const json = await res.json()
-        if (!json.success) throw new Error(json.error ?? 'Riders failed')
-        setRiders(json.data ?? [])
       } else if (t === 'orders') {
         const q = orderFilter === 'ALL' ? '' : `?status=${orderFilter}`
         const res = await fetch(`/api/admin/orders${q}`)
@@ -197,18 +181,11 @@ export function AdminDashboard() {
         const json = await res.json()
         if (!json.success) throw new Error(json.error ?? 'Coupons failed')
         setCoupons(json.data ?? [])
-      } else if (t === 'ads') {
-        const res = await fetch('/api/admin/ads')
-        const json = await res.json()
-        if (!json.success) throw new Error(json.error ?? 'Ads failed')
-        setAds(json.data ?? [])
       } else if (t === 'revenue') {
         const res = await fetch(`/api/admin/revenue?range=${revenueRange}`)
         const json = await res.json()
         if (!json.success) throw new Error(json.error ?? 'Revenue failed')
         setRevenue(json.data ?? {})
-      } else if (t === 'inventory') {
-        /* AdminInventoryUpload loads its own data */
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
@@ -274,20 +251,6 @@ export function AdminDashboard() {
     } finally { setSavingCoupon(false) }
   }
 
-  const createAd = async () => {
-    setSavingAd(true)
-    try {
-      const res = await fetch('/api/admin/ads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(adForm),
-      })
-      const json = await res.json()
-      if (json.success) { setAdModal(false); setAdForm({ title: '', imageUrl: '', linkUrl: '', placement: 'HOME_BANNER' }); void fetchTab('ads') }
-      else setError(json.error)
-    } finally { setSavingAd(false) }
-  }
-
   const revenueBars = useMemo(() => {
     const d = revenue as { gmv?: number; platformFees?: number; deliveryFees?: number }
     return [
@@ -298,162 +261,11 @@ export function AdminDashboard() {
   }, [revenue])
 
   const renderContent = () => {
-    if (loading) return <Loading />
+    if (loading && tab !== 'overview') return <Loading />
 
-    if (tab === 'overview') return (
-      <div className="space-y-6">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Shops" value={String(metrics.shopCount ?? 0)} />
-          <StatCard label="Customers" value={String(metrics.totalCustomers ?? 0)} />
-          <StatCard label="Orders Today" value={String(metrics.ordersToday ?? 0)} />
-          <StatCard label="Revenue Today" value={formatCurrency(metrics.revenueToday ?? 0)} accent />
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border bg-white p-4">
-            <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Orders — Last 7 Days</h3>
-            <BarChart data={ordersLast7Days} valueKey="count" labelKey="date" />
-          </div>
-          <div className="rounded-2xl border bg-white p-4">
-            <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">Stores by Type</h3>
-            <TypeLegend items={ordersByStoreType.map((s) => ({ label: s.type, count: s.count }))} />
-          </div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-gray-400">
-            Platform checkout rules
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-xs font-semibold text-gray-600">
-              Global min cart (₹)
-              <input
-                type="number"
-                min={0}
-                value={platformSettings.globalMinCartValue}
-                onChange={(e) =>
-                  setPlatformSettings((s) => ({
-                    ...s,
-                    globalMinCartValue: Number(e.target.value),
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-gray-600">
-              Multi-store routing fee / leg (₹)
-              <input
-                type="number"
-                min={0}
-                value={platformSettings.multiShopRoutingFeePerLeg}
-                onChange={(e) =>
-                  setPlatformSettings((s) => ({
-                    ...s,
-                    multiShopRoutingFeePerLeg: Number(e.target.value),
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs font-semibold text-gray-600">
-              Free delivery above (₹)
-              <input
-                type="number"
-                min={0}
-                value={platformSettings.freeDeliveryThreshold}
-                onChange={(e) =>
-                  setPlatformSettings((s) => ({
-                    ...s,
-                    freeDeliveryThreshold: Number(e.target.value),
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            disabled={savingPlatform}
-            onClick={async () => {
-              setSavingPlatform(true)
-              try {
-                const res = await fetch('/api/admin/platform-settings', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(platformSettings),
-                })
-                const json = await res.json()
-                if (!json.success) throw new Error(json.error ?? 'Save failed')
-                setPlatformSettings(json.data)
-              } catch (e) {
-                setError(e instanceof Error ? e.message : 'Save failed')
-              } finally {
-                setSavingPlatform(false)
-              }
-            }}
-            className="mt-4 rounded-xl bg-[#FF6B35] px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
-          >
-            {savingPlatform ? 'Saving…' : 'Save platform rules'}
-          </button>
-        </div>
-        <div className="overflow-hidden rounded-2xl border bg-white">
-          <h3 className="border-b px-4 py-3 text-xs font-black uppercase tracking-wider text-gray-400">Recent Orders</h3>
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400">
-              <tr><th className="px-4 py-2">Order</th><th className="px-4 py-2">Shop</th><th className="px-4 py-2">Status</th><th className="px-4 py-2 text-right">Amount</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {recentOrders.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">No orders yet</td></tr>
-              ) : recentOrders.map((o) => (
-                <tr key={String(o.id)} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs">{String(o.orderNumber ?? o.id).slice(0, 12)}</td>
-                  <td className="px-4 py-3">{String(o.shopName)}</td>
-                  <td className="px-4 py-3"><span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] font-bold uppercase">{String(o.statusLabel ?? o.status)}</span></td>
-                  <td className="px-4 py-3 text-right font-bold text-[#0C831F]">{formatCurrency(Number(o.grandTotal ?? 0))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
+    if (tab === 'overview') return <AdminOverviewCommandCenter />
 
-    if (tab === 'stores') return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input value={shopSearch} onChange={(e) => setShopSearch(e.target.value)} placeholder="Search stores…" className="w-full rounded-xl border py-2 pl-9 pr-3 text-sm" />
-          </div>
-          <select value={shopTypeFilter} onChange={(e) => setShopTypeFilter(e.target.value)} className="rounded-xl border px-3 py-2 text-sm">
-            <option value="ALL">All types</option>
-            {STORE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <Link href="/admin/new-store" className="flex items-center gap-1 rounded-xl bg-[#FF6B35] px-4 py-2 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Store</Link>
-        </div>
-        <div className="overflow-x-auto rounded-2xl border bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400">
-              <tr><th className="px-4 py-2">Store</th><th className="px-4 py-2">Type</th><th className="px-4 py-2">Orders</th><th className="px-4 py-2">Status</th><th className="px-4 py-2">Action</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredShops.map((s) => (
-                <tr key={String(s.id)}>
-                  <td className="px-4 py-3"><p className="font-semibold">{String(s.name)}</p><p className="text-xs text-gray-400">{String(s.address)}</p></td>
-                  <td className="px-4 py-3 text-xs font-bold text-gray-500">{String(s.storeType)}</td>
-                  <td className="px-4 py-3">{String(s.orderCount ?? 0)}</td>
-                  <td className="px-4 py-3"><span className={cn('rounded px-2 py-0.5 text-[10px] font-bold', s.isActive ? 'bg-green-100 text-[#0C831F]' : 'bg-gray-100 text-gray-500')}>{s.isActive ? 'Active' : 'Inactive'}</span></td>
-                  <td className="px-4 py-3">
-                    <button type="button" disabled={togglingShop === s.id} onClick={() => void toggleShop(String(s.id), Boolean(s.isActive))} className="text-xs font-bold text-[#FF6B35] hover:underline disabled:opacity-50">
-                      {s.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
+    if (tab === 'stores') return <AdminStoresOpsPanel />
 
     if (tab === 'customers') return (
       <div className="space-y-4">
@@ -481,28 +293,7 @@ export function AdminDashboard() {
       </div>
     )
 
-    if (tab === 'riders') return (
-      <div className="space-y-4">
-        <button type="button" onClick={() => setRiderModal(true)} className="flex items-center gap-1 rounded-xl bg-[#FF6B35] px-4 py-2 text-sm font-bold text-white"><Plus className="h-4 w-4" />Add Rider</button>
-        <div className="overflow-x-auto rounded-2xl border bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-400">
-              <tr><th className="px-4 py-2">Rider</th><th className="px-4 py-2">Phone</th><th className="px-4 py-2">Active</th><th className="px-4 py-2">Deliveries</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {riders.map((r) => (
-                <tr key={String(r.id)}>
-                  <td className="px-4 py-3 font-semibold">{String(r.name)}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{String(r.phone)}</td>
-                  <td className="px-4 py-3"><span className={cn('rounded px-2 py-0.5 text-[10px] font-bold', r.isAvailable ? 'bg-green-100 text-[#0C831F]' : 'bg-gray-100 text-gray-500')}>{r.isAvailable ? 'Available' : 'Offline'}</span></td>
-                  <td className="px-4 py-3">{String(r.totalDeliveries)} ({String(r.activeOrders)} active)</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )
+    if (tab === 'riders') return <AdminRidersOpsPanel />
 
     if (tab === 'orders') return (
       <div className="space-y-4">
@@ -555,27 +346,11 @@ export function AdminDashboard() {
       </div>
     )
 
-    if (tab === 'ads') return (
-      <div className="space-y-4">
-        <button type="button" onClick={() => setAdModal(true)} className="flex items-center gap-1 rounded-xl bg-[#FF6B35] px-4 py-2 text-sm font-bold text-white"><Plus className="h-4 w-4" />Create Ad</button>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ads.map((a) => (
-            <div key={String(a.id)} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-              <div className="aspect-[2/1] bg-gray-100">
-                {a.imageUrl ? <img src={String(a.imageUrl)} alt={String(a.title)} className="h-full w-full object-cover" /> : null}
-              </div>
-              <div className="p-3">
-                <p className="font-bold text-gray-900">{String(a.title)}</p>
-                <p className="text-[10px] font-bold uppercase text-gray-400">{String(a.placement)}</p>
-                <p className="mt-1 text-xs text-gray-500">{Number(a.impressions)} views · {Number(a.clicks)} clicks</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    if (tab === 'ads') return <AdminAdsCommandPanel />
 
-    if (tab === 'inventory') return <AdminInventoryUpload />
+    if (tab === 'inventory') return <AdminCatalogCommand />
+
+    if (tab === 'settings') return <AdminFeatureFlagsPanel />
 
     if (tab === 'revenue') return (
       <div className="space-y-6">
@@ -631,14 +406,24 @@ export function AdminDashboard() {
             </button>
           ))}
         </nav>
+        <div className="border-t p-3">
+          <LogoutButton
+            compact
+            label="Logout"
+            className="w-full rounded-xl px-3 py-2 text-xs font-medium hover:bg-red-50"
+          />
+        </div>
       </aside>
 
       <div className="flex flex-1 flex-col pb-20 lg:pb-0">
         <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-white px-4 py-4 lg:px-8">
           <h1 className="text-lg font-black text-gray-900">{TABS.find((t) => t.id === tab)?.label}</h1>
-          <button type="button" onClick={() => void fetchTab(tab)} disabled={refreshing} className="rounded-xl border p-2 text-gray-500 hover:text-[#FF6B35] disabled:opacity-50">
-            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-          </button>
+          <div className="flex items-center gap-2">
+            <LogoutButton compact label="Logout" className="hidden sm:inline-flex" />
+            <button type="button" onClick={() => void fetchTab(tab)} disabled={refreshing} className="rounded-xl border p-2 text-gray-500 hover:text-[#FF6B35] disabled:opacity-50">
+              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-8">
@@ -670,18 +455,6 @@ export function AdminDashboard() {
           <input value={couponForm.discountValue} onChange={(e) => setCouponForm((f) => ({ ...f, discountValue: e.target.value }))} placeholder="Discount value" type="number" className="w-full rounded-xl border px-3 py-2 text-sm" />
           <input value={couponForm.minOrderValue} onChange={(e) => setCouponForm((f) => ({ ...f, minOrderValue: e.target.value }))} placeholder="Min order" type="number" className="w-full rounded-xl border px-3 py-2 text-sm" />
           <button type="button" disabled={savingCoupon || !couponForm.code} onClick={() => void createCoupon()} className="w-full rounded-xl bg-[#FF6B35] py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingCoupon ? 'Saving…' : 'Create'}</button>
-        </div>
-      </Modal>
-
-      <Modal open={adModal} onClose={() => setAdModal(false)} title="Create Ad">
-        <div className="space-y-3">
-          <input value={adForm.title} onChange={(e) => setAdForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <input value={adForm.imageUrl} onChange={(e) => setAdForm((f) => ({ ...f, imageUrl: e.target.value }))} placeholder="Image URL" className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <input value={adForm.linkUrl} onChange={(e) => setAdForm((f) => ({ ...f, linkUrl: e.target.value }))} placeholder="Link URL (optional)" className="w-full rounded-xl border px-3 py-2 text-sm" />
-          <select value={adForm.placement} onChange={(e) => setAdForm((f) => ({ ...f, placement: e.target.value as AdPlacement }))} className="w-full rounded-xl border px-3 py-2 text-sm">
-            {AD_PLACEMENTS.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <button type="button" disabled={savingAd || !adForm.title || !adForm.imageUrl} onClick={() => void createAd()} className="w-full rounded-xl bg-[#FF6B35] py-2.5 text-sm font-bold text-white disabled:opacity-50">{savingAd ? 'Saving…' : 'Create'}</button>
         </div>
       </Modal>
     </div>

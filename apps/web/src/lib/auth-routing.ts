@@ -60,10 +60,47 @@ export function requiredRoleForPath(pathname: string): SessionUser['role'] | nul
   return null
 }
 
+const PORTAL_PATH_BY_ROLE: Record<string, string> = {
+  VENDOR: '/merchant',
+  RABBITOR: '/delivery',
+  ADMIN: '/admin',
+}
+
+/** Whether a signed-in user may use a partner portal (matches middleware rules). */
+export function roleCanAccessPortal(userRole: string, requiredRole: string): boolean {
+  const portalPath = PORTAL_PATH_BY_ROLE[requiredRole]
+  if (!portalPath) return userRole === requiredRole
+  return roleMatchesPath(userRole, portalPath)
+}
+
 export function roleMatchesPath(userRole: string, pathname: string): boolean {
   const required = requiredRoleForPath(pathname)
   if (!required) return true
+  if (userRole === 'ADMIN') return true
   return userRole === required
+}
+
+/** True when the signed-in user may continue with the portal they chose at login. */
+export function signInPortalMatches(
+  userRole: string,
+  requestedRole: SessionUser['role'],
+): boolean {
+  if (userRole === requestedRole) return true
+  if (userRole === 'ADMIN' && requestedRole !== 'CUSTOMER') return true
+  return false
+}
+
+export function postSignInDestination(
+  userRole: SessionUser['role'],
+  requestedRole: SessionUser['role'],
+  returnTo: string,
+  selectedRedirect: string,
+): string {
+  if (returnTo !== '/') return returnTo
+  if (userRole === 'ADMIN' && requestedRole !== 'CUSTOMER') {
+    return selectedRedirect
+  }
+  return defaultDashboardForRole(userRole) || selectedRedirect
 }
 
 export function defaultDashboardForRole(role: SessionUser['role']): string {
@@ -71,7 +108,7 @@ export function defaultDashboardForRole(role: SessionUser['role']): string {
     case 'VENDOR':
       return '/merchant'
     case 'RABBITOR':
-      return '/delivery'
+      return '/delivery/dashboard'
     case 'ADMIN':
       return '/admin'
     default:

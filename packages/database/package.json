@@ -14,7 +14,7 @@
     "build": "tsc",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
-    "push": "prisma db push",
+    "push": "prisma db push --accept-data-loss",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "test": "echo \"No database tests yet\""

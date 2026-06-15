@@ -1,12 +1,12 @@
 import { compressImageFile } from '@/lib/image-client'
 
-// PLATFORM CORE RESOLUTION — browse-to-upload helper (API first, data-URL fallback)
+/** Upload image via native /api/upload; falls back to compressed data URL offline. */
 export async function uploadProductImage(file: File): Promise<string> {
   try {
     const formData = new FormData()
-    formData.append('image', file)
+    formData.append('file', file)
 
-    const res = await fetch('/api/products/upload-image', {
+    const res = await fetch('/api/upload', {
       method: 'POST',
       body: formData,
       credentials: 'include',
@@ -16,7 +16,7 @@ export async function uploadProductImage(file: File): Promise<string> {
       return String(json.data.url)
     }
   } catch {
-    /* fall through to compressed data URL */
+    /* fall through */
   }
 
   return compressImageFile(file)

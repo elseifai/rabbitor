@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import { roleCanAccessPortal } from '@/lib/auth-routing'
 
 export function RoleGate({
   role,
@@ -14,15 +15,19 @@ export function RoleGate({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { user, isLoggedIn } = useAuth()
+  const { user, isLoggedIn, hydrated } = useAuth()
+  const allowed = Boolean(
+    hydrated && isLoggedIn && user && roleCanAccessPortal(user.role, role),
+  )
 
   useEffect(() => {
-    if (!isLoggedIn || user?.role !== role) {
+    if (!hydrated) return
+    if (!allowed) {
       router.replace(redirectTo)
     }
-  }, [isLoggedIn, user, role, redirectTo, router])
+  }, [allowed, hydrated, redirectTo, router])
 
-  if (!isLoggedIn || user?.role !== role) {
+  if (!hydrated || !allowed) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-400">
         Checking access…

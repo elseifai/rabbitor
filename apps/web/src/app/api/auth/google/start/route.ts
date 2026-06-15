@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { useSecureSessionCookies } from '@/lib/cookie-options'
+import { parseAuthRoleParam, getAuthRoleOption } from '@/lib/auth-roles'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 
@@ -23,7 +24,14 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url)
-  const role = searchParams.get('role') ?? 'CUSTOMER'
+  const roleParam = searchParams.get('role')
+  const role =
+    roleParam === 'CUSTOMER' ||
+    roleParam === 'VENDOR' ||
+    roleParam === 'RABBITOR' ||
+    roleParam === 'ADMIN'
+      ? roleParam
+      : getAuthRoleOption(parseAuthRoleParam(roleParam)).role
   const redirectTo = searchParams.get('redirect') ?? '/'
   const nonce = randomBytes(16).toString('hex')
   const state = Buffer.from(JSON.stringify({ role, redirectTo, nonce })).toString('base64url')

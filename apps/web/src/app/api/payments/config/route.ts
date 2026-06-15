@@ -14,11 +14,12 @@ export async function GET() {
   return NextResponse.json({
     success: true,
     data: {
-      enabled: isRazorpayConfigured(),
-      key,
+      enabled: isRazorpayConfigured() && platform.featureFlags.customer.razorpayEnabled,
+      key: platform.featureFlags.customer.razorpayEnabled ? key : '',
       globalMinCartValue: platform.globalMinCartValue,
       multiShopRoutingFeePerLeg: platform.multiShopRoutingFeePerLeg,
       freeDeliveryThreshold: platform.freeDeliveryThreshold,
+      featureFlags: platform.featureFlags,
     },
   })
 }

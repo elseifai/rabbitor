@@ -85,6 +85,9 @@ export async function validateCheckoutInput(input: CheckoutInput): Promise<Valid
   }
 
   const platform = await getPlatformSettings()
+  if (shopInputs.length > 1 && !platform.featureFlags.customer.multiStoreCart) {
+    throw new Error('Multi-store checkout is temporarily disabled')
+  }
   const destLatitude = input.destLatitude ?? 19.076
   const destLongitude = input.destLongitude ?? 72.8777
   const riderTip = Math.max(0, input.riderTip ?? 0)

@@ -9,7 +9,7 @@ export async function GET() {
 
     const shop = await prisma.shop.findFirst({
       where: { ownerId: session.userId },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, adminNotice: true },
     })
 
     if (!shop) {
@@ -51,8 +51,21 @@ export async function GET() {
       take: 20,
     })
 
+    const rawNotice = shop.adminNotice as {
+      message?: string
+      severity?: string
+      createdAt?: string
+      expiresAt?: string
+    } | null
+    const adminNotice =
+      rawNotice?.message &&
+      (!rawNotice.expiresAt || new Date(rawNotice.expiresAt) > new Date())
+        ? rawNotice
+        : null
+
     return NextResponse.json({
       success: true,
+      adminNotice,
       health: {
         score: healthScore,
         acceptanceRate,

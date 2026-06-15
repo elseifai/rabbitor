@@ -208,7 +208,7 @@ export function DeliveryOrdersPanel() {
     <div className="space-y-6 pb-28">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <Link href="/delivery" className="text-sm text-gray-500 hover:text-orange-500">
+          <Link href="/delivery/dashboard" className="text-sm text-gray-500 hover:text-orange-500">
             ← Jobs hub
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-gray-900">Active Delivery</h1>

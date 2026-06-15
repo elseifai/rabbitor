@@ -14,7 +14,7 @@ const PERSONA_LOGIN: Record<Role, string> = {
 const ROLE_REDIRECT: Record<string, string> = {
   CUSTOMER: '/',
   VENDOR: '/merchant',
-  RABBITOR: '/delivery',
+  RABBITOR: '/delivery/dashboard',
   ADMIN: '/admin',
 }
 
@@ -129,18 +129,28 @@ export async function GET(request: Request) {
       ? (ROLE_REDIRECT[authUser.user.role] ?? '/')
       : redirectTo
 
-  if (authUser.user.role === 'VENDOR') {
+  const portalRole =
+    authUser.user.role === 'ADMIN' &&
+    (role === 'VENDOR' || role === 'RABBITOR' || role === 'ADMIN')
+      ? role
+      : authUser.user.role
+
+  if (authUser.user.role === 'ADMIN' && portalRole !== authUser.user.role) {
+    destination = ROLE_REDIRECT[portalRole] ?? destination
+  }
+
+  if (portalRole === 'VENDOR') {
     const shop = await prisma.shop.findFirst({
       where: { ownerId: authUser.user.id },
       select: { id: true },
     })
     if (!shop) destination = '/merchant/onboarding'
-  } else if (authUser.user.role === 'RABBITOR') {
+  } else if (portalRole === 'RABBITOR') {
     const profile = await prisma.rabbitorProfile.findUnique({
       where: { userId: authUser.user.id },
-      select: { id: true },
+      select: { id: true, isOnboarded: true },
     })
-    if (!profile) destination = '/delivery/login?setup=1'
+    if (!profile || !profile.isOnboarded) destination = '/delivery/login?setup=1'
   }
 
   const res = NextResponse.redirect(

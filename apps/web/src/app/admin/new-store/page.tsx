@@ -10,9 +10,9 @@ import {
   MapPin,
   Sparkles,
   Clock,
-  Image as ImageIcon,
   Phone,
 } from 'lucide-react'
+import { FileUploader } from '@/components/ui/file-uploader'
 
 const CATEGORY_PRESETS = [
   'Kirana',
@@ -30,12 +30,13 @@ export default function OnboardNewStore() {
   const [successSlug, setSuccessSlug] = useState<string | null>(null)
   const [productCount, setProductCount] = useState(0)
 
+  const [storeImage, setStoreImage] = useState<string | null>(null)
+
   const [formData, setFormData] = useState({
     name: '',
     cuisine: '',
     location: '',
     time: '15-25 mins',
-    image: '',
     ownerPhone: '9876543210',
   })
 
@@ -53,7 +54,7 @@ export default function OnboardNewStore() {
       const res = await fetch('/api/admin/shops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, image: storeImage ?? '' }),
       })
 
       const json = await res.json()
@@ -205,33 +206,12 @@ export default function OnboardNewStore() {
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-1 text-xs font-black uppercase tracking-wider text-slate-400">
-              <ImageIcon className="h-3.5 w-3.5 text-[#FF6B35]" /> Showcase Thumbnail Asset URL
-              (Optional)
-            </label>
-            <input
-              type="url"
-              name="image"
-              value={formData.image}
-              onChange={handleChange}
-              placeholder="https://images.unsplash.com/your-photo-link"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold transition focus:border-[#FF6B35] focus:outline-none"
-            />
-            {formData.image && (
-              <div className="mt-2 h-24 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={formData.image}
-                  alt="Preview"
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          <FileUploader
+            value={storeImage}
+            onChange={setStoreImage}
+            label="Store showcase photo (optional)"
+            aspect="video"
+          />
 
           <div className="space-y-1.5">
             <label className="flex items-center gap-1 text-xs font-black uppercase tracking-wider text-slate-400">

@@ -34,7 +34,7 @@ export const AUTH_ROLE_OPTIONS: readonly AuthRoleOption[] = [
     title: 'Rider',
     subtitle: 'Deliver orders in your area',
     emoji: '🛵',
-    redirect: '/delivery',
+    redirect: '/delivery/dashboard',
   },
   {
     id: 'admin',

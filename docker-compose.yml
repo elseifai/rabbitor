@@ -164,8 +164,11 @@ services:
       NEXT_PUBLIC_DEV_SANDBOX: ${NEXT_PUBLIC_DEV_SANDBOX:-false}
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      UPLOAD_DIR: /app/apps/web/public/media
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    volumes:
+      - uploads_data:/app/apps/web/public/media
     depends_on:
       api:
         condition: service_healthy
@@ -180,3 +183,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

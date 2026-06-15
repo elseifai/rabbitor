@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react'
+import { FileUploader } from '@/components/ui/file-uploader'
 import { addProductAction } from '@/actions/merchant'
 
 // MERCHANT DASHBOARD EXPANSION — add product to operational grid
@@ -20,7 +21,7 @@ export function MerchantAddProductModal({
   const [category, setCategory] = useState('general')
   const [price, setPrice] = useState('')
   const [weight, setWeight] = useState('1 piece')
-  const [imageUrl, setImageUrl] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [stock, setStock] = useState('10')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +43,7 @@ export function MerchantAddProductModal({
       price: parsedPrice,
       unit: weight,
       stock: Number.isFinite(parsedStock) ? parsedStock : 10,
-      imageUrl: imageUrl.trim() || undefined,
+      imageUrl: imageUrl ?? undefined,
     })
 
     setSubmitting(false)
@@ -55,7 +56,7 @@ export function MerchantAddProductModal({
     setCategory('general')
     setPrice('')
     setWeight('1 piece')
-    setImageUrl('')
+    setImageUrl(null)
     setStock('10')
     onAdded()
     onClose()
@@ -117,16 +118,12 @@ export function MerchantAddProductModal({
             </label>
           </div>
 
-          <label className="block space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Image URL</span>
-            <input
-              type="url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#FF6B35] focus:outline-none"
-              placeholder="https://..."
-            />
-          </label>
+          <FileUploader
+            value={imageUrl}
+            onChange={setImageUrl}
+            label="Product photo"
+            aspect="square"
+          />
 
           <label className="block space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Stock</span>

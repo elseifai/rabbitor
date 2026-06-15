@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext'
 const ROLE_REDIRECT: Record<string, string> = {
   CUSTOMER: '/',
   VENDOR: '/merchant',
-  RABBITOR: '/delivery',
+  RABBITOR: '/delivery/dashboard',
   ADMIN: '/admin',
 }
 

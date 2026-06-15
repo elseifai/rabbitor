@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import { Activity, AlertTriangle, PauseCircle } from 'lucide-react'
 
 type HealthPayload = {
+  adminNotice?: {
+    message: string
+    severity?: string
+    createdAt?: string
+    expiresAt?: string
+  } | null
   health: {
     score: number
     acceptanceRate: number
@@ -51,6 +57,18 @@ export function MerchantInsightsBar({
 
   return (
     <div className="space-y-3">
+      {data.adminNotice?.message && (
+        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-red-800">
+              Admin broadcast
+            </p>
+            <p className="mt-1 text-sm font-medium text-red-900">{data.adminNotice.message}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">

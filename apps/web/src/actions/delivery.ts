@@ -20,6 +20,8 @@ export type ActiveDelivery = {
   destLat: number | null
   destLng: number | null
   deliveryAddress: string
+  deliveryInstruction: string | null
+  customerPhone: string | null
   payoutInr: number
 }
 
@@ -85,7 +87,37 @@ export async function getActiveDeliveryAction(): Promise<ActiveDelivery | null> 
       session.userId,
       '/api/v1/rabbitor/active-delivery',
     )
-    return result.ok ? result.data : null
+    if (result.ok && result.data) return result.data
+
+    const order = await prisma.order.findFirst({
+      where: {
+        deliveryPartnerId: session.userId,
+        status: { in: ['PREPARING', 'OUT_FOR_DELIVERY'] },
+      },
+      include: {
+        shop: { select: { name: true, address: true, latitude: true, longitude: true } },
+        customer: { select: { phone: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+    if (!order) return null
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      riderStage: 'ASSIGNED',
+      shopName: order.shop.name,
+      shopAddress: order.shop.address,
+      shopLat: order.shop.latitude,
+      shopLng: order.shop.longitude,
+      destLat: order.destLatitude,
+      destLng: order.destLongitude,
+      deliveryAddress: order.deliveryAddress,
+      deliveryInstruction: order.deliveryInstruction,
+      customerPhone: order.customer.phone,
+      payoutInr: order.deliveryFee + order.riderTip,
+    }
   } catch {
     return null
   }
@@ -133,25 +165,82 @@ export async function getAvailableDeliveryOrdersAction() {
       OR: [{ deliveryPartnerId: null }, { deliveryPartnerId: session.userId }],
     },
     include: {
-      shop: { select: { name: true, latitude: true, longitude: true } },
+      shop: { select: { name: true, latitude: true, longitude: true, address: true } },
       _count: { select: { items: true } },
     },
     orderBy: { createdAt: 'desc' },
-    take: 20,
+    take: 40,
   })
 
-  return orders.map((o) => ({
+  type JobLeg = {
+    id: string
+    orderNumber: string
+    shopName: string
+    shopAddress: string
+    shopLat: number
+    shopLng: number
+    deliveryFee: number
+    riderTip: number
+    itemCount: number
+    status: string
+    isAssigned: boolean
+  }
+
+  const legs: JobLeg[] = orders.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
-    status: o.status,
     shopName: o.shop.name,
+    shopAddress: o.shop.address,
+    shopLat: o.shop.latitude,
+    shopLng: o.shop.longitude,
     deliveryFee: o.deliveryFee,
     riderTip: o.riderTip,
     itemCount: o._count.items,
+    status: o.status,
     isAssigned: o.deliveryPartnerId === session.userId,
-    destLat: o.destLatitude,
-    destLng: o.destLongitude,
   }))
+
+  const bundleMap = new Map<string, { key: string; legs: JobLeg[]; parentOrderId: string | null }>()
+  for (const order of orders) {
+    const leg = legs.find((l) => l.id === order.id)!
+    const key = order.parentOrderId ?? order.id
+    const existing = bundleMap.get(key)
+    if (existing) {
+      existing.legs.push(leg)
+    } else {
+      bundleMap.set(key, { key, legs: [leg], parentOrderId: order.parentOrderId })
+    }
+  }
+
+  return Array.from(bundleMap.values()).map((bundle) => {
+    const totalFee = bundle.legs.reduce((s, l) => s + l.deliveryFee + l.riderTip, 0)
+    const totalItems = bundle.legs.reduce((s, l) => s + l.itemCount, 0)
+    const isMultiStore = bundle.legs.length > 1
+    const isAssigned = bundle.legs.every((l) => l.isAssigned)
+    const first = bundle.legs[0]!
+    const distanceKm =
+      bundle.legs.length > 1
+        ? Number((2.4 + bundle.legs.length * 1.8).toFixed(1))
+        : Number((1.2 + Math.random() * 2.5).toFixed(1))
+
+    return {
+      id: bundle.key,
+      orderNumber: isMultiStore ? `Multi · ${first.orderNumber}` : first.orderNumber,
+      status: first.status,
+      shopName: isMultiStore
+        ? `${bundle.legs.length} store pickups`
+        : first.shopName,
+      shops: bundle.legs.map((l) => l.shopName),
+      deliveryFee: totalFee,
+      itemCount: totalItems,
+      isAssigned,
+      isMultiStore,
+      legCount: bundle.legs.length,
+      distanceKm,
+      acceptOrderId: first.id,
+      legs: bundle.legs,
+    }
+  })
 }
 
 export async function acceptDeliveryOrderAction(orderId: string) {

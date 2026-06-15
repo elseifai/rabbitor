@@ -19,7 +19,21 @@ const DEV_OTP = DEV_OTP_CODE
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
 /** Emails allowed to sign in as platform admin via OAuth / OTP. */
-export const ADMIN_BOOTSTRAP_EMAILS = new Set(['dreamsight11@gmail.com'])
+export function getAdminBootstrapEmails(): Set<string> {
+  const emails = new Set(['dreamsight11@gmail.com'])
+  const fromEnv = process.env.ADMIN_BOOTSTRAP_EMAILS
+  if (fromEnv) {
+    for (const part of fromEnv.split(',')) {
+      const normalized = part.trim().toLowerCase()
+      if (normalized) emails.add(normalized)
+    }
+  }
+  return emails
+}
+
+export function isBootstrapAdminEmail(email: string): boolean {
+  return getAdminBootstrapEmails().has(email.trim().toLowerCase())
+}
 
 function mergeGoogleProfile(
   user: {
@@ -52,15 +66,20 @@ function resolveOAuthUserRole(
 ): Role {
   const target = requestedRole ?? 'CUSTOMER'
   const normalizedEmail = email.toLowerCase()
+  const bootstrapAdmin = isBootstrapAdminEmail(normalizedEmail)
 
   if (target === 'ADMIN') {
-    if (ADMIN_BOOTSTRAP_EMAILS.has(normalizedEmail)) return 'ADMIN'
+    if (bootstrapAdmin || existingRole === 'ADMIN') return 'ADMIN'
     throw new GoogleAuthRoleMismatchError('ADMIN', existingRole ?? 'CUSTOMER')
   }
 
   if (target === 'VENDOR' || target === 'RABBITOR') {
     if (!existingRole || existingRole === 'CUSTOMER' || existingRole === target) {
       return target
+    }
+    // Platform admins keep ADMIN in DB but may open merchant/rider portals.
+    if (bootstrapAdmin && existingRole === 'ADMIN') {
+      return 'ADMIN'
     }
     throw new GoogleAuthRoleMismatchError(target, existingRole)
   }

@@ -27,22 +27,43 @@ enum StoreType {
   GENERAL
 }
 
-/// PLATFORM CORE RESOLUTION — admin-uploaded global master catalog items
+enum CatalogItemType {
+  VEG
+  NON_VEG
+  EGG
+  SHORT_SHELF
+}
+
+/// PLATFORM CORE RESOLUTION — admin global master catalog (MasterCatalogProduct baseline)
 model MasterCatalogItem {
-  id           String    @id @default(uuid())
-  storeType    StoreType @default(GENERAL)
+  id           String           @id @default(uuid())
+  sku          String?          @unique
+  storeType    StoreType        @default(GENERAL)
   name         String
   description  String?
-  category     String    @default("general")
-  defaultUnit  String    @default("piece")
+  /// VEG | NON-VEG | EGG | SHORT-SHELF dietary / shelf-life classification
+  itemType     CatalogItemType  @default(VEG)
+  category     String           @default("general")
+  subcategory  String?
+  defaultUnit  String           @default("piece")
   basePrice    Float
   imageUrl     String?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  shopProducts Product[]
 
   @@index([storeType, isActive])
   @@index([category])
+  @@index([name])
+  @@index([itemType])
+}
+
+enum RiderVehicleType {
+  BIKE
+  SCOOTER
+  CYCLE
 }
 
 enum OrderKind {
@@ -224,15 +245,25 @@ model KycDocument {
 }
 
 model RabbitorProfile {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isVerified  Boolean  @default(false)
-  isAvailable Boolean  @default(false)
-  currentLat  Float?
-  currentLng  Float?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String            @id @default(uuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isVerified        Boolean           @default(false)
+  isAvailable       Boolean           @default(false)
+  isOnboarded       Boolean           @default(false)
+  fullName          String?
+  contactPhone      String?
+  emergencyPhone    String?
+  vehicleType       RiderVehicleType?
+  vehiclePlate      String?
+  drivingLicenseId  String?
+  bankName          String?
+  bankAccountNumber String?
+  ifscCode          String?
+  currentLat        Float?
+  currentLng        Float?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 }
 
 model PlatformSettings {
@@ -243,6 +274,12 @@ model PlatformSettings {
   multiShopRoutingFeePerLeg Float    @default(25)
   /// Subtotal threshold for waiving base delivery fee (₹)
   freeDeliveryThreshold     Float    @default(499)
+  /// Surge multiplier applied to delivery/logistics during peak or weather (1.0 = normal)
+  surgePricingMultiplier    Float    @default(1)
+  /// Flat platform service fee added to every checkout (₹)
+  platformServiceFee        Float    @default(0)
+  /// Cross-app feature toggles injected at runtime
+  featureFlags              Json     @default("{}")
   updatedAt                 DateTime @updatedAt
 }
 
@@ -268,12 +305,17 @@ model Shop {
   deliveryRadiusKm  Float          @default(5)
   /// Merchant-defined minimum order value (₹) — alias: minimumOrderValue
   minOrderValue     Float          @default(0)
+  packingCharge     Float          @default(0)
   baseDeliveryFee   Float          @default(20)
   avgPrepMinutes    Int            @default(15)
   ratingAvg         Float          @default(0)
   ratingCount       Int            @default(0)
   /// JSON: { mon: { open: "09:00", close: "21:00" }, ... }
   openingHours      Json?
+  /// Temporary admin pause — auto-resume when elapsed (checked on read)
+  pausedUntil       DateTime?
+  /// Admin broadcast shown on merchant dashboard { message, severity, createdAt, expiresAt }
+  adminNotice       Json?
   preferredDelivery DeliveryMethod @default(SELF)
 
   products       Product[]
@@ -309,20 +351,24 @@ model ShopCoupon {
 }
 
 model Product {
-  id          String  @id @default(uuid())
-  shopId      String
-  shop        Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  price       Float
+  id                  String  @id @default(uuid())
+  shopId              String
+  shop                Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  masterCatalogItemId String?
+  masterCatalogItem   MasterCatalogItem? @relation(fields: [masterCatalogItemId], references: [id], onDelete: SetNull)
+  name                String
+  description         String?
+  price               Float
   /// Original / MRP price (before discount). Null = no discount shown.
-  mrp         Float?
-  image       String?
-  isAvailable Boolean @default(true)
-  unit        String  @default("piece")
-  stock       Int     @default(10)
+  mrp                 Float?
+  image               String?
+  isAvailable         Boolean @default(true)
+  unit                String  @default("piece")
+  stock               Int     @default(10)
+  maxPurchaseQty      Int     @default(10)
+  binLocation         String?
   /// Menu grouping for category-scoped storefront feeds (sub-platform tabs)
-  category    String  @default("general")
+  category            String  @default("general")
 
   orderItems OrderItem[]
   createdAt  DateTime    @default(now())
@@ -502,6 +548,12 @@ model Ad {
   isActive    Boolean     @default(true)
   startDate   DateTime    @default(now())
   endDate     DateTime?
+  /// Hyperlocal delivery zones (area names / pincodes)
+  targetZones     Json @default("[]")
+  /// Customer profile segments e.g. NEW_USERS, VIP
+  targetSegments  Json @default("[]")
+  /// Scoped storefront shop IDs (empty = platform-wide)
+  targetShopIds   Json @default("[]")
   impressions Int         @default(0)
   clicks      Int         @default(0)
   createdAt   DateTime    @default(now())

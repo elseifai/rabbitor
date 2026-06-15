@@ -15,20 +15,21 @@ import {
   type AuthRoleOption,
 } from '@/lib/auth-roles'
 import { getOnboardingStatusAction } from '@/actions/onboarding'
-import { defaultDashboardForRole } from '@/lib/auth-routing'
+import { defaultDashboardForRole, postSignInDestination, signInPortalMatches } from '@/lib/auth-routing'
 import { useAuth } from '@/context/AuthContext'
 
 const RESEND_SECONDS = 60
 
 async function resolveDestination(
-  role: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+  userRole: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+  requestedRole: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
   returnTo: string,
   selectedRedirect: string,
 ) {
   if (returnTo !== '/') return returnTo
   const onboarding = await getOnboardingStatusAction()
   if (onboarding?.nextPath) return onboarding.nextPath
-  return defaultDashboardForRole(role) || selectedRedirect
+  return postSignInDestination(userRole, requestedRole, returnTo, selectedRedirect)
 }
 
 // GOOGLE MAPS & AUTH ACTIVATION — production Google-first auth with email OTP fallback
@@ -56,6 +57,10 @@ export default function AuthPage() {
   const [devCode, setDevCode] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(RESEND_SECONDS)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  useEffect(() => {
+    setSelectedRoleId(parseAuthRoleParam(roleParam))
+  }, [roleParam])
 
   useEffect(() => {
     if (step !== 2) return
@@ -97,7 +102,7 @@ export default function AuthPage() {
       setTimeout(() => inputRefs.current[0]?.focus(), 50)
       return
     }
-    if (selectedRole.role !== 'CUSTOMER' && res.user.role !== selectedRole.role) {
+    if (selectedRole.role !== 'CUSTOMER' && !signInPortalMatches(res.user.role, selectedRole.role)) {
       setError(
         selectedRole.role === 'VENDOR'
           ? 'This email is not registered as a merchant.'
@@ -110,6 +115,7 @@ export default function AuthPage() {
     login(res.token, res.user)
     const destination = await resolveDestination(
       res.user.role as 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+      selectedRole.role,
       returnTo,
       selectedRole.redirect,
     )

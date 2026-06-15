@@ -42,10 +42,10 @@ export async function getOnboardingStatusAction(): Promise<OnboardingStatus | nu
 
     const profile = await prisma.rabbitorProfile.findUnique({
       where: { userId: session.userId },
-      select: { id: true, isVerified: true },
+      select: { id: true, isVerified: true, isOnboarded: true },
     })
 
-    const complete = Boolean(profile)
+    const complete = Boolean(profile?.isOnboarded)
     return {
       complete,
       nextPath: complete ? null : '/delivery/login?setup=1',
