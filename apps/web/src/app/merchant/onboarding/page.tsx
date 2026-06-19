@@ -1,31 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, Store } from 'lucide-react'
-
-const STORE_TYPES = [
-  'KIRANA',
-  'FISH',
-  'VEGETABLE',
-  'PHARMACY',
-  'BAKERY',
-  'DAIRY',
-  'MEAT',
-  'GENERAL',
-] as const
+import {
+  StoreTypeSelector,
+  type StoreTypeSelection,
+} from '@/components/merchant/StoreTypeSelector'
+import { findCategoryById } from '@/lib/store-category-options'
 
 const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
-type StoreType = (typeof STORE_TYPES)[number]
 type DayKey = (typeof WEEKDAYS)[number]
 
 type OpeningHours = Record<DayKey, { open: string; close: string }>
 
 type FormData = {
   name: string
-  storeType: StoreType
+  categoryId: string
+  customCategory: string
   description: string
   address: string
   latitude: string
@@ -46,9 +40,19 @@ export default function MerchantOnboardingPage() {
   const [step, setStep] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [storeTypeSelection, setStoreTypeSelection] = useState<StoreTypeSelection | null>(
+    findCategoryById('general')
+      ? {
+          categoryId: 'general',
+          categoryLabel: 'General',
+          platformStoreType: 'GENERAL',
+        }
+      : null,
+  )
   const [form, setForm] = useState<FormData>({
     name: '',
-    storeType: 'GENERAL',
+    categoryId: 'general',
+    customCategory: '',
     description: '',
     address: '',
     latitude: '19.1364',
@@ -65,13 +69,26 @@ export default function MerchantOnboardingPage() {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  const canContinueStep1 = form.name.trim().length > 0 && form.description.trim().length > 0
+  const handleResolvedChange = useCallback((selection: StoreTypeSelection | null) => {
+    setStoreTypeSelection(selection)
+  }, [])
+
+  const canContinueStep1 =
+    form.name.trim().length > 0 &&
+    form.description.trim().length > 0 &&
+    storeTypeSelection != null
+
   const canContinueStep2 =
     form.address.trim().length > 0 &&
     !Number.isNaN(parseFloat(form.latitude)) &&
     !Number.isNaN(parseFloat(form.longitude))
 
   const handleSubmit = async () => {
+    if (!storeTypeSelection) {
+      setError('Please select a valid store type.')
+      return
+    }
+
     setSubmitting(true)
     setError(null)
 
@@ -81,7 +98,8 @@ export default function MerchantOnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim(),
-          storeType: form.storeType,
+          storeType: storeTypeSelection.platformStoreType,
+          category: storeTypeSelection.categoryLabel,
           description: form.description.trim(),
           address: form.address.trim(),
           latitude: parseFloat(form.latitude),
@@ -93,16 +111,22 @@ export default function MerchantOnboardingPage() {
         }),
       })
 
-      const json = await response.json()
-      if (!json.success) {
-        setError(typeof json.error === 'string' ? json.error : 'Could not create store')
+      const json = await response.json().catch(() => null)
+      if (!response.ok || !json?.success) {
+        setError(
+          typeof json?.error === 'string'
+            ? json.error
+            : response.status === 503
+              ? 'Service temporarily unavailable — please try again'
+              : 'Could not create store',
+        )
         return
       }
 
       router.push('/merchant')
       router.refresh()
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -149,20 +173,16 @@ export default function MerchantOnboardingPage() {
                 placeholder="Masoli House"
               />
             </label>
-            <label className="block space-y-1">
-              <span className="text-sm font-medium text-gray-700">Store type</span>
-              <select
-                value={form.storeType}
-                onChange={(e) => updateField('storeType', e.target.value as StoreType)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-rabbit-500 focus:outline-none"
-              >
-                {STORE_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type.charAt(0) + type.slice(1).toLowerCase()}
-                  </option>
-                ))}
-              </select>
-            </label>
+
+            <StoreTypeSelector
+              categoryId={form.categoryId}
+              customCategory={form.customCategory}
+              shopName={form.name}
+              onCategoryIdChange={(id) => updateField('categoryId', id)}
+              onCustomCategoryChange={(value) => updateField('customCategory', value)}
+              onResolvedChange={handleResolvedChange}
+            />
+
             <label className="block space-y-1">
               <span className="text-sm font-medium text-gray-700">Description</span>
               <textarea
@@ -304,8 +324,10 @@ export default function MerchantOnboardingPage() {
                 <dd className="font-semibold text-gray-900">{form.name}</dd>
               </div>
               <div className="flex justify-between border-b border-gray-50 pb-2">
-                <dt className="text-gray-500">Type</dt>
-                <dd className="font-semibold text-gray-900">{form.storeType}</dd>
+                <dt className="text-gray-500">Store type</dt>
+                <dd className="font-semibold text-gray-900">
+                  {storeTypeSelection?.categoryLabel ?? '—'}
+                </dd>
               </div>
               <div className="flex justify-between border-b border-gray-50 pb-2">
                 <dt className="text-gray-500">Description</dt>

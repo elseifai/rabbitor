@@ -5,10 +5,12 @@ import { useSecureSessionCookies } from './cookie-options'
 import { prisma } from './prisma'
 import { sendEmail, verificationEmailHtml } from './email'
 import { DEV_OTP_CODE, isDevOtpBypassEnabled } from './dev-auth'
+import { getPublicAppOrigin } from './public-app-url'
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? 'rabbit-dev-secret-change-in-production',
-)
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET is not set. Run: openssl rand -base64 32')
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
 import { SESSION_COOKIE } from './auth-session'
 
 export { SESSION_COOKIE }
@@ -56,35 +58,42 @@ function mergeGoogleProfile(
 }
 
 /**
- * Partner OAuth JIT — allow CUSTOMER → VENDOR/RABBITOR upgrade when profile tables
- * are not set up yet. RoleOnboardingGate handles store/rider setup after sign-in.
+ * DB role — upgraded on partner sign-up; never downgraded when browsing as customer.
  */
-function resolveOAuthUserRole(
+function resolveDbRole(
   email: string,
   existingRole: string | null | undefined,
-  requestedRole?: Role,
+  portalRole: Role,
 ): Role {
-  const target = requestedRole ?? 'CUSTOMER'
-  const normalizedEmail = email.toLowerCase()
-  const bootstrapAdmin = isBootstrapAdminEmail(normalizedEmail)
+  const bootstrapAdmin = isBootstrapAdminEmail(email.toLowerCase())
 
-  if (target === 'ADMIN') {
+  if (portalRole === 'ADMIN') {
     if (bootstrapAdmin || existingRole === 'ADMIN') return 'ADMIN'
     throw new GoogleAuthRoleMismatchError('ADMIN', existingRole ?? 'CUSTOMER')
   }
 
-  if (target === 'VENDOR' || target === 'RABBITOR') {
-    if (!existingRole || existingRole === 'CUSTOMER' || existingRole === target) {
-      return target
+  if (portalRole === 'RABBITOR') return 'RABBITOR'
+
+  if (portalRole === 'VENDOR') {
+    if (!existingRole || existingRole === 'CUSTOMER' || existingRole === 'VENDOR') {
+      return 'VENDOR'
     }
-    // Platform admins keep ADMIN in DB but may open merchant/rider portals.
-    if (bootstrapAdmin && existingRole === 'ADMIN') {
-      return 'ADMIN'
-    }
-    throw new GoogleAuthRoleMismatchError(target, existingRole)
+    if (bootstrapAdmin && existingRole === 'ADMIN') return 'ADMIN'
+    throw new GoogleAuthRoleMismatchError('VENDOR', existingRole)
   }
 
   return (existingRole as Role) ?? 'CUSTOMER'
+}
+
+function shouldUpgradeDbRole(current: string, next: Role): boolean {
+  if (next === 'CUSTOMER') return false
+  if (current === next) return false
+  return true
+}
+
+function resolvePortalRole(portalRole?: Role, fallbackDbRole?: string | null): Role {
+  if (portalRole) return portalRole
+  return (fallbackDbRole as Role) ?? 'CUSTOMER'
 }
 
 export class GoogleAuthRoleMismatchError extends Error {
@@ -124,38 +133,38 @@ function normalizeEmail(email: string): string {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.PUBLIC_APP_URL ??
-    'http://localhost:3000'
-  )
+  return getPublicAppOrigin()
 }
 
-/** Signs a JWT for the user and sets the httpOnly session cookie. */
-async function createSession(user: {
-  id: string
-  phone: string | null
-  email: string | null
-  role: string
-}): Promise<string> {
+/** Cookie options shared by server actions and OAuth redirect responses. */
+export function getSessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: useSecureSessionCookies(),
+    sameSite: 'lax' as const,
+    maxAge: 60 * 60 * 24 * 7,
+    path: '/',
+  }
+}
+
+/** Signs a JWT — `portalRole` is the active UI portal; DB role may differ. */
+async function createSession(
+  user: { id: string; phone: string | null; email: string | null; role: string },
+  portalRole?: Role,
+): Promise<string> {
+  const sessionRole = resolvePortalRole(portalRole, user.role)
   const token = await new SignJWT({
     userId: user.id,
     phone: user.phone,
     email: user.email,
-    role: user.role,
+    role: sessionRole,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
     .sign(JWT_SECRET)
 
   const cookieStore = await cookies()
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: useSecureSessionCookies(),
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7,
-    path: '/',
-  })
+  cookieStore.set(SESSION_COOKIE, token, getSessionCookieOptions())
   return token
 }
 
@@ -168,20 +177,23 @@ async function verifySessionToken(token: string): Promise<SessionPayload | null>
   }
 }
 
-function toAuthUser(user: {
-  id: string
-  name: string
-  phone: string | null
-  email: string | null
-  role: string
-  displayName: string | null
-}): AuthUser {
+function toAuthUser(
+  user: {
+    id: string
+    name: string
+    phone: string | null
+    email: string | null
+    role: string
+    displayName: string | null
+  },
+  portalRole?: Role,
+): AuthUser {
   return {
     id: user.id,
     name: user.name,
     phone: user.phone,
     email: user.email,
-    role: user.role,
+    role: portalRole ?? user.role,
     displayName: user.displayName,
   }
 }
@@ -199,8 +211,18 @@ function normalizePhone(phone: string): string {
 
 export async function sendOtp(phone: string): Promise<{ success: boolean; devCode?: string }> {
   const normalized = normalizePhone(phone)
-  const isProd = process.env.NODE_ENV === 'production'
+  const bypass = isDevOtpBypassEnabled()
+  const isProd = process.env.NODE_ENV === 'production' && !bypass
   const code = isProd ? randomInt(100000, 999999).toString() : DEV_OTP
+
+  // Rate limit: max 5 OTP requests per phone per hour
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+  const recentCount = await prisma.otpChallenge.count({
+    where: { phone: normalized, createdAt: { gt: oneHourAgo } },
+  })
+  if (recentCount >= 5) {
+    throw new Error('Too many OTP requests. Please try again in an hour.')
+  }
 
   // Delete old unverified challenges for this phone
   await prisma.otpChallenge.deleteMany({
@@ -218,20 +240,27 @@ export async function sendOtp(phone: string): Promise<{ success: boolean; devCod
   if (isProd) {
     const msg91Key = process.env.MSG91_AUTH_KEY
     const msg91Template = process.env.MSG91_TEMPLATE_ID
-    if (msg91Key && msg91Template) {
-      try {
-        const res = await fetch('https://api.msg91.com/api/v5/otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', authkey: msg91Key },
-          body: JSON.stringify({ template_id: msg91Template, mobile: `91${normalized}`, otp: code }),
-        })
-        if (!res.ok) console.warn('[OTP] MSG91 error:', await res.text().catch(() => ''))
-      } catch (err) {
-        console.warn('[OTP] MSG91 failed:', (err as Error).message)
-      }
-    } else {
-      console.warn('[OTP] MSG91 not configured — OTP will not be sent in production')
+
+    if (!msg91Key || !msg91Template) {
+      throw new Error('OTP service is not configured. Please contact support.')
     }
+
+    const res = await fetch('https://api.msg91.com/api/v5/otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', authkey: msg91Key },
+      body: JSON.stringify({
+        template_id: msg91Template,
+        mobile: `91${normalized}`,
+        otp: code,
+      }),
+    })
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => 'unknown error')
+      console.error('[OTP] MSG91 error:', body)
+      throw new Error('Could not send OTP. Please try again.')
+    }
+
     return { success: true }
   }
 
@@ -261,8 +290,9 @@ export async function verifyOtp(
         error: 'Test user not found for this phone. Run `pnpm db:seed`.',
       }
     }
-    const token = await createSession(user)
-    return { success: true, token, user: toAuthUser(user) }
+    const portalRole = resolvePortalRole(role, user.role)
+    const token = await createSession(user, portalRole)
+    return { success: true, token, user: toAuthUser(user, portalRole) }
   }
 
   const challenge = await prisma.otpChallenge.findFirst({
@@ -292,18 +322,25 @@ export async function verifyOtp(
   })
 
   let user = await prisma.user.findUnique({ where: { phone: normalized } })
+  const portalRole = resolvePortalRole(role, user?.role)
+
   if (!user) {
     user = await prisma.user.create({
       data: {
         phone: normalized,
         name: `User ${normalized.slice(-4)}`,
-        role: role ?? 'CUSTOMER',
+        role: portalRole === 'CUSTOMER' ? 'CUSTOMER' : portalRole,
       },
+    })
+  } else if (role && role !== 'CUSTOMER' && shouldUpgradeDbRole(user.role, role)) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { role },
     })
   }
 
-  const token = await createSession(user)
-  return { success: true, token, user: toAuthUser(user) }
+  const token = await createSession(user, portalRole)
+  return { success: true, token, user: toAuthUser(user, portalRole) }
 }
 
 /** Creates an email OTP + magic-link challenge and emails it. */
@@ -330,16 +367,18 @@ export async function sendEmailOtp(
   })
 
   const link = `${appUrl()}/auth/verify?token=${token}`
-  try {
-    await sendEmail({
-      to: normalized,
-      subject: `Your Rabbit verification code: ${code}`,
-      html: verificationEmailHtml(code, link),
-    })
-  } catch (err) {
-    const message = (err as Error).message
-    console.warn('[EMAIL] send failed:', message)
-    return { success: false, error: message }
+  if (!bypass) {
+    try {
+      await sendEmail({
+        to: normalized,
+        subject: `Your Rabbit verification code: ${code}`,
+        html: verificationEmailHtml(code, link),
+      })
+    } catch (err) {
+      const message = (err as Error).message
+      console.warn('[EMAIL] send failed:', message)
+      return { success: false, error: message }
+    }
   }
 
   if (bypass || !isProd) {
@@ -399,9 +438,10 @@ async function finalizeEmailChallenge(
   await prisma.emailVerification.update({ where: { id: challengeId }, data: { verified: true } })
 
   let user = await prisma.user.findUnique({ where: { email } })
-  let effectiveRole: Role
+  const portalRole = resolvePortalRole(requestedRole ?? storedRole ?? undefined, user?.role)
+  let dbRole: Role
   try {
-    effectiveRole = resolveOAuthUserRole(email, user?.role, requestedRole ?? storedRole ?? undefined)
+    dbRole = resolveDbRole(email, user?.role, portalRole)
   } catch (err) {
     if (err instanceof GoogleAuthRoleMismatchError) {
       return {
@@ -423,7 +463,7 @@ async function finalizeEmailChallenge(
         email,
         emailVerified: new Date(),
         name: email.split('@')[0],
-        role: effectiveRole,
+        role: dbRole,
       },
     })
   } else {
@@ -431,13 +471,13 @@ async function finalizeEmailChallenge(
       where: { id: user.id },
       data: {
         emailVerified: user.emailVerified ?? new Date(),
-        ...(user.role !== effectiveRole ? { role: effectiveRole } : {}),
+        ...(shouldUpgradeDbRole(user.role, dbRole) ? { role: dbRole } : {}),
       },
     })
   }
 
-  const token = await createSession(user)
-  return { success: true, token, user: toAuthUser(user) }
+  const token = await createSession(user, portalRole)
+  return { success: true, token, user: toAuthUser(user, portalRole) }
 }
 
 /** Upserts a Google-authenticated user and sets the session. */
@@ -456,7 +496,8 @@ export async function signInWithGoogle(
   })
 
   const displayName = profile.name?.trim() || email.split('@')[0]
-  const effectiveRole = resolveOAuthUserRole(email, user?.role, role)
+  const portalRole = resolvePortalRole(role, user?.role)
+  const dbRole = resolveDbRole(email, user?.role, portalRole)
 
   if (!user) {
     user = await prisma.user.create({
@@ -467,7 +508,7 @@ export async function signInWithGoogle(
         name: displayName,
         displayName,
         avatarUrl: profile.picture ?? null,
-        role: effectiveRole,
+        role: dbRole,
       },
     })
   } else {
@@ -475,13 +516,13 @@ export async function signInWithGoogle(
       where: { id: user.id },
       data: {
         ...mergeGoogleProfile(user, profile),
-        ...(user.role !== effectiveRole ? { role: effectiveRole } : {}),
+        ...(shouldUpgradeDbRole(user.role, dbRole) ? { role: dbRole } : {}),
       },
     })
   }
 
-  const token = await createSession(user)
-  return { token, user: toAuthUser(user) }
+  const token = await createSession(user, portalRole)
+  return { token, user: toAuthUser(user, portalRole) }
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -513,7 +554,7 @@ export async function resolveSessionUser(session: SessionPayload) {
     user = await prisma.user.findUnique({ where: { phone: session.phone } })
   }
   if (user) {
-    await createSession(user)
+    await createSession(user, session.role as Role)
     return user
   }
 
@@ -542,7 +583,31 @@ export async function getCurrentAuth(): Promise<{ token: string; user: AuthUser 
     }
   }
 
-  return { token, user: toAuthUser(user) }
+  return { token, user: toAuthUser(user, session.role as Role) }
+}
+
+/** Re-issue JWT with CUSTOMER portal so storefront checkout works for partner accounts. */
+export async function switchToCustomerPortal(): Promise<{ token: string; user: AuthUser } | null> {
+  const session = await getSession()
+  if (!session) return null
+
+  const user = await resolveSessionUser(session)
+  if (!user) return null
+
+  if (session.role === 'CUSTOMER') {
+    const cookieStore = await cookies()
+    let token = cookieStore.get(SESSION_COOKIE)?.value ?? ''
+    if (!token) {
+      const authHeader = (await headers()).get('authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.slice(7)
+      }
+    }
+    return { token, user: toAuthUser(user, 'CUSTOMER') }
+  }
+
+  const token = await createSession(user, 'CUSTOMER')
+  return { token, user: toAuthUser(user, 'CUSTOMER') }
 }
 
 export async function requireSession(roles?: string[]): Promise<SessionPayload> {
@@ -556,10 +621,10 @@ export async function requireSession(roles?: string[]): Promise<SessionPayload> 
     userId: user.id,
     phone: user.phone,
     email: user.email,
-    role: user.role,
+    role: session.role,
   }
 
-  if (roles && !roles.includes(user.role)) {
+  if (roles && !roles.includes(user.role) && user.role !== 'ADMIN') {
     throw new Error('Access denied')
   }
 

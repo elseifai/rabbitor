@@ -37,16 +37,37 @@ function mapNetworkState(
 
 export function useMerchantOrderSocket(
   token: string | null,
-  storeId: string | null,
+  storeIds: string[] | string | null,
   onNewOrder: (order: MerchantNewOrderEvent) => void,
+  onRiderStage?: (payload: { orderId: string; stage: string }) => void,
+  onOrderStatus?: (payload: { orderId: string; status: string }) => void,
+  onFeedback?: (payload: {
+    orderId: string
+    shopRating: number
+    riderRating: number
+    comment: string | null
+  }) => void,
 ) {
   const { connected, reconnecting } = useSocket()
   const onNewOrderRef = useRef(onNewOrder)
+  const onRiderStageRef = useRef(onRiderStage)
+  const onOrderStatusRef = useRef(onOrderStatus)
+  const onFeedbackRef = useRef(onFeedback)
   const [joinError, setJoinError] = useState<string | null>(null)
 
   onNewOrderRef.current = onNewOrder
+  onRiderStageRef.current = onRiderStage
+  onOrderStatusRef.current = onOrderStatus
+  onFeedbackRef.current = onFeedback
 
-  const hasCredentials = Boolean(token && storeId)
+  const normalizedStoreIds = Array.isArray(storeIds)
+    ? storeIds
+    : storeIds
+      ? [storeIds]
+      : []
+  const storeKey = normalizedStoreIds.join(',')
+
+  const hasCredentials = Boolean(token && normalizedStoreIds.length > 0)
   const connectionState = mapNetworkState(
     hasCredentials,
     connected,
@@ -55,13 +76,15 @@ export function useMerchantOrderSocket(
   )
 
   useEffect(() => {
-    if (!token || !storeId) {
+    if (!token || normalizedStoreIds.length === 0) {
       setJoinError(null)
       return
     }
 
     setJoinError(null)
-    const releaseRoom = socketClient.acquireStoreRoom(storeId, { token })
+    const releaseRooms = normalizedStoreIds.map((storeId) =>
+      socketClient.acquireStoreRoom(storeId, { token }),
+    )
 
     const handleStoreJoined = () => setJoinError(null)
     const handleStoreJoinError = (payload: { message?: string }) => {
@@ -70,19 +93,47 @@ export function useMerchantOrderSocket(
     const handleNewOrder = (payload: MerchantNewOrderEvent) => {
       onNewOrderRef.current(payload)
     }
+    const handleRiderStage = (payload: { orderId?: string; stage?: string }) => {
+      if (payload.orderId && payload.stage) {
+        onRiderStageRef.current?.({ orderId: payload.orderId, stage: payload.stage })
+      }
+    }
+    const handleOrderStatus = (payload: { orderId?: string; status?: string }) => {
+      if (payload.orderId && payload.status) {
+        onOrderStatusRef.current?.({ orderId: payload.orderId, status: payload.status })
+      }
+    }
+    const handleFeedback = (payload: {
+      orderId?: string
+      shopRating?: number
+      riderRating?: number
+      comment?: string | null
+    }) => {
+      if (payload.orderId) {
+        onFeedbackRef.current?.({
+          orderId: payload.orderId,
+          shopRating: payload.shopRating ?? 0,
+          riderRating: payload.riderRating ?? 0,
+          comment: payload.comment ?? null,
+        })
+      }
+    }
 
     const unsubs = [
       socketClient.on('store-joined', handleStoreJoined),
       socketClient.on('store-join-error', handleStoreJoinError),
       socketClient.on('NEW_ORDER', handleNewOrder),
+      socketClient.on('RIDER_STAGE_UPDATED', handleRiderStage),
+      socketClient.on('ORDER_STATUS_UPDATED', handleOrderStatus),
+      socketClient.on('FEEDBACK_RECEIVED', handleFeedback),
     ]
 
     return () => {
       unsubs.forEach((off) => off())
-      releaseRoom()
+      releaseRooms.forEach((release) => release())
       setJoinError(null)
     }
-  }, [token, storeId])
+  }, [token, storeKey])
 
   return { connectionState, joinError }
 }

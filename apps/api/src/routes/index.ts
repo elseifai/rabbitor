@@ -13,6 +13,7 @@ import rabbitorRoutes from "./rabbitor.routes";
 import merchantRoutes from "./merchant.routes";
 import internalRoutes from "./internal.routes";
 import adsRoutes from "./ads.routes";
+import analyticsRoutes from "./analytics.routes";
 import { prisma } from "../lib/prisma";
 import { getRedis } from "../lib/redis";
 
@@ -63,6 +64,7 @@ router.use("/merchant", merchantRoutes);
 router.use("/orders", ordersRoutes);
 router.use("/payments", paymentsRoutes);
 router.use("/ads", adsRoutes);
+router.use("/analytics", analyticsRoutes);
 router.use("/internal", internalRoutes);
 
 export default router;

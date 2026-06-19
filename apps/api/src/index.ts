@@ -1,4 +1,4 @@
-import express from "express";
+import express, { raw } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -9,6 +9,8 @@ import { connectRedis } from "./lib/redis";
 import { errorHandler } from "./middleware/errorHandler";
 import routes from "./routes";
 import { setupTrackingSocket } from "./socket/tracking";
+import * as paymentService from "./services/payment.service";
+import { expireStalePendingPaymentOrders } from "./services/order.service";
 
 validateConfig();
 
@@ -36,7 +38,44 @@ const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigins, credentials: true }));
+
+app.post(
+  "/api/v1/payments/webhook",
+  raw({ type: "application/json" }),
+  async (req, res, next) => {
+    try {
+      const signature = req.headers["x-razorpay-signature"];
+      if (typeof signature !== "string") {
+        res.status(400).json({ success: false, error: "Missing signature" });
+        return;
+      }
+      const rawBody = req.body instanceof Buffer ? req.body.toString("utf8") : String(req.body ?? "");
+      const result = await paymentService.handleRazorpayWebhook(rawBody, signature);
+      res.json({ success: true, data: result });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 app.use(express.json({ limit: "2mb" }));
+
+if (config.nodeEnv === "production") {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      console.log(
+        JSON.stringify({
+          method: req.method,
+          path: req.originalUrl,
+          status: res.statusCode,
+          ms: Date.now() - start,
+        }),
+      );
+    });
+    next();
+  });
+}
 
 app.use("/api/v1/auth", authLimiter);
 app.use("/api/v1/otp", authLimiter);
@@ -58,6 +97,14 @@ async function start() {
   });
 
   setupTrackingSocket(io);
+
+  setInterval(() => {
+    void expireStalePendingPaymentOrders().then((count) => {
+      if (count > 0) {
+        console.log(`[orders] auto-cancelled ${count} stale pending payment order(s)`);
+      }
+    });
+  }, 5 * 60 * 1000);
 
   httpServer.listen(config.port, () => {
     console.log(`🐰 Rabbit API + Socket.io on http://localhost:${config.port}`);

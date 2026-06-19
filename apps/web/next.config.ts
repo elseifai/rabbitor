@@ -8,6 +8,27 @@ const securityHeaders = [
     key: 'Permissions-Policy',
     value: 'camera=(), microphone=(), geolocation=(self), interest-cohort=()',
   },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      // Next.js needs unsafe-inline for styles; tighten after moving to CSS modules/nonce
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      // Scripts: self + Next.js inline chunks (unsafe-inline required until nonce setup)
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+      // API, socket, Firebase, MSG91, Razorpay
+      "connect-src 'self' https://api.msg91.com https://fcm.googleapis.com https://firebaseinstallations.googleapis.com https://api.razorpay.com wss:",
+      // Images: all configured remote patterns
+      "img-src 'self' data: blob: https://images.unsplash.com https://plus.unsplash.com https://res.cloudinary.com https://placehold.co https://picsum.photos https://lh3.googleusercontent.com https://avatars.githubusercontent.com https://cdn.zeptonow.com https://www.bigbasket.com",
+      // Service worker for Firebase messaging
+      "worker-src 'self' blob:",
+      "frame-src https://checkout.razorpay.com https://api.razorpay.com",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; '),
+  },
 ]
 
 const nextConfig: NextConfig = {
@@ -34,6 +55,9 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }]
+  },
+  async redirects() {
+    return [{ source: '/home', destination: '/', permanent: true }]
   },
 }
 

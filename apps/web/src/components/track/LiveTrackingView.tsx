@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, MapPin, Phone, Star } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone } from 'lucide-react'
 import type { OrderStatus } from '@rabbit/database'
 import { useOrderSocket } from '@/hooks/useOrderSocket'
 import { useCartStore } from '@/store'
@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/utils'
 import { labelToOrderStatus, trackingFromOrderStatus } from '@/lib/tracking-status'
 import { ProductImage } from '@/components/products/ProductImage'
 import { RabbitProgressTrack } from '@/components/track/RabbitProgressTrack'
+import { OrderFeedbackModal } from '@/components/feedback/OrderFeedbackModal'
 import dynamic from 'next/dynamic'
 
 const GoogleOrderMap = dynamic(
@@ -101,11 +102,8 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
-  const [shopRating, setShopRating] = useState(0)
-  const [riderRating, setRiderRating] = useState(0)
-  const [reviewComment, setReviewComment] = useState('')
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
-  const [reviewLoading, setReviewLoading] = useState(false)
 
   const syncOrder = useCallback(async () => {
     try {
@@ -182,27 +180,11 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
     return `Arriving in ~${eta} mins`
   }, [delivered, currentStatus, countdown, eta])
 
-  const handleSubmitReview = async () => {
-    if (shopRating < 1 || riderRating < 1) return
-    setReviewLoading(true)
-    try {
-      await fetch('/api/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-        body: JSON.stringify({
-          orderId,
-          shopRating,
-          riderRating,
-          comment: reviewComment.trim() || undefined,
-        }),
-      })
-      setReviewSubmitted(true)
-    } catch {
-      /* stub OK */
-    } finally {
-      setReviewLoading(false)
-    }
-  }
+  useEffect(() => {
+    if (order?.status !== 'DELIVERED' || reviewSubmitted) return
+    const timer = window.setTimeout(() => setFeedbackOpen(true), 800)
+    return () => window.clearTimeout(timer)
+  }, [order?.status, reviewSubmitted])
 
   if (loading) {
     return (
@@ -390,61 +372,40 @@ export function LiveTrackingView({ orderId }: { orderId: string }) {
         </div>
       )}
 
-      {/* Rate order */}
-      {delivered && !reviewSubmitted && (
-        <div className="mx-4 mt-4 rounded-xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold">Rate your order</h2>
-          <div className="mt-4">
-            <p className="text-xs font-semibold text-slate-500">Shop rating</p>
-            <StarRow value={shopRating} onChange={setShopRating} />
-          </div>
-          <div className="mt-3">
-            <p className="text-xs font-semibold text-slate-500">Rider rating</p>
-            <StarRow value={riderRating} onChange={setRiderRating} />
-          </div>
-          <textarea
-            value={reviewComment}
-            onChange={(e) => setReviewComment(e.target.value)}
-            placeholder="Optional comment…"
-            rows={3}
-            className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-          />
+      {/* Rate order prompt */}
+      {delivered && !reviewSubmitted && !feedbackOpen && (
+        <div className="mx-4 mt-4 rounded-xl bg-white p-4 text-center shadow-sm">
+          <p className="text-sm font-bold text-slate-900">How was your order?</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Rate {order.shop.name} and your delivery experience
+          </p>
           <button
             type="button"
-            onClick={() => void handleSubmitReview()}
-            disabled={reviewLoading || shopRating < 1 || riderRating < 1}
-            className="mt-3 w-full rounded-xl bg-[#FF6B35] py-3 text-sm font-bold text-white disabled:opacity-50"
+            onClick={() => setFeedbackOpen(true)}
+            className="mt-4 w-full rounded-xl bg-[#FF6B35] py-3 text-sm font-bold text-white"
           >
-            {reviewLoading ? 'Submitting…' : 'Submit Review'}
+            Leave feedback
           </button>
         </div>
       )}
 
       {reviewSubmitted && (
         <p className="mx-4 mt-4 rounded-xl bg-green-50 p-4 text-center text-sm font-semibold text-green-700">
-          Thanks for your review! 🎉
+          Thanks for your feedback!
         </p>
       )}
-    </div>
-  )
-}
 
-function StarRow({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  return (
-    <div className="mt-1 flex gap-1">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          className="p-0.5"
-          aria-label={`${n} stars`}
-        >
-          <Star
-            className={`h-7 w-7 ${n <= value ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`}
-          />
-        </button>
-      ))}
+      <OrderFeedbackModal
+        open={feedbackOpen}
+        orderId={orderId}
+        shopName={order.shop.name}
+        riderName={order.rabbitorName}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmitted={() => {
+          setReviewSubmitted(true)
+          setFeedbackOpen(false)
+        }}
+      />
     </div>
   )
 }

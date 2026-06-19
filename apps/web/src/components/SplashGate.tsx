@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { RabbitSplashScreen } from '@/components/RabbitSplashScreen'
 
 export function SplashGate({ children }: { children: React.ReactNode }) {
-  const [showSplash, setShowSplash] = useState(false)
+  // null = not yet checked, true = show splash, false = done
+  const [showSplash, setShowSplash] = useState<boolean | null>(null)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
     const seen = sessionStorage.getItem('splash_shown')
-    if (!seen) setShowSplash(true)
+    setShowSplash(!seen)
   }, [])
 
   const onDone = useCallback(() => {
@@ -17,10 +17,12 @@ export function SplashGate({ children }: { children: React.ReactNode }) {
     setShowSplash(false)
   }, [])
 
-  return (
-    <>
-      {showSplash && <RabbitSplashScreen onDone={onDone} />}
-      {children}
-    </>
-  )
+  // Don't render anything until we've checked sessionStorage
+  // This prevents a flash of children before splash appears
+  if (showSplash === null) return null
+
+  if (showSplash) return <RabbitSplashScreen onDone={onDone} />
+
+  // Splash is done — render children only, no overlay
+  return <>{children}</>
 }

@@ -17,6 +17,8 @@ export interface DeliveryOfferEvent {
   requiresAccept: true
 }
 
+export type DeliveryAssignedEvent = Omit<DeliveryOfferEvent, 'expiresInSeconds' | 'requiresAccept'>
+
 type ConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 function mapNetworkState(
@@ -36,12 +38,23 @@ export function useRiderSocket(
   token: string | null,
   isOnline: boolean,
   onOffer: (offer: DeliveryOfferEvent) => void,
+  onAssigned?: (assignment: DeliveryAssignedEvent) => void,
+  onFeedback?: (payload: {
+    orderId: string
+    shopRating: number
+    riderRating: number
+    comment: string | null
+  }) => void,
 ) {
   const { connected, reconnecting } = useSocket()
   const onOfferRef = useRef(onOffer)
+  const onAssignedRef = useRef(onAssigned)
+  const onFeedbackRef = useRef(onFeedback)
   const [joinError, setJoinError] = useState<string | null>(null)
 
   onOfferRef.current = onOffer
+  onAssignedRef.current = onAssigned
+  onFeedbackRef.current = onFeedback
 
   const active = Boolean(token && isOnline)
   const connectionState = mapNetworkState(active, connected, reconnecting, joinError)
@@ -60,11 +73,29 @@ export function useRiderSocket(
       setJoinError(payload.message ?? 'Could not join rider channel')
     }
     const onOffer = (payload: DeliveryOfferEvent) => onOfferRef.current(payload)
+    const onAssigned = (payload: DeliveryAssignedEvent) => onAssignedRef.current?.(payload)
+    const onFeedback = (payload: {
+      orderId?: string
+      shopRating?: number
+      riderRating?: number
+      comment?: string | null
+    }) => {
+      if (payload.orderId) {
+        onFeedbackRef.current?.({
+          orderId: payload.orderId,
+          shopRating: payload.shopRating ?? 0,
+          riderRating: payload.riderRating ?? 0,
+          comment: payload.comment ?? null,
+        })
+      }
+    }
 
     const unsubs = [
       socketClient.on('rider-joined', onRiderJoined),
       socketClient.on('rider-join-error', onRiderJoinError),
       socketClient.on('DELIVERY_OFFERED', onOffer),
+      socketClient.on('DELIVERY_ASSIGNED', onAssigned),
+      socketClient.on('FEEDBACK_RECEIVED', onFeedback),
     ]
 
     return () => {

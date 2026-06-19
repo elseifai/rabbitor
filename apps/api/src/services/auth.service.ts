@@ -1,4 +1,4 @@
-import { randomInt } from "crypto";
+import { randomInt, createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { UserRole } from "@rabbit/database";
@@ -13,12 +13,18 @@ import {
   isPrivilegedRole,
 } from "../lib/google-auth";
 
-const SALT_ROUNDS = 10;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_ACTIVE_CHALLENGES = 3;
 const MAX_OTP_ATTEMPTS = 5;
+const MAX_OTP_SENDS_PER_HOUR = 5;
 /** DEV ONLY BYPASS — static OTP for seeded test accounts. */
 const DEV_OTP = "123456";
+
+function hashOtp(code: string): string {
+  return createHash("sha256").update(code.trim()).digest("hex");
+}
+
+const SALT_ROUNDS = 10;
 
 function isDevOtpBypassEnabled(): boolean {
   return (
@@ -41,6 +47,18 @@ function generateOtpCode(): string {
 export async function sendOtp(phone: string) {
   const normalized = normalizePhone(phone);
 
+  await prisma.otpChallenge.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const recentSends = await prisma.otpChallenge.count({
+    where: { phone: normalized, createdAt: { gt: oneHourAgo } },
+  });
+  if (recentSends >= MAX_OTP_SENDS_PER_HOUR) {
+    throw badRequest("Too many OTP requests. Please try again in an hour.", "OTP_RATE_LIMITED");
+  }
+
   const activeCount = await prisma.otpChallenge.count({
     where: {
       phone: normalized,
@@ -54,7 +72,7 @@ export async function sendOtp(phone: string) {
   }
 
   const code = generateOtpCode();
-  const codeHash = await bcrypt.hash(code, SALT_ROUNDS);
+  const codeHash = hashOtp(code);
 
   await prisma.otpChallenge.create({
     data: {
@@ -113,7 +131,7 @@ export async function verifyOtp(phone: string, code: string) {
     throw unauthorized("Too many attempts. Request a new OTP.");
   }
 
-  const valid = await bcrypt.compare(trimmedCode, challenge.codeHash);
+  const valid = challenge.codeHash === hashOtp(trimmedCode);
   if (!valid) {
     await prisma.otpChallenge.update({
       where: { id: challenge.id },

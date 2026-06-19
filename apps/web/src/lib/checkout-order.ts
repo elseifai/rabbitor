@@ -358,3 +358,122 @@ export async function createPaidOrderFromCheckout(params: {
 
   return result.order
 }
+
+export async function createCodOrderFromCheckout(params: {
+  customerId: string
+  checkout: ValidatedCheckout
+}) {
+  const { customerId, checkout } = params
+
+  const result = await prisma.$transaction(async (tx) => {
+    if (checkout.couponId) {
+      const coupon = await tx.coupon.findUnique({ where: { id: checkout.couponId } })
+      if (!coupon || !coupon.isActive || coupon.usedCount >= coupon.maxUses) {
+        throw new Error('Coupon is no longer valid')
+      }
+      await tx.coupon.update({
+        where: { id: checkout.couponId },
+        data: { usedCount: { increment: 1 } },
+      })
+    }
+
+    for (const shop of checkout.shops) {
+      for (const item of shop.lineItems) {
+        const product = await tx.product.findUnique({ where: { id: item.productId } })
+        if (!product || !product.isAvailable || product.stock < item.quantity) {
+          throw new Error(`Insufficient stock for ${product?.name ?? 'an item'}`)
+        }
+      }
+    }
+
+    const isMulti = checkout.isMultiShop
+    const orderKind = isMulti ? 'PARENT' : 'STANDARD'
+
+    const parent = await tx.order.create({
+      data: {
+        orderNumber: generateOrderNumber(),
+        orderKind,
+        customerId,
+        shopId: checkout.primaryShopId,
+        totalPrice: checkout.orderItemTotal,
+        deliveryFee: checkout.totalDeliveryFee,
+        riderTip: checkout.riderTip,
+        deliveryAddress: checkout.address,
+        deliveryInstruction: checkout.instruction ?? null,
+        destLatitude: checkout.destLatitude,
+        destLongitude: checkout.destLongitude,
+        appliedCouponCode: checkout.appliedCouponCode,
+        discountAmount: checkout.discountAmount,
+        status: 'PENDING',
+        paymentStatus: 'PENDING',
+        statusHistory: {
+          create: {
+            status: 'PENDING',
+            note: isMulti
+              ? 'Multi-store cash on delivery order placed'
+              : 'Cash on delivery order placed',
+          },
+        },
+        ...(isMulti
+          ? {}
+          : {
+              items: { create: checkout.shops[0]!.lineItems },
+            }),
+      },
+    })
+
+    const childOrders = []
+
+    if (isMulti) {
+      for (const shop of checkout.shops) {
+        const child = await tx.order.create({
+          data: {
+            orderNumber: generateOrderNumber(),
+            orderKind: 'CHILD',
+            parentOrderId: parent.id,
+            customerId,
+            shopId: shop.shopId,
+            totalPrice: shop.orderItemTotal,
+            deliveryFee: shop.deliveryFee,
+            riderTip: 0,
+            deliveryAddress: checkout.address,
+            deliveryInstruction: checkout.instruction ?? null,
+            destLatitude: checkout.destLatitude,
+            destLongitude: checkout.destLongitude,
+            status: 'PENDING',
+            paymentStatus: 'PENDING',
+            items: { create: shop.lineItems },
+            statusHistory: {
+              create: {
+                status: 'PENDING',
+                note: `Fulfillment for ${shop.shopName}`,
+              },
+            },
+          },
+        })
+        childOrders.push(child)
+      }
+    }
+
+    for (const shop of checkout.shops) {
+      for (const item of shop.lineItems) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        })
+      }
+    }
+
+    return { order: parent, childOrders, isNew: true as const }
+  })
+
+  if (result.childOrders.length > 0) {
+    for (const child of result.childOrders) {
+      await broadcastNewMerchantOrder(child.id)
+    }
+  } else {
+    await broadcastNewMerchantOrder(result.order.id)
+  }
+
+  return result.order
+}

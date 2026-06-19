@@ -16,6 +16,7 @@ import {
   Loader2,
   RefreshCw,
   X,
+  LayoutGrid,
   PackageOpen,
 } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -24,14 +25,16 @@ import { AdminStoresOpsPanel } from '@/components/admin/AdminStoresOpsPanel'
 import { AdminRidersOpsPanel } from '@/components/admin/AdminRidersOpsPanel'
 import { AdminFeatureFlagsPanel } from '@/components/admin/AdminFeatureFlagsPanel'
 import { AdminOverviewCommandCenter } from '@/components/admin/AdminOverviewCommandCenter'
+import { AdminLayoutBuilder } from '@/components/admin/AdminLayoutBuilder'
 import { AdminAdsCommandPanel } from '@/components/admin/AdminAdsCommandPanel'
 import { LogoutButton } from '@/components/auth/LogoutButton'
 import type { DiscountType, StoreType } from '@rabbit/database'
 
-type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue' | 'inventory' | 'settings'
+type TabId = 'overview' | 'stores' | 'customers' | 'riders' | 'orders' | 'coupons' | 'ads' | 'revenue' | 'inventory' | 'homefeed' | 'settings'
 
 const TABS: { id: TabId; label: string; short: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview', label: 'Overview', short: 'Home', icon: LayoutDashboard },
+  { id: 'homefeed', label: 'Layout Builder', short: 'Layout', icon: LayoutGrid },
   { id: 'stores', label: 'Stores', short: 'Stores', icon: Store },
   { id: 'customers', label: 'Customers', short: 'Users', icon: Users },
   { id: 'riders', label: 'Riders', short: 'Riders', icon: Bike },
@@ -154,7 +157,7 @@ export function AdminDashboard() {
   const [savingPlatform, setSavingPlatform] = useState(false)
 
   const fetchTab = useCallback(async (t: TabId) => {
-    const selfContained: TabId[] = ['overview', 'inventory', 'stores', 'riders', 'settings', 'ads']
+    const selfContained: TabId[] = ['overview', 'inventory', 'stores', 'riders', 'settings', 'ads', 'homefeed']
     if (selfContained.includes(t)) {
       setLoading(false)
       setRefreshing(false)
@@ -349,6 +352,8 @@ export function AdminDashboard() {
     if (tab === 'ads') return <AdminAdsCommandPanel />
 
     if (tab === 'inventory') return <AdminCatalogCommand />
+
+    if (tab === 'homefeed') return <AdminLayoutBuilder />
 
     if (tab === 'settings') return <AdminFeatureFlagsPanel />
 

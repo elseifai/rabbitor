@@ -1,26 +1,31 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Search, X } from 'lucide-react'
+import { Check, Loader2, Plus, Search, X } from 'lucide-react'
 import type { StoreType } from '@rabbit/database'
 import { addProductFromCatalogAction } from '@/actions/merchant'
+import { FileUploader } from '@/components/ui/file-uploader'
 import {
   CATALOG_CATEGORY_LABELS,
   searchCatalogTemplates,
   type CatalogTemplate,
 } from '@/config/master-catalog'
+import { parseBaselineStockFromDescription } from '@/lib/catalog-baseline-stock'
 import { cn } from '@/lib/utils'
 
-// MERCHANT SIDEBAR & CATALOG REFACTOR — one-click add catalog wizard
+// MERCHANT SIDEBAR & CATALOG REFACTOR — one-click add catalog wizard (DB-first lineage)
 export function MerchantCatalogWizard({
   shopId,
   storeType,
+  assignedCatalogIds,
   open,
   onClose,
   onAdded,
 }: {
   shopId: string
   storeType: StoreType
+  /** Master catalog UUIDs already activated for this shop. */
+  assignedCatalogIds: Set<string>
   open: boolean
   onClose: () => void
   onAdded: () => void
@@ -29,43 +34,53 @@ export function MerchantCatalogWizard({
   const [category, setCategory] = useState('ALL')
   const [selected, setSelected] = useState<CatalogTemplate | null>(null)
   const [price, setPrice] = useState('')
-  const [stock, setStock] = useState('10')
+  const [stock, setStock] = useState('20')
   const [unit, setUnit] = useState('')
   const [variantIdx, setVariantIdx] = useState(0)
   const [isAvailable, setIsAvailable] = useState(true)
   const [description, setDescription] = useState('')
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dbTemplates, setDbTemplates] = useState<CatalogTemplate[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [useDbCatalog, setUseDbCatalog] = useState(false)
 
-  // PLATFORM CORE RESOLUTION — merge admin-uploaded global catalog
+  // DB-first: live master bank from GET /api/merchant/master-catalog
   useEffect(() => {
     if (!open) return
+    setCatalogLoading(true)
     void fetch(`/api/merchant/master-catalog?storeType=${storeType}`)
       .then((r) => r.json())
       .then((json) => {
-        if (json.success && Array.isArray(json.data)) {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setDbTemplates(json.data as CatalogTemplate[])
+          setUseDbCatalog(true)
+        } else {
+          setDbTemplates([])
+          setUseDbCatalog(false)
         }
       })
-      .catch(() => setDbTemplates([]))
+      .catch(() => {
+        setDbTemplates([])
+        setUseDbCatalog(false)
+      })
+      .finally(() => setCatalogLoading(false))
   }, [open, storeType])
 
-  const mergedTemplates = useMemo(() => {
-    const staticItems = searchCatalogTemplates(storeType, '', 'ALL')
-    const seen = new Set(staticItems.map((i) => i.name.toLowerCase()))
-    const extra = dbTemplates.filter((i) => !seen.has(i.name.toLowerCase()))
-    return [...staticItems, ...extra]
-  }, [storeType, dbTemplates])
+  const catalogTemplates = useMemo(() => {
+    if (useDbCatalog && dbTemplates.length > 0) return dbTemplates
+    return searchCatalogTemplates(storeType, '', 'ALL')
+  }, [useDbCatalog, dbTemplates, storeType])
 
   const categories = useMemo(() => {
-    const cats = new Set(mergedTemplates.map((i) => i.category))
+    const cats = new Set(catalogTemplates.map((i) => i.category))
     return ['ALL', ...Array.from(cats).sort()]
-  }, [mergedTemplates])
+  }, [catalogTemplates])
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return mergedTemplates.filter((item) => {
+    return catalogTemplates.filter((item) => {
       const matchCategory = category === 'ALL' || item.category === category
       const matchQuery =
         !q ||
@@ -74,16 +89,22 @@ export function MerchantCatalogWizard({
         item.category.toLowerCase().includes(q)
       return matchCategory && matchQuery
     })
-  }, [mergedTemplates, query, category])
+  }, [catalogTemplates, query, category])
+
+  const isInStore = (item: CatalogTemplate) => {
+    const masterId = item.id.startsWith('db-') ? item.id.slice(3) : item.id
+    return assignedCatalogIds.has(masterId)
+  }
 
   const resetCustomize = (item: CatalogTemplate) => {
     setSelected(item)
     setPrice(String(item.suggestedPrice))
-    setStock('10')
+    setStock(String(parseBaselineStockFromDescription(item.description)))
     setUnit(item.defaultUnit)
     setVariantIdx(0)
     setIsAvailable(true)
     setDescription(item.description)
+    setImageUrl(item.imageUrl ?? null)
     setError(null)
   }
 
@@ -104,6 +125,8 @@ export function MerchantCatalogWizard({
     const finalUnit = unit.trim() || variant?.unit || selected.defaultUnit
     const basePrice = parseFloat(price)
     const finalPrice = basePrice + (variant?.priceDelta ?? 0)
+    const stockQty = parseInt(stock, 10)
+    const parsedStock = Number.isFinite(stockQty) ? stockQty : parseBaselineStockFromDescription(selected.description)
 
     const res = await addProductFromCatalogAction({
       shopId,
@@ -113,9 +136,9 @@ export function MerchantCatalogWizard({
       category: selected.category,
       price: finalPrice,
       unit: finalUnit,
-      stock: parseInt(stock, 10) || 10,
+      stock: parsedStock,
       isAvailable,
-      imageUrl: selected.imageUrl,
+      imageUrl: imageUrl ?? selected.imageUrl,
     })
 
     setSubmitting(false)
@@ -141,6 +164,7 @@ export function MerchantCatalogWizard({
             </h3>
             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
               {storeType} templates
+              {useDbCatalog ? ' · live master bank' : ' · offline fallback'}
             </p>
           </div>
           <button type="button" onClick={closeAll} className="rounded-lg p-1 hover:bg-gray-100">
@@ -174,30 +198,64 @@ export function MerchantCatalogWizard({
             </div>
 
             <div className="mt-4 flex-1 space-y-2 overflow-y-auto">
-              {results.length === 0 ? (
+              {catalogLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-[#FF6B35]" />
+                </div>
+              ) : results.length === 0 ? (
                 <p className="py-8 text-center text-sm text-gray-400">No matching items</p>
               ) : (
-                results.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/50 p-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-gray-900">{item.name}</p>
-                      <p className="truncate text-xs text-gray-500">{item.description}</p>
-                      <p className="mt-0.5 text-[10px] font-bold uppercase text-[#FF6B35]">
-                        ₹{item.suggestedPrice} · {item.defaultUnit}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => resetCustomize(item)}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0C831F] text-white shadow-md hover:scale-105 active:scale-95"
+                results.map((item) => {
+                  const added = isInStore(item)
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        'flex items-center justify-between gap-3 rounded-xl border p-3 transition',
+                        added
+                          ? 'border-gray-200 bg-gray-100/80 opacity-75'
+                          : 'border-gray-100 bg-gray-50/50',
+                      )}
                     >
-                      <Plus className="h-5 w-5" />
-                    </button>
-                  </div>
-                ))
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p
+                            className={cn(
+                              'truncate text-sm font-bold',
+                              added ? 'text-gray-500' : 'text-gray-900',
+                            )}
+                          >
+                            {item.name}
+                          </p>
+                          {added && (
+                            <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-200">
+                              <Check className="h-3 w-3" />
+                              Added to Store
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-xs text-gray-500">{item.description}</p>
+                        <p className="mt-0.5 text-[10px] font-bold uppercase text-[#FF6B35]">
+                          ₹{item.suggestedPrice} · {item.defaultUnit}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={added}
+                        onClick={() => resetCustomize(item)}
+                        className={cn(
+                          'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md transition',
+                          added
+                            ? 'cursor-not-allowed bg-gray-300 text-gray-500'
+                            : 'bg-[#0C831F] text-white hover:scale-105 active:scale-95',
+                        )}
+                        aria-label={added ? `${item.name} already in store` : `Add ${item.name}`}
+                      >
+                        <Plus className="h-5 w-5" />
+                      </button>
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
@@ -212,6 +270,13 @@ export function MerchantCatalogWizard({
                 className="mt-2 w-full rounded-lg border bg-white px-3 py-2 text-xs focus:border-[#FF6B35] focus:outline-none"
               />
             </div>
+
+            <FileUploader
+              value={imageUrl}
+              onChange={setImageUrl}
+              label="Product image"
+              aspect="square"
+            />
 
             {selected.variants && selected.variants.length > 0 && (
               <div className="space-y-2">

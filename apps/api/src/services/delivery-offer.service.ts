@@ -167,10 +167,12 @@ export async function updateRiderDeliveryStage(
       orderId,
       status: statusLabel,
     });
+    io.to(orderRoom(orderId)).emit("rider-stage-updated", { orderId, stage });
     io.to(storeRoom(order.shopId)).emit("ORDER_STATUS_UPDATED", {
       orderId,
       status: orderStatus,
     });
+    io.to(storeRoom(order.shopId)).emit("RIDER_STAGE_UPDATED", { orderId, stage });
   } else {
     io.to(orderRoom(orderId)).emit("rider-stage-updated", { orderId, stage });
     io.to(storeRoom(order.shopId)).emit("RIDER_STAGE_UPDATED", { orderId, stage });

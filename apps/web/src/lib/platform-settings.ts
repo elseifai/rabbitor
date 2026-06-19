@@ -1,5 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { mergeFeatureFlags, type FeatureFlags } from '@/lib/feature-flags'
+import { mergeHomeFeedConfig, type HomeFeedConfig } from '@/lib/home-feed-config'
+import {
+  mergeMerchantLayoutConfig,
+  mergeRiderLayoutConfig,
+  type MerchantLayoutConfig,
+  type RiderLayoutConfig,
+} from '@/lib/layout-config'
 
 export type PlatformSettingsData = {
   globalMinCartValue: number
@@ -8,6 +15,9 @@ export type PlatformSettingsData = {
   surgePricingMultiplier: number
   platformServiceFee: number
   featureFlags: FeatureFlags
+  homeFeedConfig: HomeFeedConfig
+  merchantLayoutConfig: MerchantLayoutConfig
+  riderLayoutConfig: RiderLayoutConfig
 }
 
 const DEFAULTS: PlatformSettingsData = {
@@ -17,6 +27,9 @@ const DEFAULTS: PlatformSettingsData = {
   surgePricingMultiplier: 1,
   platformServiceFee: 0,
   featureFlags: mergeFeatureFlags({}),
+  homeFeedConfig: mergeHomeFeedConfig({}),
+  merchantLayoutConfig: mergeMerchantLayoutConfig({}),
+  riderLayoutConfig: mergeRiderLayoutConfig({}),
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettingsData> {
@@ -34,6 +47,9 @@ export async function getPlatformSettings(): Promise<PlatformSettingsData> {
     surgePricingMultiplier: row.surgePricingMultiplier,
     platformServiceFee: row.platformServiceFee,
     featureFlags: mergeFeatureFlags(row.featureFlags),
+    homeFeedConfig: mergeHomeFeedConfig(row.homeFeedConfig),
+    merchantLayoutConfig: mergeMerchantLayoutConfig(row.merchantLayoutConfig),
+    riderLayoutConfig: mergeRiderLayoutConfig(row.riderLayoutConfig),
   }
 }
 
@@ -71,5 +87,67 @@ export async function updatePlatformSettings(
     surgePricingMultiplier: row.surgePricingMultiplier,
     platformServiceFee: row.platformServiceFee,
     featureFlags: mergeFeatureFlags(row.featureFlags),
+    homeFeedConfig: mergeHomeFeedConfig(row.homeFeedConfig),
+    merchantLayoutConfig: mergeMerchantLayoutConfig(row.merchantLayoutConfig),
+    riderLayoutConfig: mergeRiderLayoutConfig(row.riderLayoutConfig),
   }
+}
+
+export async function getHomeFeedConfig(): Promise<HomeFeedConfig> {
+  const settings = await getPlatformSettings()
+  return settings.homeFeedConfig
+}
+
+export async function updateHomeFeedConfig(
+  patch: Partial<HomeFeedConfig>,
+): Promise<HomeFeedConfig> {
+  const current = await getHomeFeedConfig()
+  const merged = mergeHomeFeedConfig({ ...current, ...patch })
+  await prisma.platformSettings.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', ...DEFAULTS, homeFeedConfig: merged as object },
+    update: { homeFeedConfig: merged as object },
+  })
+  return merged
+}
+
+export async function getMerchantLayoutConfig(): Promise<MerchantLayoutConfig> {
+  const settings = await getPlatformSettings()
+  return settings.merchantLayoutConfig
+}
+
+export async function getRiderLayoutConfig(): Promise<RiderLayoutConfig> {
+  const settings = await getPlatformSettings()
+  return settings.riderLayoutConfig
+}
+
+export async function updateLayoutConfigs(input: {
+  merchantLayoutConfig?: Partial<MerchantLayoutConfig>
+  riderLayoutConfig?: Partial<RiderLayoutConfig>
+}): Promise<{ merchantLayoutConfig: MerchantLayoutConfig; riderLayoutConfig: RiderLayoutConfig }> {
+  const current = await getPlatformSettings()
+  const merchantLayoutConfig = mergeMerchantLayoutConfig({
+    ...current.merchantLayoutConfig,
+    ...input.merchantLayoutConfig,
+  })
+  const riderLayoutConfig = mergeRiderLayoutConfig({
+    ...current.riderLayoutConfig,
+    ...input.riderLayoutConfig,
+  })
+
+  await prisma.platformSettings.upsert({
+    where: { id: 'default' },
+    create: {
+      id: 'default',
+      ...DEFAULTS,
+      merchantLayoutConfig: merchantLayoutConfig as object,
+      riderLayoutConfig: riderLayoutConfig as object,
+    },
+    update: {
+      merchantLayoutConfig: merchantLayoutConfig as object,
+      riderLayoutConfig: riderLayoutConfig as object,
+    },
+  })
+
+  return { merchantLayoutConfig, riderLayoutConfig }
 }

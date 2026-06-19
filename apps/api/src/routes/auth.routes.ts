@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { UserRole } from "@rabbit/database";
 import * as authService from "../services/auth.service";
+import * as analyticsService from "../services/analytics.service";
 import { authenticate, requireRoles, type AuthRequest } from "../middleware/auth";
 
 export const otpRouter = Router();
@@ -29,6 +30,11 @@ otpRouter.post("/verify", async (req, res, next) => {
   try {
     const body = verifyOtpSchema.parse(req.body);
     const result = await authService.verifyOtp(body.phone, body.code);
+    void analyticsService.recordUserEvent({
+      userId: result.user.id,
+      eventType: "LOGIN",
+      metadata: { method: "otp" },
+    });
     res.json({ success: true, data: result });
   } catch (e) {
     next(e);
@@ -64,6 +70,11 @@ router.post("/login", async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
     const result = await authService.loginUser(body.phone, body.password);
+    void analyticsService.recordUserEvent({
+      userId: result.user.id,
+      eventType: "LOGIN",
+      metadata: { method: "password" },
+    });
     res.json({ success: true, data: result });
   } catch (e) {
     next(e);

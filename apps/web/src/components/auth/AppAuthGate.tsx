@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import {
   defaultDashboardForRole,
-  isPublicAuthPath,
+  isProtectedAuthPath,
   loginPathForRole,
   roleHintFromPathname,
   roleMatchesPath,
@@ -23,8 +23,7 @@ export function AppAuthGate({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, hydrated, user } = useAuth()
   const sandbox = isDevSandboxClient()
 
-  const isPublic = isPublicAuthPath(pathname)
-  const shouldGate = !isPublic
+  const shouldGate = isProtectedAuthPath(pathname)
 
   useEffect(() => {
     if (!hydrated || !shouldGate) return

@@ -35,6 +35,7 @@ export function ConfirmDeliveryLocationModal({
   address,
   grandTotal,
   paymentLabel,
+  isCod = false,
   isPlacing,
   onConfirm,
   onChangeAddress,
@@ -44,6 +45,7 @@ export function ConfirmDeliveryLocationModal({
   address: CustomerAddressRecord | null
   grandTotal: number
   paymentLabel: string
+  isCod?: boolean
   isPlacing: boolean
   onConfirm: () => void
   onChangeAddress: () => void
@@ -155,7 +157,11 @@ export function ConfirmDeliveryLocationModal({
               disabled={isPlacing}
               className="w-full rounded-2xl bg-[#FF6B35] py-4 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-[#FF6B35]/25 disabled:opacity-70"
             >
-              {isPlacing ? 'Processing payment…' : `Yes, deliver here · ${paymentLabel}`}
+              {isPlacing
+                ? isCod
+                  ? 'Placing order…'
+                  : 'Processing payment…'
+                : `Yes, deliver here · ${paymentLabel}`}
             </button>
             <button
               type="button"

@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { emitDeliveryOffers } from "../services/delivery-offer.service";
 import { emitNewOrderToStore } from "../services/merchant-order-events";
-import { getIO, orderRoom } from "../socket/io";
+import { assignNearestRabbitorForOrder } from "../services/order.service";
+import { getIO, orderRoom, riderRoom, storeRoom } from "../socket/io";
 import { ORDER_STATUS_LABELS } from "../lib/order-labels";
+import { requireInternalSecret } from "../middleware/internal-auth";
 
 const router = Router();
+
+router.use(requireInternalSecret);
 
 router.post("/order-events", (req, res) => {
   const { orderId, type, status, lat, lng } = req.body as {
@@ -57,6 +61,25 @@ router.post("/delivery/offer", async (req, res) => {
   }
 });
 
+router.post("/assign-rider", async (req, res) => {
+  const { orderId } = req.body as { orderId?: string };
+
+  if (!orderId) {
+    res.status(400).json({ success: false, error: "orderId is required" });
+    return;
+  }
+
+  try {
+    const result = await assignNearestRabbitorForOrder(orderId);
+    if (!result.assigned) {
+      await emitDeliveryOffers(orderId);
+    }
+    res.json({ success: true, data: result });
+  } catch {
+    res.status(503).json({ success: false, error: "Rider assignment failed" });
+  }
+});
+
 router.post("/merchant/new-order", async (req, res) => {
   const { orderId } = req.body as { orderId?: string };
 
@@ -67,6 +90,39 @@ router.post("/merchant/new-order", async (req, res) => {
 
   try {
     await emitNewOrderToStore(orderId);
+    res.json({ success: true });
+  } catch {
+    res.status(503).json({ success: false, error: "Realtime server unavailable" });
+  }
+});
+
+router.post("/feedback-received", (req, res) => {
+  const { orderId, shopId, riderId, shopRating, riderRating, comment } = req.body as {
+    orderId?: string;
+    shopId?: string;
+    riderId?: string | null;
+    shopRating?: number;
+    riderRating?: number;
+    comment?: string | null;
+  };
+
+  if (!orderId || !shopId) {
+    res.status(400).json({ success: false, error: "orderId and shopId are required" });
+    return;
+  }
+
+  try {
+    const io = getIO();
+    const payload = {
+      orderId,
+      shopRating: shopRating ?? 0,
+      riderRating: riderRating ?? 0,
+      comment: comment ?? null,
+    };
+    io.to(storeRoom(shopId)).emit("FEEDBACK_RECEIVED", payload);
+    if (riderId) {
+      io.to(riderRoom(riderId)).emit("FEEDBACK_RECEIVED", payload);
+    }
     res.json({ success: true });
   } catch {
     res.status(503).json({ success: false, error: "Realtime server unavailable" });

@@ -20,6 +20,7 @@ import {
   updateProductPriceAction,
 } from '@/actions/merchant'
 import { MerchantCatalogWizard } from '@/components/merchant/MerchantCatalogWizard'
+import { MerchantEditProductModal, type EditableProduct } from '@/components/merchant/MerchantEditProductModal'
 import { MerchantManualProductModal } from '@/components/merchant/MerchantManualProductModal'
 import { BulkProductImport } from '@/components/shared/BulkProductImport'
 import { CATALOG_CATEGORY_LABELS } from '@/config/master-catalog'
@@ -33,6 +34,8 @@ type ProductRow = {
   unit: string
   stock: number
   available: boolean
+  image?: string | null
+  masterCatalogItemId?: string | null
 }
 
 // MERCHANT SIDEBAR & CATALOG REFACTOR — product listing with catalog search grid
@@ -45,6 +48,7 @@ export function MerchantProductListing() {
   const [search, setSearch] = useState('')
   const [showWizard, setShowWizard] = useState(false)
   const [showManual, setShowManual] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<EditableProduct | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editPrice, setEditPrice] = useState('')
   const [stockWarnings, setStockWarnings] = useState<Set<string>>(new Set())
@@ -64,6 +68,8 @@ export function MerchantProductListing() {
           unit: p.unit,
           stock: p.stock,
           available: p.isAvailable,
+          image: p.image,
+          masterCatalogItemId: p.masterCatalogItemId,
         })),
       )
     }
@@ -94,6 +100,16 @@ export function MerchantProductListing() {
         p.unit.toLowerCase().includes(q),
     )
   }, [products, search])
+
+  const assignedCatalogIds = useMemo(
+    () =>
+      new Set(
+        products
+          .map((p) => p.masterCatalogItemId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [products],
+  )
 
   const toggleStock = async (id: string) => {
     const item = products.find((p) => p.id === id)
@@ -217,9 +233,13 @@ export function MerchantProductListing() {
                       <div className="flex items-center gap-2">
                         {warn && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />}
                         <div>
-                          <p className={`font-bold ${item.available ? 'text-gray-900' : 'text-gray-400 line-through'}`}>
+                          <button
+                            type="button"
+                            onClick={() => setEditingProduct(item)}
+                            className={`text-left font-bold hover:text-[#FF6B35] hover:underline ${item.available ? 'text-gray-900' : 'text-gray-400 line-through'}`}
+                          >
                             {item.name}
-                          </p>
+                          </button>
                           <p className="text-xs text-gray-400">{item.unit}</p>
                         </div>
                       </div>
@@ -277,6 +297,7 @@ export function MerchantProductListing() {
       <MerchantCatalogWizard
         shopId={shopId}
         storeType={storeType}
+        assignedCatalogIds={assignedCatalogIds}
         open={showWizard}
         onClose={() => setShowWizard(false)}
         onAdded={() => void load()}
@@ -290,6 +311,13 @@ export function MerchantProductListing() {
           onAdded={() => void load()}
         />
       )}
+
+      <MerchantEditProductModal
+        product={editingProduct}
+        open={editingProduct != null}
+        onClose={() => setEditingProduct(null)}
+        onSaved={() => void load()}
+      />
     </div>
   )
 }

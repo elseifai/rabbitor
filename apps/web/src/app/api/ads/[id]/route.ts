@@ -3,15 +3,31 @@ import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params
+    const body = (await request.json().catch(() => ({}))) as { visitorId?: string }
+    const visitorId = body.visitorId?.trim()
+
     await prisma.ad.update({
       where: { id },
       data: { clicks: { increment: 1 } },
     })
+
+    if (visitorId) {
+      const existing = await prisma.adUniqueClick.findUnique({
+        where: { adId_visitorId: { adId: id, visitorId } },
+      })
+      if (!existing) {
+        await prisma.$transaction([
+          prisma.adUniqueClick.create({ data: { adId: id, visitorId } }),
+          prisma.ad.update({ where: { id }, data: { uniqueClicks: { increment: 1 } } }),
+        ])
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch {
     return NextResponse.json({ success: true })

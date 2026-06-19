@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "seed-catalog": "node dist/scripts/seed-global-catalog.js",
     "test": "echo \"No API tests yet\""
   },
   "dependencies": {

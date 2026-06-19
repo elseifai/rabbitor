@@ -1,0 +1,1 @@
+ALTER TABLE "PlatformSettings" ADD COLUMN IF NOT EXISTS "homeFeedConfig" JSONB NOT NULL DEFAULT '{}';

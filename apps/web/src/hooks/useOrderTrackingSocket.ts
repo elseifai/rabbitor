@@ -42,6 +42,7 @@ function parseStatusPayload(payload: unknown): OrderStatus | null {
 export function useOrderTrackingSocket(orderId: string) {
   const { connected, reconnecting, latencyMs } = useSocket()
   const [status, setStatus] = useState<OrderStatus | null>(null)
+  const [riderStage, setRiderStage] = useState<string | null>(null)
   const [riderLocation, setRiderLocation] = useState<RiderLocation | null>(null)
   const prevLocationRef = useRef<{ lat: number; lng: number } | null>(null)
 
@@ -74,10 +75,17 @@ export function useOrderTrackingSocket(orderId: string) {
       setRiderLocation({ lat: data.lat, lng: data.lng, bearing })
     }
 
+    const onRiderStage = (data: { orderId?: string; stage?: string }) => {
+      if (data.orderId === orderId && data.stage) {
+        setRiderStage(data.stage)
+      }
+    }
+
     const unsubs = [
       socketClient.on('status-updated', onStatusLabel),
       socketClient.on('ORDER_STATUS_UPDATED', onStatusUpdated),
       socketClient.on('location-updated', onLocation),
+      socketClient.on('rider-stage-updated', onRiderStage),
     ]
 
     return () => {
@@ -87,5 +95,5 @@ export function useOrderTrackingSocket(orderId: string) {
     }
   }, [orderId])
 
-  return { connected, reconnecting, latencyMs, status, riderLocation }
+  return { connected, reconnecting, latencyMs, status, riderStage, riderLocation }
 }

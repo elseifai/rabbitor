@@ -3,11 +3,14 @@ import type { NextRequest } from 'next/server'
 import { SESSION_COOKIE, verifySessionCookie } from '@/lib/auth-session'
 import {
   defaultDashboardForRole,
+  isProtectedAuthPath,
   isPublicAuthPath,
   loginPathForRole,
   roleHintFromPathname,
   roleMatchesPath,
+  signInPortalMatches,
 } from '@/lib/auth-routing'
+import { getAuthRoleOption, parseAuthRoleParam } from '@/lib/auth-roles'
 
 function isMiddlewareBypassed(): boolean {
   return (
@@ -40,9 +43,25 @@ export async function middleware(request: NextRequest) {
         !redirectParam.startsWith('/auth')
           ? redirectParam
           : null
-      const destination = safeRedirect ?? defaultDashboardForRole(session.role)
-      return NextResponse.redirect(new URL(destination, request.url))
+      const roleParam = request.nextUrl.searchParams.get('role')
+      const selectedPortal = getAuthRoleOption(parseAuthRoleParam(roleParam))
+
+      if (selectedPortal.role === 'CUSTOMER') {
+        return NextResponse.redirect(new URL(safeRedirect ?? '/', request.url))
+      }
+
+      if (signInPortalMatches(session.role, selectedPortal.role)) {
+        return NextResponse.redirect(
+          new URL(safeRedirect ?? selectedPortal.redirect, request.url),
+        )
+      }
+
+      return NextResponse.next()
     }
+    return NextResponse.next()
+  }
+
+  if (!isProtectedAuthPath(pathname)) {
     return NextResponse.next()
   }
 
@@ -61,6 +80,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|media/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

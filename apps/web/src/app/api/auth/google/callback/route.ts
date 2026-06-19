@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server'
-import { GoogleAuthRoleMismatchError, signInWithGoogle } from '@/lib/auth'
+import { GoogleAuthRoleMismatchError, getSessionCookieOptions, signInWithGoogle } from '@/lib/auth'
+import { SESSION_COOKIE } from '@/lib/auth-session'
 import { prisma } from '@/lib/prisma'
+import { getPublicAppOrigin, publicAppUrl } from '@/lib/public-app-url'
 
 type Role = 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN'
 
 const PERSONA_LOGIN: Record<Role, string> = {
-  CUSTOMER: '/auth?role=customer',
+  CUSTOMER: '/auth',
   VENDOR: '/auth?role=merchant',
-  RABBITOR: '/auth?role=rabbitor',
-  ADMIN: '/auth?role=admin',
+  RABBITOR: '/delivery/login',
+  ADMIN: '/admin/login',
 }
 
-const ROLE_REDIRECT: Record<string, string> = {
+const ROLE_HOME: Record<Role, string> = {
   CUSTOMER: '/',
   VENDOR: '/merchant',
   RABBITOR: '/delivery/dashboard',
@@ -21,34 +23,62 @@ const ROLE_REDIRECT: Record<string, string> = {
 const PERSONA_ERROR: Record<Role, string> = {
   CUSTOMER: 'Sign-in failed.',
   VENDOR: 'This email is not registered as a merchant.',
-  RABBITOR: 'This email is not registered as a delivery partner.',
+  RABBITOR: 'Could not sign in as a delivery partner. Please try again.',
   ADMIN: 'This email is not registered as admin.',
 }
 
-function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.PUBLIC_APP_URL ??
-    'http://localhost:3000'
-  )
+function fail(request: Request, reason: string, role: Role = 'CUSTOMER') {
+  const loginPath = PERSONA_LOGIN[role] ?? '/auth'
+  const url = new URL(publicAppUrl(loginPath, request))
+  url.searchParams.set('error', reason)
+  return NextResponse.redirect(url)
 }
 
-function fail(reason: string, loginPath = '/auth') {
-  return NextResponse.redirect(
-    `${appUrl()}${loginPath}?error=${encodeURIComponent(reason)}`,
-  )
+async function resolvePostLoginDestination(
+  requestedPortal: Role,
+  redirectTo: string,
+  userId: string,
+): Promise<string> {
+  if (requestedPortal === 'CUSTOMER') {
+    return redirectTo !== '/' ? redirectTo : '/'
+  }
+
+  if (requestedPortal === 'VENDOR') {
+    const shop = await prisma.shop.findFirst({
+      where: { ownerId: userId },
+      select: { id: true },
+    })
+    return shop ? ROLE_HOME.VENDOR : '/merchant/onboarding'
+  }
+
+  if (requestedPortal === 'RABBITOR') {
+    const profile = await prisma.rabbitorProfile.findUnique({
+      where: { userId },
+      select: { isOnboarded: true },
+    })
+    if (!profile?.isOnboarded) return '/delivery/login?setup=1'
+    return ROLE_HOME.RABBITOR
+  }
+
+  if (requestedPortal === 'ADMIN') return ROLE_HOME.ADMIN
+
+  return ROLE_HOME.CUSTOMER
 }
 
 /** Handles Google's OAuth redirect: exchanges the code and signs the user in. */
 export async function GET(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  if (!clientId || !clientSecret) return fail('Google sign-in is not configured')
+  if (!clientId || !clientSecret) {
+    return fail(request, 'Google sign-in is not configured', 'CUSTOMER')
+  }
+
+  const appOrigin = getPublicAppOrigin(request)
 
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const state = searchParams.get('state')
-  if (!code || !state) return fail('Sign-in was cancelled')
+  if (!code || !state) return fail(request, 'Sign-in was cancelled', 'CUSTOMER')
 
   let role: Role = 'CUSTOMER'
   let redirectTo = '/'
@@ -63,10 +93,8 @@ export async function GET(request: Request) {
     redirectTo = decoded.redirectTo
     nonce = decoded.nonce
   } catch {
-    return fail('Invalid sign-in state')
+    return fail(request, 'Invalid sign-in state', role)
   }
-
-  const loginPath = PERSONA_LOGIN[role] ?? '/auth'
 
   const cookieNonce = request.headers
     .get('cookie')
@@ -74,9 +102,12 @@ export async function GET(request: Request) {
     .map((c) => c.trim())
     .find((c) => c.startsWith('g_oauth_nonce='))
     ?.split('=')[1]
+
   if (!cookieNonce || cookieNonce !== nonce) {
-    return fail('Sign-in expired, please try again', loginPath)
+    return fail(request, 'Sign-in expired, please try again', role)
   }
+
+  const redirectUri = `${appOrigin}/api/auth/google/callback`
 
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -85,26 +116,33 @@ export async function GET(request: Request) {
       code,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uri: `${appUrl()}/api/auth/google/callback`,
+      redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
   })
-  if (!tokenRes.ok) return fail('Could not verify your Google account', loginPath)
+
+  if (!tokenRes.ok) {
+    console.error('[Google OAuth] token exchange failed:', await tokenRes.text().catch(() => ''))
+    return fail(request, 'Could not verify your Google account', role)
+  }
+
   const tokens = (await tokenRes.json()) as { access_token?: string }
-  if (!tokens.access_token) return fail('Could not verify your Google account', loginPath)
+  if (!tokens.access_token) {
+    return fail(request, 'Could not verify your Google account', role)
+  }
 
   const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   })
-  if (!profileRes.ok) return fail('Could not read your Google profile', loginPath)
+  if (!profileRes.ok) return fail(request, 'Could not read your Google profile', role)
+
   const profile = (await profileRes.json()) as {
     sub: string
     email?: string
     name?: string
     picture?: string
-    email_verified?: boolean
   }
-  if (!profile.email) return fail('Your Google account has no email', loginPath)
+  if (!profile.email) return fail(request, 'Your Google account has no email', role)
 
   let authUser
   try {
@@ -119,43 +157,18 @@ export async function GET(request: Request) {
     )
   } catch (err) {
     if (err instanceof GoogleAuthRoleMismatchError) {
-      return fail(PERSONA_ERROR[err.expectedRole], PERSONA_LOGIN[err.expectedRole])
+      return fail(request, PERSONA_ERROR[err.expectedRole], err.expectedRole)
     }
     throw err
   }
 
-  let destination =
-    redirectTo === '/'
-      ? (ROLE_REDIRECT[authUser.user.role] ?? '/')
-      : redirectTo
+  const destination = await resolvePostLoginDestination(role, redirectTo, authUser.user.id)
 
-  const portalRole =
-    authUser.user.role === 'ADMIN' &&
-    (role === 'VENDOR' || role === 'RABBITOR' || role === 'ADMIN')
-      ? role
-      : authUser.user.role
+  const completeUrl = new URL(publicAppUrl('/auth/complete', request))
+  completeUrl.searchParams.set('redirect', destination)
 
-  if (authUser.user.role === 'ADMIN' && portalRole !== authUser.user.role) {
-    destination = ROLE_REDIRECT[portalRole] ?? destination
-  }
-
-  if (portalRole === 'VENDOR') {
-    const shop = await prisma.shop.findFirst({
-      where: { ownerId: authUser.user.id },
-      select: { id: true },
-    })
-    if (!shop) destination = '/merchant/onboarding'
-  } else if (portalRole === 'RABBITOR') {
-    const profile = await prisma.rabbitorProfile.findUnique({
-      where: { userId: authUser.user.id },
-      select: { id: true, isOnboarded: true },
-    })
-    if (!profile || !profile.isOnboarded) destination = '/delivery/login?setup=1'
-  }
-
-  const res = NextResponse.redirect(
-    `${appUrl()}/auth/complete?redirect=${encodeURIComponent(destination)}`,
-  )
+  const res = NextResponse.redirect(completeUrl)
+  res.cookies.set(SESSION_COOKIE, authUser.token, getSessionCookieOptions())
   res.cookies.delete('g_oauth_nonce')
   return res
 }

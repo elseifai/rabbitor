@@ -6,7 +6,14 @@ import { Loader2 } from 'lucide-react'
 import { getOnboardingStatusAction } from '@/actions/onboarding'
 import { useAuth } from '@/context/AuthContext'
 
-const ONBOARDING_EXEMPT = ['/merchant/onboarding', '/delivery/login', '/auth', '/merchant/login']
+const ONBOARDING_EXEMPT = [
+  '/merchant/onboarding',
+  '/delivery/login',
+  '/auth',
+  '/merchant/login',
+  '/checkout',
+  '/cart',
+]
 
 export function RoleOnboardingGate({ children }: { children: React.ReactNode }) {
   const router = useRouter()

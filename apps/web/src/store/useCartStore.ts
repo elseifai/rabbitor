@@ -15,7 +15,10 @@ export type CartItemInput = Omit<CartLineItem, 'quantity'>
 
 interface CartStore {
   items: CartLineItem[]
+  pendingItem: { item: CartItemInput; qty: number } | null
   addItem: (item: CartItemInput, qty?: number) => void
+  confirmSwitchShop: () => void
+  cancelSwitchShop: () => void
   removeItem: (id: string) => void
   updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
@@ -45,12 +48,34 @@ export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
+      pendingItem: null,
 
       addItem: (item, qty = 1) => {
-        set((state) => ({
-          items: appendItem(state.items, item, qty),
-        }))
+        set((state) => {
+          const isDifferentShop =
+            state.items.length > 0 &&
+            state.items.some((i) => i.storeId !== item.storeId)
+
+          if (isDifferentShop) {
+            return { pendingItem: { item, qty } }
+          }
+
+          return { items: appendItem(state.items, item, qty) }
+        })
       },
+
+      confirmSwitchShop: () => {
+        set((state) => {
+          if (!state.pendingItem) return {}
+          const { item, qty } = state.pendingItem
+          return {
+            items: [{ ...item, quantity: qty }],
+            pendingItem: null,
+          }
+        })
+      },
+
+      cancelSwitchShop: () => set({ pendingItem: null }),
 
       removeItem: (id) =>
         set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
@@ -67,7 +92,7 @@ export const useCartStore = create<CartStore>()(
           }
         }),
 
-      clearCart: () => set({ items: [] }),
+      clearCart: () => set({ items: [], pendingItem: null }),
 
       itemsByShop: () => {
         const grouped: Record<string, CartLineItem[]> = {}

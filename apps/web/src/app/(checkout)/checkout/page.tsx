@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { useCart } from '@/context/CartContext'
 import {
   ArrowLeft,
@@ -14,6 +15,9 @@ import {
   ShoppingBag,
   Loader2,
   AlertCircle,
+  Banknote,
+  ChevronRight,
+  Wallet,
 } from 'lucide-react'
 import { getDeliveryQuote, getMultiShopDeliveryQuote } from '@/actions/shops'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
@@ -23,7 +27,10 @@ import {
   type CustomerAddressRecord,
 } from '@/components/checkout/CheckoutAddressSection'
 import { ConfirmDeliveryLocationModal } from '@/components/checkout/ConfirmDeliveryLocationModal'
+import { CompleteYourBasket } from '@/components/checkout/CompleteYourBasket'
+import { PaymentSheetDrawer } from '@/components/checkout/PaymentSheetDrawer'
 import { formatCustomerAddress } from '@/lib/customer-address'
+import { buildUpiPayUrl, getMerchantUpiVpa } from '@/lib/upi-deep-link'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import { useAuth } from '@/context/AuthContext'
 import { loadRazorpayScript } from '@/lib/razorpay'
@@ -35,6 +42,11 @@ import { AdBanner } from '@/components/ads/AdBanner'
 const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
 
+type PaymentMethod = 'online' | 'cod'
+type OnlinePayMode = 'upi' | 'card' | 'netbanking' | 'bnpl'
+
+const billSpring = { type: 'spring' as const, stiffness: 420, damping: 26 }
+
 function instructionLabel(key: string | null): string | undefined {
   if (key === 'gate') return 'Leave at Gate'
   if (key === 'bell') return "Don't Ring Bell"
@@ -43,9 +55,12 @@ function instructionLabel(key: string | null): string | undefined {
 
 export default function DynamicCheckoutPage() {
   const router = useRouter()
-  const { isLoggedIn, hydrated: authHydrated } = useAuth()
-  const { items, shopIds, itemsByShop, total, subtotalForShop, clearCart, removeItem, hydrated } = useCart()
+  const { isLoggedIn, hydrated: authHydrated, login } = useAuth()
+  const { items, shopIds, itemsByShop, total, subtotalForShop, clearCart, removeItem, hydrated } =
+    useCart()
   const sandbox = isDevSandboxClient()
+  const pendingOnlineMode = useRef<OnlinePayMode>('card')
+  const pendingUpiApp = useRef<'gpay' | 'phonepe' | 'paytm' | null>(null)
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
   const [selectedInstruction, setSelectedInstruction] = useState<string | null>(null)
@@ -62,10 +77,15 @@ export default function DynamicCheckoutPage() {
   const [hasDeliveryAddress, setHasDeliveryAddress] = useState(false)
   const [showConfirmLocation, setShowConfirmLocation] = useState(false)
   const [needsAuth, setNeedsAuth] = useState(false)
+  const [portalReady, setPortalReady] = useState(false)
   const [orderPlacedId, setOrderPlacedId] = useState<string | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
   const [paymentEnabled, setPaymentEnabled] = useState<boolean | null>(null)
+  const [codEnabled, setCodEnabled] = useState(true)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod')
   const [runtimeRazorpayKey, setRuntimeRazorpayKey] = useState('')
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false)
+  const [billPulse, setBillPulse] = useState(0)
 
   const itemTotal = total()
   const partnerTip = selectedTip ?? 0
@@ -84,8 +104,36 @@ export default function DynamicCheckoutPage() {
   }, [authHydrated, isLoggedIn])
 
   useEffect(() => {
+    if (!authHydrated || needsAuth) {
+      setPortalReady(!needsAuth)
+      return
+    }
+
+    let cancelled = false
+    void fetch(resolveAppApiUrl('/api/auth/customer-portal'), {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (cancelled) return
+        if (json.success && json.data?.token && json.data?.user) {
+          login(json.data.token, json.data.user)
+        }
+        setPortalReady(true)
+      })
+      .catch(() => {
+        if (!cancelled) setPortalReady(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authHydrated, needsAuth, login])
+
+  useEffect(() => {
     if (authHydrated && needsAuth && !sandbox) {
-      router.push('/auth?redirect=/checkout')
+      router.push('/auth?role=customer&redirect=/checkout')
     }
   }, [authHydrated, needsAuth, sandbox, router])
 
@@ -95,11 +143,19 @@ export default function DynamicCheckoutPage() {
       .then((res) => res.json())
       .then((json) => {
         if (cancelled || !json.success) return
-        setPaymentEnabled(Boolean(json.data?.enabled))
+        const online = Boolean(json.data?.enabled)
+        const cod = json.data?.codEnabled !== false
+        setPaymentEnabled(online)
+        setCodEnabled(cod)
+        setPaymentMethod(online ? 'online' : 'cod')
         setRuntimeRazorpayKey(String(json.data?.key ?? ''))
       })
       .catch(() => {
-        if (!cancelled) setPaymentEnabled(false)
+        if (!cancelled) {
+          setPaymentEnabled(false)
+          setCodEnabled(true)
+          setPaymentMethod('cod')
+        }
       })
     return () => {
       cancelled = true
@@ -134,12 +190,13 @@ export default function DynamicCheckoutPage() {
 
           const res = await fetch(`/api/products?shopId=${encodeURIComponent(shopId)}`)
           const json = await res.json()
-          if (!json.success || cancelled) return
+          if (!json.success || cancelled) continue
+
+          const products = json.data as Array<{ id: string; isAvailable: boolean }>
+          if (!Array.isArray(products) || products.length === 0) continue
 
           const validIds = new Set(
-            (json.data as Array<{ id: string; isAvailable: boolean }>)
-              .filter((p) => p.isAvailable)
-              .map((p) => p.id),
+            products.filter((p) => p.isAvailable).map((p) => p.id),
           )
 
           const stale = shopItems.filter((item) => !validIds.has(item.id))
@@ -231,13 +288,24 @@ export default function DynamicCheckoutPage() {
   }
 
   const handlePlaceOrder = async () => {
+    if (paymentMethod === 'cod') {
+      await handlePlaceCodOrder()
+      return
+    }
+    await runOnlinePayment(pendingOnlineMode.current, pendingUpiApp.current)
+  }
+
+  const runOnlinePayment = async (
+    mode: OnlinePayMode = 'card',
+    upiApp: 'gpay' | 'phonepe' | 'paytm' | null = null,
+  ) => {
     if (items.length === 0 || shopIds.length === 0) return
     if (!selectedAddress || !deliveryAddress.trim()) {
       setError('Please add and select a delivery address.')
       return
     }
     if (!paymentEnabled) {
-      setError('Online payment is temporarily unavailable. Please try again later.')
+      setError('Online payment is temporarily unavailable. Try cash on delivery instead.')
       return
     }
 
@@ -282,6 +350,21 @@ export default function DynamicCheckoutPage() {
       }
       activeIntentId = paymentData.intentId
 
+      if (mode === 'upi' && upiApp && typeof window !== 'undefined') {
+        const vpa = getMerchantUpiVpa()
+        const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent)
+        if (vpa && isMobile) {
+          const deepLink = buildUpiPayUrl({
+            vpa,
+            payeeName: 'Rabbit',
+            amount: grandTotal,
+            transactionNote: `Rabbit ${paymentData.intentId.slice(0, 8)}`,
+            app: upiApp,
+          })
+          window.location.href = deepLink
+        }
+      }
+
       const razorpayKey =
         paymentData.key ||
         runtimeRazorpayKey ||
@@ -306,7 +389,14 @@ export default function DynamicCheckoutPage() {
           amount: paymentData.amount,
           currency: paymentData.currency,
           name: 'Rabbit',
-          description: 'Order payment',
+          description:
+            mode === 'upi'
+              ? 'UPI payment'
+              : mode === 'netbanking'
+                ? 'Netbanking payment'
+                : mode === 'bnpl'
+                  ? 'Pay later'
+                  : 'Order payment',
           order_id: paymentData.razorpayOrderId,
           theme: { color: '#FF6B35' },
           handler: async (razorpayResponse) => {
@@ -359,6 +449,59 @@ export default function DynamicCheckoutPage() {
     } finally {
       setIsPlacing(false)
       setShowConfirmLocation(false)
+      setShowPaymentSheet(false)
+    }
+  }
+
+  const handlePlaceCodOrder = async () => {
+    if (items.length === 0 || shopIds.length === 0) return
+    if (!selectedAddress || !deliveryAddress.trim()) {
+      setError('Please add and select a delivery address.')
+      return
+    }
+    if (!codEnabled) {
+      setError('Cash on delivery is not available right now.')
+      return
+    }
+
+    setIsPlacing(true)
+    setError(null)
+
+    const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
+
+    try {
+      const res = await authFetch(
+        resolveAppApiUrl('/api/checkout/cod'),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        { skipLogoutRedirect: true },
+      )
+
+      const json = await res.json()
+      if (!json.success) {
+        if (res.status === 401) {
+          setError(json.error ?? 'Please log in again.')
+          if (sandbox) {
+            setNeedsAuth(true)
+            return
+          }
+          router.push('/auth?redirect=/checkout')
+          return
+        }
+        setError(json.error ?? 'Could not place order. Please try again.')
+        return
+      }
+
+      finishOrder(json.data.orderId as string, json.data.orderNumber as string | undefined)
+    } catch {
+      setError('Something went wrong. Please try again.')
+    } finally {
+      setIsPlacing(false)
+      setShowConfirmLocation(false)
+      setShowPaymentSheet(false)
     }
   }
 
@@ -367,17 +510,37 @@ export default function DynamicCheckoutPage() {
       setError('Please add and select a delivery address.')
       return
     }
-    if (!paymentEnabled) {
-      setError('Online payment is temporarily unavailable. Please try again later.')
+    if (!codEnabled && paymentEnabled !== true) {
+      setError('No payment methods are available right now.')
       return
     }
     setError(null)
+    setShowPaymentSheet(true)
+  }
+
+  const beginOnlineCheckout = (
+    mode: OnlinePayMode,
+    upiApp: 'gpay' | 'phonepe' | 'paytm' | null = null,
+  ) => {
+    setPaymentMethod('online')
+    pendingOnlineMode.current = mode
+    pendingUpiApp.current = upiApp
+    setShowPaymentSheet(false)
     setShowConfirmLocation(true)
   }
 
-  const paymentConfirmLabel = 'Pay now'
+  const beginCodCheckout = () => {
+    setPaymentMethod('cod')
+    setShowPaymentSheet(false)
+    setShowConfirmLocation(true)
+  }
 
-  if (!hydrated || !authHydrated) {
+  const paymentConfirmLabel =
+    paymentMethod === 'cod' ? 'Pay on delivery' : 'Pay now'
+  const canPlaceOrder = items.length > 0 && hasDeliveryAddress
+  const bumpBill = useCallback(() => setBillPulse((n) => n + 1), [])
+
+  if (!hydrated || !authHydrated || (!needsAuth && !portalReady)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] text-sm font-bold text-slate-400">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -420,8 +583,8 @@ export default function DynamicCheckoutPage() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8FAFC] px-4 font-sans">
         <ShoppingBag className="h-12 w-12 text-slate-300" />
         <p className="mt-4 text-slate-600">Your cart is empty</p>
-        <Link href="/" className="mt-4 font-semibold text-[#FF6B35]">
-          Browse shops
+        <Link href="/cart" className="mt-4 font-semibold text-[#FF6B35]">
+          Back to cart
         </Link>
       </div>
     )
@@ -570,26 +733,33 @@ export default function DynamicCheckoutPage() {
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
             Payment
           </h3>
-          <div className="flex items-start gap-3 rounded-2xl border border-[#FF6B35]/20 bg-[#FFF8F5] p-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FF6B35] text-white">
-              <CreditCard className="h-5 w-5" />
+          <button
+            type="button"
+            onClick={() => {
+              if (!selectedAddress) {
+                setError('Please add and select a delivery address first.')
+                return
+              }
+              setShowPaymentSheet(true)
+            }}
+            className="group flex w-full items-center justify-between rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 text-left shadow-[0_12px_40px_rgba(15,23,42,0.25)] transition hover:scale-[1.01] active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-white backdrop-blur">
+                <Wallet className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-black text-white">Choose payment method</p>
+                <p className="text-[11px] font-semibold text-white/60">
+                  UPI · Cards · COD · BNPL
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-black text-slate-900">Pay online to confirm your order</p>
-              <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                UPI, cards, netbanking and wallets via Razorpay. Your order is placed only after
-                successful payment.
-              </p>
-            </div>
-          </div>
-          {paymentEnabled === false && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              Online payment is temporarily unavailable. Checkout is disabled until payment is
-              restored.
-            </div>
-          )}
+            <ChevronRight className="h-5 w-5 text-white/70 transition group-hover:translate-x-0.5" />
+          </button>
         </div>
+
+        <CompleteYourBasket shopIds={shopIds} onTotalBump={bumpBill} />
 
         <div className="space-y-3 rounded-[2rem] border bg-white p-5 shadow-xs">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">
@@ -598,7 +768,15 @@ export default function DynamicCheckoutPage() {
           <div className="space-y-2.5 text-xs font-bold text-slate-600">
             <div className="flex justify-between">
               <span>Item Total</span>
-              <span className="font-extrabold text-slate-900">₹{itemTotal}</span>
+              <motion.span
+                key={`items-${itemTotal}-${billPulse}`}
+                initial={{ scale: 1.12, color: '#FF6B35' }}
+                animate={{ scale: 1, color: '#0f172a' }}
+                transition={billSpring}
+                className="font-extrabold text-slate-900"
+              >
+                ₹{itemTotal}
+              </motion.span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-emerald-600">
@@ -638,7 +816,15 @@ export default function DynamicCheckoutPage() {
             )}
             <div className="flex justify-between border-t pt-3 text-sm font-black text-slate-950">
               <span>To Pay</span>
-              <span className="text-lg text-[#FF6B35]">₹{grandTotal}</span>
+              <motion.span
+                key={`grand-${grandTotal}-${billPulse}`}
+                initial={{ scale: 1.15, color: '#ea580c' }}
+                animate={{ scale: 1, color: '#FF6B35' }}
+                transition={billSpring}
+                className="text-lg text-[#FF6B35]"
+              >
+                ₹{grandTotal}
+              </motion.span>
             </div>
           </div>
         </div>
@@ -658,15 +844,18 @@ export default function DynamicCheckoutPage() {
         <button
           type="button"
           onClick={requestPlaceOrder}
-          disabled={
-            isPlacing ||
-            items.length === 0 ||
-            !hasDeliveryAddress ||
-            paymentEnabled !== true
-          }
-          className="flex w-full items-center justify-between rounded-2xl bg-[#FF6B35] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl disabled:bg-slate-300 disabled:shadow-none"
+          disabled={isPlacing || !canPlaceOrder}
+          className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl shadow-orange-300/40 disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
         >
-          <span className="text-base font-black">₹{grandTotal}</span>
+          <motion.span
+            key={`cta-${grandTotal}-${billPulse}`}
+            initial={{ scale: 1.08 }}
+            animate={{ scale: 1 }}
+            transition={billSpring}
+            className="text-base font-black"
+          >
+            ₹{grandTotal}
+          </motion.span>
           <span className="flex items-center gap-1.5">
             {isPlacing ? (
               <>
@@ -675,18 +864,33 @@ export default function DynamicCheckoutPage() {
               </>
             ) : (
               <>
-                Pay &amp; Place Order <CreditCard className="h-4 w-4" />
+                Continue to pay <ChevronRight className="h-4 w-4" />
               </>
             )}
           </span>
         </button>
       </div>
 
+      <PaymentSheetDrawer
+        open={showPaymentSheet}
+        onClose={() => !isPlacing && setShowPaymentSheet(false)}
+        grandTotal={grandTotal}
+        codEnabled={codEnabled}
+        onlineEnabled={paymentEnabled === true}
+        isPlacing={isPlacing}
+        onPayCod={beginCodCheckout}
+        onPayUpiApp={(app) => beginOnlineCheckout('upi', app)}
+        onPayCard={() => beginOnlineCheckout('card')}
+        onPayNetbanking={() => beginOnlineCheckout('netbanking')}
+        onPayBnpl={() => beginOnlineCheckout('bnpl')}
+      />
+
       <ConfirmDeliveryLocationModal
         open={showConfirmLocation}
         address={selectedAddress}
         grandTotal={grandTotal}
         paymentLabel={paymentConfirmLabel}
+        isCod={paymentMethod === 'cod'}
         isPlacing={isPlacing}
         onConfirm={() => void handlePlaceOrder()}
         onChangeAddress={() => setShowConfirmLocation(false)}

@@ -68,6 +68,7 @@ router.post("/", authenticate, requireRoles("VENDOR"), async (req: AuthRequest, 
     const schema = z.object({
       name: z.string().min(1),
       storeType: z.nativeEnum(StoreType),
+      category: z.string().min(2).max(40).optional(),
       latitude: z.number(),
       longitude: z.number(),
       address: z.string().min(1),

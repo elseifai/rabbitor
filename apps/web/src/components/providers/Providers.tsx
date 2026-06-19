@@ -8,6 +8,7 @@ import { CartProvider } from '@/context/CartContext'
 import { SplashGate } from '@/components/SplashGate'
 import { AppAuthGate } from '@/components/auth/AppAuthGate'
 import { AppStartupProvider } from '@/components/providers/AppStartupProvider'
+import { CartSwitchShopDialog } from '@/components/cart/CartSwitchShopDialog'
 
 const FcmInit = dynamic(
   () => import('@/components/FcmInit').then((mod) => ({ default: mod.FcmInit })),
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <AppAuthGate>
               <AppStartupProvider>
                 <FcmInit />
+                <CartSwitchShopDialog />
                 {children}
               </AppStartupProvider>
             </AppAuthGate>

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const user = await prisma.user.findUnique({ where: { id: session.userId } })
-    if (!user || user.role !== 'CUSTOMER') {
+    if (!user || session.role !== 'CUSTOMER') {
       return NextResponse.json(
         { success: false, error: 'Only customers can checkout' },
         { status: 403 },

@@ -273,6 +273,8 @@ async function main() {
     data: {
       name: 'Rahul Admin',
       phone: '9000000000',
+      email: 'dreamsight11@gmail.com',
+      emailVerified: new Date(),
       role: UserRole.ADMIN,
       passwordHash,
       displayName: 'Rahul Admin',
@@ -342,6 +344,7 @@ async function main() {
         create: {
           isAvailable: true,
           isVerified: true,
+          isOnboarded: true,
           currentLat: 19.076,
           currentLng: 72.877,
         },
@@ -360,6 +363,7 @@ async function main() {
         create: {
           isAvailable: true,
           isVerified: true,
+          isOnboarded: true,
           currentLat: 19.079,
           currentLng: 72.88,
         },

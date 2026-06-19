@@ -7,7 +7,7 @@ import { clearSession, requireSession } from '@/lib/auth'
 import { canTransition, generateOrderNumber, ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
 import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
 import {
-  broadcastDeliveryOffer,
+  broadcastAssignRider,
   broadcastNewMerchantOrder,
   broadcastOrderEvent,
 } from '@/lib/order-events'
@@ -210,7 +210,7 @@ export async function updateOrderStatusAction(
   await broadcastOrderEvent(orderId, { type: 'status', status: ORDER_STATUS_LABELS[status] })
 
   if (status === 'OUT_FOR_DELIVERY') {
-    await broadcastDeliveryOffer(orderId)
+    await broadcastAssignRider(orderId)
   }
 
   revalidatePath('/merchant/orders')
@@ -250,7 +250,11 @@ export async function getMerchantOrdersAction() {
     shopId: o.shop.id,
     shopName: o.shop.name,
     customerPhone: o.customer.phone?.replace(/\d(?=\d{4})/g, '•') ?? '',
+    customerName: o.customer.name ?? 'Customer',
     totalPrice: o.totalPrice + o.deliveryFee,
+    subtotal: o.totalPrice,
+    deliveryFee: o.deliveryFee,
+    deliveryInstruction: o.deliveryInstruction,
     itemCount: o.items.reduce((sum, item) => sum + item.quantity, 0),
     createdAt: o.createdAt.toISOString(),
     items: o.items.map((item) => ({

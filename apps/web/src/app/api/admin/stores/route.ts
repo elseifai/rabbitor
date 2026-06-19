@@ -8,6 +8,7 @@ import {
 } from '@/lib/store-performance'
 import { computePositiveFeedbackPercent } from '@/lib/catalog-performance'
 import { aggregateStoreFeedback } from '@/lib/master-catalog-metrics'
+import { syncAdsWithStoreStatus } from '@/lib/ad-store-sync'
 
 function startOfDay() {
   const d = new Date()
@@ -84,6 +85,7 @@ export async function GET() {
             where: { id: s.id },
             data: { isActive: true, pausedUntil: null },
           })
+          await syncAdsWithStoreStatus(s.id, true)
           isActive = true
         }
 

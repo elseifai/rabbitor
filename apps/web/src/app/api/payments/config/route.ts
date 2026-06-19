@@ -15,6 +15,7 @@ export async function GET() {
     success: true,
     data: {
       enabled: isRazorpayConfigured() && platform.featureFlags.customer.razorpayEnabled,
+      codEnabled: platform.featureFlags.customer.codEnabled !== false,
       key: platform.featureFlags.customer.razorpayEnabled ? key : '',
       globalMinCartValue: platform.globalMinCartValue,
       multiShopRoutingFeePerLeg: platform.multiShopRoutingFeePerLeg,

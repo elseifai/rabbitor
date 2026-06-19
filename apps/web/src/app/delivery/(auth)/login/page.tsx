@@ -9,6 +9,7 @@ import { getRiderProfileStatusAction } from '@/actions/rider-onboarding'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { RiderOnboardingWizard } from '@/components/delivery/RiderOnboardingWizard'
 import { useAuth } from '@/context/AuthContext'
+import { PartnerPhoneLogin } from '@/components/auth/PartnerPhoneLogin'
 import { roleCanAccessPortal, signInPortalMatches } from '@/lib/auth-routing'
 
 type GatewayView = 'loading' | 'login' | 'setup'
@@ -26,7 +27,6 @@ export default function DeliveryEnterGatewayPage() {
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(oauthError)
-  const [devCode, setDevCode] = useState<string | null>(null)
   const [initialProfile, setInitialProfile] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
@@ -65,7 +65,6 @@ export default function DeliveryEnterGatewayPage() {
     const res = await requestEmailOtpAction(email, 'RABBITOR')
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed to send code')
-    setDevCode(res.devCode ?? null)
     setStep('otp')
   }
 
@@ -76,7 +75,7 @@ export default function DeliveryEnterGatewayPage() {
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Invalid code')
     if (!signInPortalMatches(res.user.role, 'RABBITOR')) {
-      setError('This email is not registered as a delivery partner.')
+      setError('Could not sign in as a delivery partner. Please try again.')
       return
     }
     login(res.token, res.user)
@@ -110,7 +109,7 @@ export default function DeliveryEnterGatewayPage() {
     <div className="mx-auto max-w-md py-6">
       <h1 className="text-2xl font-black text-gray-900">Rider sign in</h1>
       <p className="mt-1 text-sm text-gray-500">
-        Sign in to complete your delivery partner profile
+        Sign in with any Google account or email to join as a delivery partner
       </p>
 
       <div className="mt-6">
@@ -154,11 +153,6 @@ export default function DeliveryEnterGatewayPage() {
           <p className="text-sm text-gray-600">
             Enter the 6-digit code sent to <strong>{email}</strong>
           </p>
-          {devCode && (
-            <p className="rounded-lg bg-amber-50 p-3 text-sm">
-              Dev code: <strong>{devCode}</strong>
-            </p>
-          )}
           <input
             inputMode="numeric"
             value={otp}
@@ -177,6 +171,14 @@ export default function DeliveryEnterGatewayPage() {
           </button>
         </div>
       )}
+
+      <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
+        <span className="h-px flex-1 bg-orange-100" />
+        OR PHONE OTP
+        <span className="h-px flex-1 bg-orange-100" />
+      </div>
+
+      <PartnerPhoneLogin role="RABBITOR" redirectTo="/delivery/login?setup=1" />
 
       {error && <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 

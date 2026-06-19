@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Download, FileSpreadsheet, ImageIcon, Loader2, Upload } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   ADMIN_CATALOG_HEADERS,
   MERCHANT_PRODUCT_HEADERS,
@@ -126,7 +127,7 @@ export function BulkProductImport({
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={cn('grid gap-3', mode === 'admin' ? 'sm:grid-cols-2' : 'grid-cols-1')}>
         <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-orange-100 bg-white p-4 text-center hover:bg-orange-50/50">
           <FileSpreadsheet className="mb-2 h-6 w-6 text-orange-500" />
           <span className="text-xs font-semibold text-gray-700">
@@ -141,20 +142,22 @@ export function BulkProductImport({
           />
         </label>
 
-        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-orange-100 bg-white p-4 text-center hover:bg-orange-50/50">
-          <ImageIcon className="mb-2 h-6 w-6 text-orange-500" />
-          <span className="text-xs font-semibold text-gray-700">
-            {imageFiles.length ? `${imageFiles.length} images selected` : 'Upload product images'}
-          </span>
-          <input
-            ref={imagesRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            multiple
-            className="hidden"
-            onChange={(e) => setImageFiles(Array.from(e.target.files ?? []))}
-          />
-        </label>
+        {mode === 'admin' && (
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-orange-100 bg-white p-4 text-center hover:bg-orange-50/50">
+            <ImageIcon className="mb-2 h-6 w-6 text-orange-500" />
+            <span className="text-xs font-semibold text-gray-700">
+              {imageFiles.length ? `${imageFiles.length} images selected` : 'Upload product images'}
+            </span>
+            <input
+              ref={imagesRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              className="hidden"
+              onChange={(e) => setImageFiles(Array.from(e.target.files ?? []))}
+            />
+          </label>
+        )}
       </div>
 
       <p className="text-[10px] text-gray-400">

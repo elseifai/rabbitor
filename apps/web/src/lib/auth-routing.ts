@@ -5,12 +5,15 @@ import { parseAuthRoleParam } from '@/lib/auth-roles'
 export const AUTH_PUBLIC_PREFIXES = [
   '/auth',
   '/login',
+  '/admin/login',
+  '/delivery/login',
   '/api',
   '/manifest.webmanifest',
 ] as const
 
 export const AUTH_PROTECTED_PREFIXES = [
   '/checkout',
+  '/cart',
   '/profile',
   '/orders',
   '/track',
@@ -85,6 +88,8 @@ export function signInPortalMatches(
   userRole: string,
   requestedRole: SessionUser['role'],
 ): boolean {
+  // Any account may browse / shop as a customer
+  if (requestedRole === 'CUSTOMER') return true
   if (userRole === requestedRole) return true
   if (userRole === 'ADMIN' && requestedRole !== 'CUSTOMER') return true
   return false
@@ -97,10 +102,19 @@ export function postSignInDestination(
   selectedRedirect: string,
 ): string {
   if (returnTo !== '/') return returnTo
+
+  // Storefront — any signed-in user may browse as a customer
+  if (requestedRole === 'CUSTOMER') return '/'
+
   if (userRole === 'ADMIN' && requestedRole !== 'CUSTOMER') {
     return selectedRedirect
   }
-  return defaultDashboardForRole(userRole) || selectedRedirect
+
+  if (signInPortalMatches(userRole, requestedRole)) {
+    return defaultDashboardForRole(userRole) || selectedRedirect
+  }
+
+  return selectedRedirect
 }
 
 export function defaultDashboardForRole(role: SessionUser['role']): string {

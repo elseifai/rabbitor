@@ -1,9 +1,9 @@
-export type SubPlatformId = 'all' | 'grocery' | 'fresh' | 'fashion'
+export type SubPlatformId = 'all' | 'grocery' | 'restaurants' | 'fashion'
 
 export const SUB_PLATFORM_IDS: SubPlatformId[] = [
   'all',
   'grocery',
-  'fresh',
+  'restaurants',
   'fashion',
 ]
 
@@ -31,8 +31,8 @@ export const SUB_PLATFORM_TABS: SubPlatformTab[] = [
     idleText: 'text-[#4338CA]',
   },
   {
-    id: 'fresh',
-    label: 'Fresh Farm',
+    id: 'restaurants',
+    label: 'Restaurants / Cafés',
     activePill: 'bg-gradient-to-r from-[#059669] to-[#34D399] shadow-[0_4px_14px_rgba(5,150,105,0.35)]',
     activeText: 'text-white',
     idleText: 'text-[#059669]',
@@ -71,13 +71,12 @@ export const SUB_PLATFORM_CONFIG: Record<SubPlatformId, SubPlatformConfig> = {
     showFashionDeals: false,
     storeTypes: ['KIRANA', 'DAIRY', 'BAKERY', 'GENERAL'],
   },
-  fresh: {
-    etaLabel: '⚡ 15 Mins',
+  restaurants: {
+    etaLabel: '🍽️ 25-35 Mins',
     etaTone: 'bg-emerald-50 text-emerald-700',
     productVariant: 'GROCERY',
-    showGroceryLayouts: true,
+    showGroceryLayouts: false,
     showFashionDeals: false,
-    storeTypes: ['VEGETABLE', 'FISH', 'MEAT', 'DAIRY'],
   },
   fashion: {
     etaLabel: '🕒 Delivery in 45 Mins',
@@ -101,6 +100,7 @@ export const FASHION_DEAL_BADGES = [
 ] as const
 
 export function parseSubPlatformId(value: string | null): SubPlatformId {
+  if (value === 'fresh') return 'restaurants'
   if (value && SUB_PLATFORM_IDS.includes(value as SubPlatformId)) {
     return value as SubPlatformId
   }

@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Mail, Phone } from 'lucide-react'
 import { requestEmailOtpAction, verifyEmailOtpAction } from '@/actions/auth'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { PhoneOtpLogin } from '@/components/auth/PhoneOtpLogin'
 import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { isDevSandboxClient } from '@/lib/dev-auth'
 import {
@@ -19,6 +20,25 @@ import { defaultDashboardForRole, postSignInDestination, signInPortalMatches } f
 import { useAuth } from '@/context/AuthContext'
 
 const RESEND_SECONDS = 60
+
+type SignInMethod = 'google' | 'phone' | 'email'
+
+function GoogleTabIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.65l-3.57-2.77c-.99.66-2.26 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.05l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+    </svg>
+  )
+}
+
+const SIGN_IN_METHODS: { id: SignInMethod; label: string; icon?: 'google' | 'phone' | 'email' }[] = [
+  { id: 'google', label: 'Google', icon: 'google' },
+  { id: 'phone', label: 'Mobile', icon: 'phone' },
+  { id: 'email', label: 'Email', icon: 'email' },
+]
 
 async function resolveDestination(
   userRole: 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
@@ -39,7 +59,6 @@ export default function AuthPage() {
   const { login } = useAuth()
   const sandbox = isDevSandboxClient()
   const returnTo = searchParams.get('redirect') ?? '/'
-  const oauthError = searchParams.get('error')
   const roleParam = searchParams.get('role')
 
   const [selectedRoleId, setSelectedRoleId] = useState<AuthRoleId>(() =>
@@ -49,11 +68,12 @@ export default function AuthPage() {
   const ssoRedirect = returnTo !== '/' ? returnTo : selectedRole.redirect
 
   const [showDevLogin, setShowDevLogin] = useState(false)
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>('phone')
   const [step, setStep] = useState<1 | 2>(1)
   const [email, setEmail] = useState('')
   const [digits, setDigits] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(oauthError)
+  const [error, setError] = useState<string | null>(null)
   const [devCode, setDevCode] = useState<string | null>(null)
   const [countdown, setCountdown] = useState(RESEND_SECONDS)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
@@ -61,6 +81,14 @@ export default function AuthPage() {
   useEffect(() => {
     setSelectedRoleId(parseAuthRoleParam(roleParam))
   }, [roleParam])
+
+  useEffect(() => {
+    if (!searchParams.get('error')) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('error')
+    const q = params.toString()
+    router.replace(q ? `/auth?${q}` : '/auth', { scroll: false })
+  }, [searchParams, router])
 
   useEffect(() => {
     if (step !== 2) return
@@ -210,7 +238,7 @@ export default function AuthPage() {
           <>
             <h1 className="text-2xl font-black text-gray-900">Sign in to Rabbit</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Choose how you&apos;ll use Rabbit, then sign in with Google or email
+              Choose your role, then sign in with Google, mobile OTP, or email
             </p>
 
             <AuthRolePicker
@@ -219,48 +247,91 @@ export default function AuthPage() {
               onChange={(id: AuthRoleId, _option: AuthRoleOption) => setSelectedRoleId(id)}
             />
 
-            <div className="mt-6">
-              <GoogleSignInButton role={selectedRole.role} redirect={ssoRedirect} />
+            <div className="mt-6 grid grid-cols-3 gap-2 rounded-xl bg-orange-50/60 p-1">
+              {SIGN_IN_METHODS.map(({ id, label, icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setSignInMethod(id)
+                    setError(null)
+                  }}
+                  className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-wide transition ${
+                    signInMethod === id
+                      ? 'bg-white text-orange-600 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {icon === 'google' && <GoogleTabIcon />}
+                  {icon === 'phone' && <Phone className="h-4 w-4" />}
+                  {icon === 'email' && <Mail className="h-4 w-4" />}
+                  {label}
+                </button>
+              ))}
             </div>
 
-            <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
-              <span className="h-px flex-1 bg-orange-100" />
-              OR EMAIL OTP
-              <span className="h-px flex-1 bg-orange-100" />
-            </div>
+            {signInMethod === 'google' && (
+              <div className="mt-4">
+                <GoogleSignInButton role={selectedRole.role} redirect={ssoRedirect} />
+                <p className="mt-3 text-center text-xs text-gray-400">
+                  Use your Gmail or Google Workspace account
+                </p>
+              </div>
+            )}
 
-            <form onSubmit={(e) => void handleSendOtp(e)} className="space-y-4">
-              <div className="flex items-center overflow-hidden rounded-xl border-2 border-orange-100 bg-orange-50/20 focus-within:border-orange-400 focus-within:bg-white">
-                <span className="flex h-14 items-center border-r border-orange-100 bg-white px-4">
-                  <Mail className="h-4 w-4 text-gray-500" />
-                </span>
-                <input
-                  type="email"
-                  required
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-14 flex-1 bg-transparent px-4 text-base font-bold text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-400"
+            {signInMethod === 'phone' && (
+              <div className="mt-4">
+                <PhoneOtpLogin
+                  role={selectedRole.role}
+                  compact
+                  onVerified={async ({ user }) => {
+                    const destination = await resolveDestination(
+                      user.role as 'CUSTOMER' | 'VENDOR' | 'RABBITOR' | 'ADMIN',
+                      selectedRole.role,
+                      returnTo,
+                      selectedRole.redirect,
+                    )
+                    router.push(destination)
+                    router.refresh()
+                  }}
                 />
               </div>
+            )}
 
-              {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
-                  {error}
-                </p>
-              )}
+            {signInMethod === 'email' && (
+              <form onSubmit={(e) => void handleSendOtp(e)} className="mt-4 space-y-4">
+                <div className="flex items-center overflow-hidden rounded-xl border-2 border-orange-100 bg-orange-50/20 focus-within:border-orange-400 focus-within:bg-white">
+                  <span className="flex h-14 items-center border-r border-orange-100 bg-white px-4">
+                    <Mail className="h-4 w-4 text-gray-500" />
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-14 flex-1 bg-transparent px-4 text-base font-bold text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-400"
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={!emailValid || loading}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-orange-500 text-base font-bold text-white shadow-lg shadow-orange-100 transition active:scale-95 disabled:opacity-40"
-              >
-                {loading
-                  ? <Loader2 className="h-5 w-5 animate-spin" />
-                  : <>Get code <ArrowRight className="h-5 w-5" /></>
-                }
-              </button>
-            </form>
+                {error && (
+                  <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!emailValid || loading}
+                  className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-orange-500 text-base font-bold text-white shadow-lg shadow-orange-100 transition active:scale-95 disabled:opacity-40"
+                >
+                  {loading
+                    ? <Loader2 className="h-5 w-5 animate-spin" />
+                    : <>Get code <ArrowRight className="h-5 w-5" /></>
+                  }
+                </button>
+              </form>
+            )}
 
             {sandbox && (
               <button
@@ -280,7 +351,7 @@ export default function AuthPage() {
               <span className="font-bold text-gray-800">{email}</span>
             </p>
 
-            {devCode && (
+            {sandbox && devCode && (
               <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
                 Dev code: <strong className="text-lg tracking-widest">{devCode}</strong>
               </div>
@@ -342,7 +413,14 @@ export default function AuthPage() {
       </div>
 
       <p className="px-6 py-4 text-center text-[11px] text-gray-400">
-        By continuing, you agree to Rabbit&apos;s Terms of Service &amp; Privacy Policy
+        By continuing, you agree to Rabbit&apos;s{' '}
+        <a href="/terms" className="underline">
+          Terms of Service
+        </a>{' '}
+        &amp;{' '}
+        <a href="/privacy" className="underline">
+          Privacy Policy
+        </a>
       </p>
     </div>
   )

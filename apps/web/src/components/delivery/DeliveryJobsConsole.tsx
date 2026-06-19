@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { Clock, IndianRupee, MapPin, Store } from 'lucide-react'
 import { acceptDeliveryOrderAction } from '@/actions/delivery'
 import { SwipeActionButton } from '@/components/delivery/SwipeActionButton'
@@ -25,13 +25,17 @@ export type DeliveryJobBundle = {
 export function DeliveryJobsConsole({ jobs }: { jobs: DeliveryJobBundle[] }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [acceptError, setAcceptError] = useState<string | null>(null)
 
   function handleAccept(orderId: string) {
+    setAcceptError(null)
     startTransition(async () => {
       const result = await acceptDeliveryOrderAction(orderId)
       if (result.ok) {
         router.push('/delivery/orders')
+        return
       }
+      setAcceptError(result.error ?? 'Could not accept this job. It may already be taken.')
     })
   }
 
@@ -46,6 +50,9 @@ export function DeliveryJobsConsole({ jobs }: { jobs: DeliveryJobBundle[] }) {
 
   return (
     <div className="space-y-4">
+      {acceptError && (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-600">{acceptError}</p>
+      )}
       {jobs.map((job) => (
         <article
           key={job.id}

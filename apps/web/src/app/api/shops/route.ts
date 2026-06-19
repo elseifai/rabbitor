@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { StoreType } from '@rabbit/database'
 
+import { isRestaurantShop } from '@/lib/home-feed-config'
+
 const VALID_STORE_TYPES = new Set([
   'KIRANA',
   'FISH',
@@ -18,18 +20,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const category = searchParams.get('category')
     const storeTypeParam = searchParams.get('storeType')
+    const vertical = searchParams.get('vertical')
 
     const where: { isActive: boolean; storeType?: StoreType; category?: string } = {
       isActive: true,
     }
 
-    if (storeTypeParam && VALID_STORE_TYPES.has(storeTypeParam.toUpperCase())) {
-      where.storeType = storeTypeParam.toUpperCase() as StoreType
-    } else if (category && category !== 'all') {
-      const tab = category.toUpperCase()
-      if (VALID_STORE_TYPES.has(tab)) {
-        where.storeType = tab as StoreType
-      }
+    const storeTypeFilter =
+      storeTypeParam && VALID_STORE_TYPES.has(storeTypeParam.toUpperCase())
+        ? (storeTypeParam.toUpperCase() as StoreType)
+        : category && category !== 'all' && VALID_STORE_TYPES.has(category.toUpperCase())
+          ? (category.toUpperCase() as StoreType)
+          : undefined
+
+    if (vertical !== 'restaurants' && storeTypeFilter) {
+      where.storeType = storeTypeFilter
     }
 
     const shops = await prisma.shop.findMany({
@@ -40,10 +45,19 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: storeTypeFilter
+        ? [{ ratingAvg: 'desc' }, { ratingCount: 'desc' }]
+        : { createdAt: 'desc' },
     })
 
-    const data = shops.map((shop) => ({
+    const filtered =
+      vertical === 'restaurants'
+        ? shops.filter((s) =>
+            isRestaurantShop({ name: s.name, category: s.category, storeType: s.storeType }),
+          )
+        : shops
+
+    const data = filtered.map((shop) => ({
       id: shop.id,
       name: shop.name,
       slug: shop.slug,
@@ -51,6 +65,7 @@ export async function GET(request: NextRequest) {
       latitude: shop.latitude,
       longitude: shop.longitude,
       rating: shop.ratingCount > 0 ? shop.ratingAvg.toFixed(1) : 'New',
+      ratingAvg: shop.ratingAvg,
       ratingCount: shop.ratingCount,
       time: `${shop.avgPrepMinutes}-${shop.avgPrepMinutes + 5} mins`,
       cuisine: shop.category,

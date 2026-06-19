@@ -6,13 +6,6 @@ import { Loader2 } from 'lucide-react'
 import { fetchCurrentAuth } from '@/lib/client-auth'
 import { useAuth } from '@/context/AuthContext'
 
-const ROLE_REDIRECT: Record<string, string> = {
-  CUSTOMER: '/',
-  VENDOR: '/merchant',
-  RABBITOR: '/delivery/dashboard',
-  ADMIN: '/admin',
-}
-
 // GOOGLE MAPS & AUTH ACTIVATION — sync httpOnly cookie session to client after OAuth
 export default function AuthCompletePage() {
   const router = useRouter()
@@ -30,8 +23,7 @@ export default function AuthCompletePage() {
         return
       }
       login(current.token, current.user)
-      const roleRedirect = ROLE_REDIRECT[current.user.role] ?? '/'
-      router.replace(redirectTo === '/' ? roleRedirect : redirectTo)
+      router.replace(redirectTo)
       router.refresh()
     })()
   }, [login, router, searchParams])

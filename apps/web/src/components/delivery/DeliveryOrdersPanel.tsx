@@ -21,7 +21,7 @@ import {
 } from '@/actions/delivery'
 import { SwipeActionButton } from '@/components/delivery/SwipeActionButton'
 import { useRiderLocationStream } from '@/hooks/useRiderLocationStream'
-import { useRiderSocket, type DeliveryOfferEvent } from '@/hooks/useRiderSocket'
+import { useRiderSocket, type DeliveryAssignedEvent, type DeliveryOfferEvent } from '@/hooks/useRiderSocket'
 import { formatCurrency, cn } from '@/lib/utils'
 
 const ACTIVE_ORDER_KEY = 'rabbit:active-delivery-id'
@@ -69,6 +69,7 @@ export function DeliveryOrdersPanel() {
   const [socketToken, setSocketToken] = useState<string | null>(null)
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [lastGpsAt, setLastGpsAt] = useState<number | null>(null)
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null)
 
   const watchIdRef = useRef<number | null>(null)
   const lastEmitRef = useRef(0)
@@ -101,10 +102,29 @@ export function DeliveryOrdersPanel() {
     setPendingOffer(offer)
   }, [activeDelivery])
 
+  const handleAssigned = useCallback(
+    async (_assignment: DeliveryAssignedEvent) => {
+      if (activeDelivery) return
+      const delivery = await getActiveDeliveryAction()
+      if (delivery) {
+        setActiveDelivery(delivery)
+        persistActive(delivery.id)
+        setPendingOffer(null)
+        setPickupVerified(false)
+      }
+    },
+    [activeDelivery, persistActive],
+  )
+
   const { connectionState, joinError, emitLocation } = useRiderSocket(
     socketToken,
     isOnline,
     handleOffer,
+    handleAssigned,
+    (payload) => {
+      setFeedbackToast(`Customer rated delivery ★${payload.riderRating}`)
+      window.setTimeout(() => setFeedbackToast(null), 8000)
+    },
   )
 
   // GOOGLE MAPS & AUTH ACTIVATION — persist rider coords to DB during active delivery
@@ -206,6 +226,11 @@ export function DeliveryOrdersPanel() {
 
   return (
     <div className="space-y-6 pb-28">
+      {feedbackToast && (
+        <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-bold text-emerald-800">
+          {feedbackToast}
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <Link href="/delivery/dashboard" className="text-sm text-gray-500 hover:text-orange-500">
@@ -363,7 +388,7 @@ export function DeliveryOrdersPanel() {
 
             {stage === 'PICKED_UP' && (
               <SwipeActionButton
-                label="Swipe to Complete Delivery"
+                label="Swipe — Order Complete"
                 tone="orange"
                 disabled={busy}
                 onConfirm={() => void advanceStage('DELIVERED')}

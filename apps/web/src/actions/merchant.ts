@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 import { mintApiAccessToken } from '@/lib/api-jwt'
+import { syncAdsWithStoreStatus } from '@/lib/ad-store-sync'
+import { parseMasterCatalogItemId } from '@/lib/catalog-baseline-stock'
 
 function resolveStoredImage(url?: string | null): string | undefined {
   if (!url) return undefined
@@ -45,6 +47,7 @@ export async function getMerchantShopAction() {
         stock: p.stock,
         isAvailable: p.isAvailable,
         image: p.image,
+        masterCatalogItemId: p.masterCatalogItemId,
       })),
     }
   } catch {
@@ -60,6 +63,7 @@ export async function toggleShopOpenAction(shopId: string, isActive: boolean) {
   if (!shop) return { ok: false as const, error: 'Shop not found' }
 
   await prisma.shop.update({ where: { id: shopId }, data: { isActive } })
+  await syncAdsWithStoreStatus(shopId, isActive)
   revalidatePath('/merchant')
   revalidatePath('/merchant/products')
   revalidatePath('/shops')
@@ -90,24 +94,67 @@ export async function addProductFromCatalogAction(input: {
       return { ok: false as const, error: 'Valid name and price required' }
     }
 
-    const product = await prisma.product.create({
-      data: {
-        shopId: input.shopId,
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        category: input.category.trim(),
-        price: input.price,
-        unit: input.unit.trim() || 'piece',
-        stock: input.stock ?? 10,
-        image: resolveStoredImage(input.imageUrl),
-        isAvailable: input.isAvailable,
-      },
-    })
+    const masterCatalogItemId = parseMasterCatalogItemId(input.catalogId)
+    const stockQty = Number.isFinite(input.stock) ? input.stock : 20
+
+    const productPayload = {
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+      category: input.category.trim(),
+      price: input.price,
+      unit: input.unit.trim() || 'piece',
+      stock: stockQty,
+      image: resolveStoredImage(input.imageUrl) ?? null,
+      isAvailable: input.isAvailable,
+    }
+
+    let product
+
+    if (masterCatalogItemId) {
+      const catalogItem = await prisma.masterCatalogItem.findUnique({
+        where: { id: masterCatalogItemId },
+      })
+      if (!catalogItem) {
+        return { ok: false as const, error: 'Master catalog template not found' }
+      }
+
+      const existing = await prisma.product.findFirst({
+        where: { shopId: input.shopId, masterCatalogItemId },
+      })
+
+      product = existing
+        ? await prisma.product.update({
+            where: { id: existing.id },
+            data: {
+              ...productPayload,
+              masterCatalogItemId,
+            },
+          })
+        : await prisma.product.create({
+            data: {
+              shopId: input.shopId,
+              masterCatalogItemId,
+              ...productPayload,
+            },
+          })
+    } else {
+      product = await prisma.product.create({
+        data: {
+          shopId: input.shopId,
+          ...productPayload,
+        },
+      })
+    }
 
     revalidatePath('/merchant')
     revalidatePath('/merchant/products')
     revalidatePath(`/shops/${shop.slug}`)
-    return { ok: true as const, productId: product.id, catalogId: input.catalogId }
+    return {
+      ok: true as const,
+      productId: product.id,
+      catalogId: input.catalogId,
+      updated: Boolean(masterCatalogItemId),
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not add product'
     return { ok: false as const, error: message }
@@ -211,6 +258,51 @@ export async function updateProductPriceAction(productId: string, price: number)
     return { ok: true as const }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not update price'
+    return { ok: false as const, error: message }
+  }
+}
+
+export async function updateProductAction(input: {
+  productId: string
+  price: number
+  unit?: string
+  stock?: number
+  isAvailable?: boolean
+  imageUrl?: string | null
+  description?: string
+}) {
+  try {
+    const session = await requireSession(['VENDOR', 'ADMIN'])
+    if (!Number.isFinite(input.price) || input.price <= 0) {
+      return { ok: false as const, error: 'Enter a valid price' }
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { id: input.productId, shop: { ownerId: session.userId } },
+      include: { shop: { select: { slug: true } } },
+    })
+    if (!product) return { ok: false as const, error: 'Product not found' }
+
+    const data: Record<string, unknown> = {
+      price: input.price,
+      unit: input.unit?.trim() || product.unit,
+      stock: input.stock ?? product.stock,
+      isAvailable: input.isAvailable ?? product.isAvailable,
+    }
+    if (input.description !== undefined) {
+      data.description = input.description.trim() || null
+    }
+    if (input.imageUrl !== undefined) {
+      data.image = resolveStoredImage(input.imageUrl ?? undefined) ?? null
+    }
+
+    await prisma.product.update({ where: { id: input.productId }, data })
+    revalidatePath('/merchant')
+    revalidatePath('/merchant/products')
+    revalidatePath(`/shops/${product.shop.slug}`)
+    return { ok: true as const }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Could not update product'
     return { ok: false as const, error: message }
   }
 }
@@ -558,11 +650,12 @@ export async function createShopCouponAction(input: {
 export async function getMerchantRealtimeAuthAction() {
   try {
     const session = await requireSession(['VENDOR', 'ADMIN'])
-    const shop = await prisma.shop.findFirst({
+    const shops = await prisma.shop.findMany({
       where: { ownerId: session.userId },
       select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     })
-    if (!shop) {
+    if (shops.length === 0) {
       return { ok: false as const, error: 'No shop found for this merchant account' }
     }
 
@@ -570,8 +663,9 @@ export async function getMerchantRealtimeAuthAction() {
     return {
       ok: true as const,
       token,
-      storeId: shop.id,
-      storeName: shop.name,
+      storeId: shops[0]!.id,
+      storeIds: shops.map((s) => s.id),
+      storeName: shops.map((s) => s.name).join(', '),
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Not authenticated'

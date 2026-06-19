@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Edit3, Loader2, Package, Plus, Search, UploadCloud } from 'lucide-react'
+import { Edit3, Loader2, Package, Plus, Search, Sparkles, UploadCloud } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
 import {
   itemTypeBadgeClass,
@@ -40,6 +40,16 @@ type UploadResult = {
   lineErrors: string[]
 }
 
+type SeedResult = {
+  total: number
+  created: number
+  updated: number
+  skipped: number
+  errors: string[]
+  bySector: Record<string, number>
+  entries: Array<{ name: string; sku: string; action: 'created' | 'updated' | 'skipped' }>
+}
+
 export function AdminCatalogCommand() {
   const [items, setItems] = useState<CatalogItem[]>([])
   const [shops, setShops] = useState<Shop[]>([])
@@ -48,6 +58,8 @@ export function AdminCatalogCommand() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState<SeedResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [controlItem, setControlItem] = useState<CatalogItem | null>(null)
   const [controlTab, setControlTab] = useState<'profile' | 'assortment' | 'feedback'>('profile')
@@ -137,6 +149,23 @@ export function AdminCatalogCommand() {
     disabled: uploading,
   })
 
+  const runSystemSeed = async () => {
+    setSeeding(true)
+    setSeedResult(null)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/catalog/seed', { method: 'POST' })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error ?? 'Seed failed')
+      setSeedResult(json.data as SeedResult)
+      void load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Seed failed')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   const openControl = (item: CatalogItem, tab: 'profile' | 'assortment' | 'feedback' = 'profile') => {
     setControlTab(tab)
     setControlItem(item)
@@ -181,6 +210,21 @@ export function AdminCatalogCommand() {
             <p className="mt-1 text-xs text-gray-500">
               CSV headers: sku, name, category, subcategory, base_price, description, type
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={seeding || uploading}
+              onClick={() => void runSystemSeed()}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {seeding ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 text-orange-400" />
+              )}
+              Run Dynamic System Catalog Seeding Engine
+            </button>
           </div>
           <div className="flex gap-4 text-center text-xs">
             <div>
@@ -239,6 +283,58 @@ export function AdminCatalogCommand() {
             {uploadResult.lineErrors.length > 0 && (
               <ul className="mt-2 max-h-24 overflow-y-auto text-xs text-red-600">
                 {uploadResult.lineErrors.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {seedResult && (
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+            <div className="border-b bg-slate-900 px-4 py-2.5">
+              <p className="text-xs font-black uppercase tracking-widest text-orange-400">
+                Catalog seed summary
+              </p>
+            </div>
+            <div className="grid gap-3 p-4 sm:grid-cols-4">
+              <div className="rounded-lg bg-emerald-50 px-3 py-2 text-center">
+                <p className="text-2xl font-black text-emerald-700">{seedResult.created}</p>
+                <p className="text-[10px] font-bold uppercase text-emerald-600">Created</p>
+              </div>
+              <div className="rounded-lg bg-blue-50 px-3 py-2 text-center">
+                <p className="text-2xl font-black text-blue-700">{seedResult.updated}</p>
+                <p className="text-[10px] font-bold uppercase text-blue-600">Updated</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 px-3 py-2 text-center">
+                <p className="text-2xl font-black text-amber-700">{seedResult.skipped}</p>
+                <p className="text-[10px] font-bold uppercase text-amber-600">Skipped</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-center">
+                <p className="text-2xl font-black text-slate-800">{seedResult.total}</p>
+                <p className="text-[10px] font-bold uppercase text-slate-500">Total rows</p>
+              </div>
+            </div>
+            {Object.keys(seedResult.bySector).length > 0 && (
+              <div className="border-t px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                  By sector
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {Object.entries(seedResult.bySector).map(([sector, count]) => (
+                    <span
+                      key={sector}
+                      className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold capitalize text-orange-700 ring-1 ring-orange-100"
+                    >
+                      {sector}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {seedResult.errors.length > 0 && (
+              <ul className="max-h-24 overflow-y-auto border-t px-4 py-2 text-xs text-red-600">
+                {seedResult.errors.map((line, i) => (
                   <li key={i}>{line}</li>
                 ))}
               </ul>

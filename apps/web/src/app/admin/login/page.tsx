@@ -9,6 +9,7 @@ import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
 import { AuthRolePicker } from '@/components/auth/AuthRolePicker'
 import { useAuth } from '@/context/AuthContext'
 import { getAuthRoleOption, type AuthRoleId } from '@/lib/auth-roles'
+import { PartnerPhoneLogin } from '@/components/auth/PartnerPhoneLogin'
 import { signInPortalMatches } from '@/lib/auth-routing'
 
 export default function AdminLoginPage() {
@@ -18,7 +19,6 @@ export default function AdminLoginPage() {
   const [step, setStep] = useState<'email' | 'otp'>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
-  const [devCode, setDevCode] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(searchParams.get('error'))
   const [selectedRoleId, setSelectedRoleId] = useState<AuthRoleId>('admin')
@@ -32,7 +32,6 @@ export default function AdminLoginPage() {
     const res = await requestEmailOtpAction(email, selectedRole.role)
     setLoading(false)
     if (!res.ok) return setError(res.error ?? 'Failed to send code')
-    setDevCode(res.devCode ?? null)
     setStep('otp')
   }
 
@@ -65,7 +64,7 @@ export default function AdminLoginPage() {
         </div>
         <div>
           <h1 className="text-2xl font-black text-slate-900">Admin login</h1>
-          <p className="text-sm text-slate-500">Platform super-admin access</p>
+          <p className="text-sm text-slate-500">Sign in with your registered admin email or phone</p>
         </div>
       </div>
 
@@ -100,18 +99,24 @@ export default function AdminLoginPage() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send code'}
           </button>
           <GoogleSignInButton
-            role={selectedRole.role}
-            redirect={selectedRole.redirect}
+            role="ADMIN"
+            redirect="/admin"
             className="h-auto border-slate-200 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
           />
+
+          <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-100" />
+            OR PHONE OTP
+            <span className="h-px flex-1 bg-slate-100" />
+          </div>
+
+          <PartnerPhoneLogin role="ADMIN" redirectTo="/admin" />
         </div>
       ) : (
         <div className="space-y-4 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
-          {devCode && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs font-bold text-amber-800">
-              Dev OTP: {devCode}
-            </p>
-          )}
+          <p className="text-sm text-slate-600">
+            Enter the 6-digit code sent to <span className="font-bold">{email}</span>
+          </p>
           <input
             type="text"
             inputMode="numeric"

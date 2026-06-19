@@ -8,14 +8,20 @@ type SubPlatformTabsProps = {
   activeTab: SubPlatformId
   onChange: (tab: SubPlatformId) => void
   className?: string
+  labelOverrides?: Partial<Record<SubPlatformId, string>>
 }
 
-export function SubPlatformTabs({ activeTab, onChange, className }: SubPlatformTabsProps) {
+export function SubPlatformTabs({
+  activeTab,
+  onChange,
+  className,
+  labelOverrides,
+}: SubPlatformTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Record<SubPlatformId, HTMLButtonElement | null>>({
     all: null,
     grocery: null,
-    fresh: null,
+    restaurants: null,
     fashion: null,
   })
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
@@ -83,7 +89,7 @@ export function SubPlatformTabs({ activeTab, onChange, className }: SubPlatformT
                 selected ? tab.activeText : tab.idleText,
               )}
             >
-              {tab.label}
+              {labelOverrides?.[tab.id] ?? tab.label}
             </button>
           )
         })}

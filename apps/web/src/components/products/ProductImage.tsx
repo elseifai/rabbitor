@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { resolveImageSrc } from '@/lib/image-url'
 import { cn } from '@/lib/utils'
 
 // LIVE ECOSYSTEM UPGRADE — standardized product image container
@@ -10,21 +12,34 @@ export function ProductImage({
   fallback = '📦',
   className,
   imgClassName,
+  eager = false,
 }: {
   src?: string | null
   alt?: string
   fallback?: string
   className?: string
   imgClassName?: string
+  /** Set for above-the-fold tiles so refresh does not defer loading. */
+  eager?: boolean
 }) {
+  const [failed, setFailed] = useState(false)
+  const resolved = resolveImageSrc(src, '')
+  const showImage = Boolean(resolved) && !failed
+
+  useEffect(() => {
+    setFailed(false)
+  }, [resolved])
+
   return (
     <div className={cn(CONTAINER_CLASS, className)}>
-      {src ? (
+      {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          src={resolved}
           alt={alt}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          onError={() => setFailed(true)}
           className={cn(IMG_CLASS, imgClassName)}
         />
       ) : (

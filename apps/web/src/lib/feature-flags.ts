@@ -1,6 +1,7 @@
 export type FeatureFlags = {
   customer: {
     razorpayEnabled: boolean
+    codEnabled: boolean
     multiStoreCart: boolean
     promoBannerEnabled: boolean
   }
@@ -17,6 +18,7 @@ export type FeatureFlags = {
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   customer: {
     razorpayEnabled: true,
+    codEnabled: true,
     multiStoreCart: true,
     promoBannerEnabled: true,
   },

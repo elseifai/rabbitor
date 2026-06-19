@@ -9,6 +9,8 @@ export type AdRecord = {
   endDate: string | null
   impressions: number
   clicks: number
+  uniqueClicks?: number
+  shop?: { id: string; name: string } | null
   targetShopIds?: unknown
   targetZones?: unknown
   targetSegments?: unknown

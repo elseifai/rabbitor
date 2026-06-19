@@ -197,7 +197,7 @@ export function MerchantIncomingOrdersPanel() {
   const [alertingIds, setAlertingIds] = useState<Set<string>>(new Set())
   const [rejectTarget, setRejectTarget] = useState<MerchantOrder | null>(null)
   const [socketToken, setSocketToken] = useState<string | null>(null)
-  const [storeId, setStoreId] = useState<string | null>(null)
+  const [storeIds, setStoreIds] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<'incoming' | 'preparing' | 'ready'>('incoming')
 
   const alert = useOrderAlert()
@@ -210,13 +210,15 @@ export function MerchantIncomingOrdersPanel() {
 
   useEffect(() => {
     void loadOrders()
+    const id = window.setInterval(() => void loadOrders(), 10_000)
+    return () => window.clearInterval(id)
   }, [loadOrders])
 
   useEffect(() => {
     getMerchantRealtimeAuthAction().then((res) => {
       if (res.ok) {
         setSocketToken(res.token)
-        setStoreId(res.storeId)
+        setStoreIds(res.storeIds)
       }
     })
   }, [])
@@ -230,7 +232,11 @@ export function MerchantIncomingOrdersPanel() {
         shopId: incoming.storeId,
         shopName: incoming.storeName,
         customerPhone: incoming.customerPhone,
+        customerName: 'Customer',
         totalPrice: incoming.totalPrice + incoming.deliveryFee,
+        subtotal: incoming.totalPrice,
+        deliveryFee: incoming.deliveryFee,
+        deliveryInstruction: null,
         itemCount: incoming.itemCount,
         createdAt: incoming.createdAt,
         items: incoming.items,
@@ -254,7 +260,7 @@ export function MerchantIncomingOrdersPanel() {
 
   const { connectionState, joinError } = useMerchantOrderSocket(
     socketToken,
-    storeId,
+    storeIds,
     handleNewOrder,
   )
 

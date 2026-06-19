@@ -1,8 +1,11 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const THUMB_SIZE = 48
+const THRESHOLD = 0.68
 
 export function SwipeActionButton({
   label,
@@ -16,20 +19,64 @@ export function SwipeActionButton({
   tone?: 'green' | 'dark' | 'orange'
 }) {
   const trackRef = useRef<HTMLDivElement>(null)
+  const dragXRef = useRef(0)
+  const draggingRef = useRef(false)
+  const pointerIdRef = useRef<number | null>(null)
   const [dragX, setDragX] = useState(0)
-  const [dragging, setDragging] = useState(false)
 
-  const threshold = 0.78
+  const maxDrag = useCallback(() => {
+    const width = trackRef.current?.clientWidth ?? 0
+    return Math.max(0, width - THUMB_SIZE - 8)
+  }, [])
 
-  const reset = () => {
-    setDragX(0)
-    setDragging(false)
-  }
+  const setDragPosition = useCallback((x: number) => {
+    dragXRef.current = x
+    setDragX(x)
+  }, [])
 
-  const handleEnd = (width: number) => {
-    if (width > 0 && dragX / width >= threshold) {
+  const reset = useCallback(() => {
+    draggingRef.current = false
+    pointerIdRef.current = null
+    setDragPosition(0)
+  }, [setDragPosition])
+
+  const finishDrag = useCallback(() => {
+    const max = maxDrag()
+    const ratio = max > 0 ? dragXRef.current / max : 0
+    if (ratio >= THRESHOLD) {
+      setDragPosition(max)
       onConfirm()
     }
+    reset()
+  }, [maxDrag, onConfirm, reset, setDragPosition])
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled || e.button !== 0) return
+    e.preventDefault()
+    draggingRef.current = true
+    pointerIdRef.current = e.pointerId
+    trackRef.current?.setPointerCapture(e.pointerId)
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current || disabled || pointerIdRef.current !== e.pointerId) return
+    const rect = trackRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const max = maxDrag()
+    const x = Math.max(0, Math.min(max, e.clientX - rect.left - THUMB_SIZE / 2 - 4))
+    setDragPosition(x)
+  }
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return
+    if (trackRef.current?.hasPointerCapture(e.pointerId)) {
+      trackRef.current.releasePointerCapture(e.pointerId)
+    }
+    finishDrag()
+  }
+
+  const onPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointerIdRef.current !== e.pointerId) return
     reset()
   }
 
@@ -41,30 +88,17 @@ export function SwipeActionButton({
         tone === 'green' ? 'bg-[#0C831F]' : tone === 'orange' ? 'bg-orange-500' : 'bg-[#1C1C1C]',
         disabled && 'opacity-50',
       )}
-      onPointerDown={(e) => {
-        if (disabled) return
-        setDragging(true)
-        ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-      }}
-      onPointerMove={(e) => {
-        if (!dragging || !trackRef.current || disabled) return
-        const rect = trackRef.current.getBoundingClientRect()
-        const max = rect.width - 56
-        const next = Math.max(0, Math.min(max, e.clientX - rect.left - 28))
-        setDragX(next)
-      }}
-      onPointerUp={(e) => {
-        if (!trackRef.current) return
-        handleEnd(trackRef.current.clientWidth)
-        ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
-      }}
-      onPointerCancel={reset}
+      style={{ touchAction: 'none' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-bold text-white/90">
         {label}
       </p>
       <div
-        className="absolute left-1 top-1 flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md transition-transform"
+        className="absolute left-1 top-1 flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md will-change-transform"
         style={{ transform: `translateX(${dragX}px)` }}
       >
         <ChevronRight

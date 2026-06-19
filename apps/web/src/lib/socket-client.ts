@@ -3,10 +3,21 @@
 import { io, type Socket } from 'socket.io-client'
 import { getSession } from '@/lib/session'
 
-export const SOCKET_URL =
+const CONFIGURED_SOCKET_URL =
   process.env.NEXT_PUBLIC_SOCKET_SERVER_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   'http://localhost:4000'
+
+/** Use same-origin when build-time URL points at localhost but app runs on a public domain. */
+export function resolveSocketUrl(): string {
+  if (typeof window === 'undefined') return CONFIGURED_SOCKET_URL
+  const isLocalConfig = /localhost|127\.0\.0\.1/.test(CONFIGURED_SOCKET_URL)
+  const isLocalPage = /localhost|127\.0\.0\.1/.test(window.location.hostname)
+  if (isLocalConfig && !isLocalPage) return window.location.origin
+  return CONFIGURED_SOCKET_URL
+}
+
+export const SOCKET_URL = CONFIGURED_SOCKET_URL
 
 const IDLE_DISCONNECT_MS = 1500
 
@@ -299,7 +310,7 @@ class SocketClientManager {
       const token = this.token ?? getSession()?.token ?? null
       this.token = token
 
-      this.socket = io(SOCKET_URL, {
+      this.socket = io(resolveSocketUrl(), {
         autoConnect: false,
         transports: ['websocket', 'polling'],
         reconnection: true,

@@ -11,18 +11,21 @@ import {
   type UnifiedProductData,
 } from '@/components/products/UnifiedProductCard'
 import {
-  FASHION_DEAL_BADGES,
   SUB_PLATFORM_CONFIG,
   parseSubPlatformId,
   type SubPlatformId,
 } from '@/lib/sub-platforms'
 import { useLocationStore, useCartStore } from '@/store'
 import { SAVED_LOCATIONS } from '@/lib/constants'
-import { HOME_CATEGORY_TABS } from '@/lib/categories'
+import { useHomeFeedConfig } from '@/hooks/useHomeFeedConfig'
+import { DEFAULT_COMPONENT_TOGGLES } from '@/lib/home-feed-config'
 import { getNearbyShops, type ShopListItem } from '@/actions/shops'
 import { useAuth } from '@/context/AuthContext'
+import { resolveImageSrc } from '@/lib/image-url'
 import { cn, formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { RestaurantsHomeSection } from '@/components/home/RestaurantsHomeSection'
+import { PromoDealsModal } from '@/components/home/PromoDealsModal'
 
 type DealProduct = {
   id: string
@@ -36,6 +39,50 @@ type DealProduct = {
   shopSlug: string
   storeType?: string
   stock?: number
+  shopRating?: number
+}
+
+const TOP_RATED_MIN = 4
+const TOP_SHOP_LIMIT = 5
+const HOME_DEALS_CACHE_KEY = 'rabbit_home_deals_v1'
+
+function readCachedDeals(): DealProduct[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = sessionStorage.getItem(HOME_DEALS_CACHE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as DealProduct[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeCachedDeals(deals: DealProduct[]) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(HOME_DEALS_CACHE_KEY, JSON.stringify(deals))
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function pickHomeDeals(all: DealProduct[], categoryActive: boolean): DealProduct[] {
+  if (categoryActive) {
+    return filterTopRatedDeals(
+      all,
+      new Map(all.map((d) => [d.shopId, d.shopRating ?? 0])),
+      true,
+    )
+  }
+
+  const withImages = all.filter((d) => d.image?.trim())
+  const withoutImages = all.filter((d) => !d.image?.trim())
+  const picked = shuffle(withImages).slice(0, 8)
+  if (picked.length < 8) {
+    picked.push(...shuffle(withoutImages).slice(0, 8 - picked.length))
+  }
+  return picked
 }
 
 const STORE_PLACEHOLDERS: Record<string, { emoji: string; bg: string }> = {
@@ -108,110 +155,6 @@ const FASHION_FALLBACK_DEALS: DealProduct[] = [
   },
 ]
 
-const COUPONS = [
-  { title: 'FLAT ₹50 OFF', sub: 'above ₹199', cashback: 'Get ₹50 cashback on UPI' },
-  { title: 'FLAT ₹20 OFF', sub: 'above ₹299', cashback: 'Get ₹20 off on cards' },
-  { title: 'FLAT ₹100 OFF', sub: 'above ₹400', cashback: 'Get ₹100 off on fish' },
-]
-
-const GROCERY_KITCHEN = {
-  row1: [
-    {
-      label: 'Fruits & Vegetables',
-      image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=300',
-      category: 'veggies',
-    },
-    {
-      label: 'Dairy, Bread & Eggs',
-      image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300',
-      category: 'dairy',
-    },
-  ],
-  row2: [
-    {
-      label: 'Atta, Rice, Oil & Dals',
-      image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Meat, Fish & Eggs',
-      image: 'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=200',
-      category: 'fish',
-    },
-    {
-      label: 'Masala & Dry Fruits',
-      image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=200',
-      category: 'kirana',
-    },
-  ],
-  row3: [
-    {
-      label: 'Breakfast & Sauces',
-      image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Packaged Food',
-      image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Frozen Food',
-      image: 'https://images.unsplash.com/photo-1581088654672-8f1e3a8c9d72?w=200',
-      category: 'kirana',
-    },
-  ],
-}
-
-const SNACKS_DRINKS = {
-  row1: [
-    {
-      label: 'Tea, Coffee & More',
-      image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300',
-      category: 'kirana',
-    },
-    {
-      label: 'Ice Creams & More',
-      image: 'https://images.unsplash.com/photo-1567206563114-c179706a56c8?w=300',
-      category: 'dairy',
-    },
-  ],
-  row2: [
-    {
-      label: 'Sweet Cravings',
-      image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=200',
-      category: 'bakery',
-    },
-    {
-      label: 'Cold Drinks & Juices',
-      image: 'https://images.unsplash.com/photo-1527960471264-932f39eb5846?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Munchies',
-      image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=200',
-      category: 'kirana',
-    },
-  ],
-  row3: [
-    {
-      label: 'Biscuits & Cookies',
-      image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Noodles & Pasta',
-      image: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Spreads & Dips',
-      image: 'https://images.unsplash.com/photo-1588165171080-c89acfa5ee83?w=200',
-      category: 'kirana',
-    },
-  ],
-}
-
 function CategoryCard({
   label,
   image,
@@ -223,18 +166,38 @@ function CategoryCard({
   category: string
   tall?: boolean
 }) {
+  const [failed, setFailed] = useState(false)
+  const src = resolveImageSrc(image, '')
+  const showImage = Boolean(src) && !failed
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+
   return (
     <Link
       href={`/shops?category=${category}`}
       className="overflow-hidden rounded-xl bg-[#F8F8F8]"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={image}
-        alt=""
-        loading="lazy"
-        className={cn('w-full object-cover', tall ? 'h-[120px]' : 'h-[90px]')}
-      />
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className={cn('w-full object-cover', tall ? 'h-[120px]' : 'h-[90px]')}
+        />
+      ) : (
+        <div
+          className={cn(
+            'flex w-full items-center justify-center bg-gradient-to-br from-[#FFF7ED] to-[#FFEDD5]',
+            tall ? 'h-[120px]' : 'h-[90px]',
+          )}
+        >
+          <span className="text-3xl opacity-80">🛒</span>
+        </div>
+      )}
       <p className="p-2 text-sm font-bold leading-tight text-[#1C1C1C]">{label}</p>
     </Link>
   )
@@ -299,17 +262,19 @@ function ViewCartBar() {
 }
 
 function HomeShopCard({ shop }: { shop: ShopListItem }) {
+  const ratingLabel =
+    shop.ratingCount && shop.ratingCount > 0
+      ? shop.ratingAvg?.toFixed(1) ?? '4.2'
+      : 'New'
+
   return (
     <Link href={`/shops/${shop.slug}`} className="w-[160px] shrink-0 overflow-hidden rounded-lg bg-white">
       <div className="relative h-[100px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={
-            shop.image ??
-            'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=400'
-          }
+          src={resolveImageSrc(shop.image)}
           alt=""
-          loading="lazy"
+          loading="eager"
           className="h-full w-full object-cover"
         />
         {shop.isActive && (
@@ -317,12 +282,17 @@ function HomeShopCard({ shop }: { shop: ShopListItem }) {
             OPEN
           </span>
         )}
+        {(shop.ratingAvg ?? 0) >= TOP_RATED_MIN && (
+          <span className="absolute right-1.5 top-1.5 rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-white">
+            TOP
+          </span>
+        )}
       </div>
       <div className="p-2">
         <p className="truncate text-[13px] font-bold text-[#1C1C1C]">{shop.name}</p>
         <p className="text-[11px] font-semibold text-[#FF6B35]">{shop.category}</p>
         <p className="text-[11px] text-[#878787]">
-          ⭐ 4.2 · {shop.etaMinutes} mins
+          ⭐ {ratingLabel} · {shop.etaMinutes} mins
         </p>
         <p className="text-[11px] text-[#878787]">
           {shop.deliveryFee === 0 ? 'FREE' : `₹${shop.deliveryFee} delivery`}
@@ -332,9 +302,35 @@ function HomeShopCard({ shop }: { shop: ShopListItem }) {
   )
 }
 
+function filterTopRatedDeals(
+  deals: DealProduct[],
+  shopRatings: Map<string, number>,
+  categoryActive: boolean,
+): DealProduct[] {
+  if (!categoryActive || deals.length === 0) return deals
+
+  const topShopIds = [...shopRatings.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_SHOP_LIMIT)
+    .map(([id]) => id)
+
+  return deals
+    .filter((d) => {
+      const rating = shopRatings.get(d.shopId) ?? d.shopRating ?? 0
+      return rating >= TOP_RATED_MIN || topShopIds.includes(d.shopId)
+    })
+    .sort(
+      (a, b) =>
+        (shopRatings.get(b.shopId) ?? b.shopRating ?? 0) -
+        (shopRatings.get(a.shopId) ?? a.shopRating ?? 0),
+    )
+    .slice(0, 12)
+}
+
 export function HomeFeed() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { config: feedConfig } = useHomeFeedConfig()
   const coordinates = useLocationStore((s) => s.coordinates)
   const cartTotal = useCartStore((s) => s.total())
 
@@ -344,23 +340,46 @@ export function HomeFeed() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [shops, setShops] = useState<ShopListItem[]>([])
-  const [deals, setDeals] = useState<DealProduct[]>([])
+  const [deals, setDeals] = useState<DealProduct[]>(() => readCachedDeals())
   const [loadingShops, setLoadingShops] = useState(true)
   const { isLoggedIn: loggedIn } = useAuth()
   const [buyAgainTab, setBuyAgainTab] = useState('all')
+  const [promoModalOpen, setPromoModalOpen] = useState(false)
 
   const dealsRef = useRef<HTMLDivElement>(null)
   const couponsRef = useRef<HTMLDivElement>(null)
+  const categoryFocusRef = useRef<HTMLDivElement>(null)
+
+  const categoryFilterActive = activeCategory !== 'all'
 
   const lat = coordinates?.lat ?? SAVED_LOCATIONS[0].latitude
   const lng = coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
 
   const platformConfig = SUB_PLATFORM_CONFIG[subPlatform]
-  const tab = HOME_CATEGORY_TABS.find((t) => t.id === activeCategory)
+  const toggles = feedConfig.componentToggles ?? DEFAULT_COMPONENT_TOGGLES
+  const categoryTabs = feedConfig.categoryTabs.filter((t) => t.active !== false)
+  const tab = categoryTabs.find((t) => t.id === activeCategory)
   const storeType = tab?.storeType
+
+  const subPlatformLabelOverrides = useMemo(() => {
+    const map: Partial<Record<SubPlatformId, string>> = {}
+    for (const t of feedConfig.subPlatformTabs) {
+      if (t.id === 'restaurants' || (t.id as string) === 'fresh') {
+        map.restaurants = t.label === 'Fresh Farm' ? 'Restaurants / Cafés' : t.label
+      } else {
+        map[t.id] = t.label
+      }
+    }
+    return map
+  }, [feedConfig.subPlatformTabs])
 
   const handleSubPlatformChange = useCallback(
     (next: SubPlatformId) => {
+      const tabConfig = feedConfig.subPlatformTabs.find((t) => t.id === next)
+      if (tabConfig?.route?.trim()) {
+        router.push(tabConfig.route.trim())
+        return
+      }
       setSubPlatform(next)
       const params = new URLSearchParams(searchParams.toString())
       if (next === 'all') params.delete('platform')
@@ -368,8 +387,12 @@ export function HomeFeed() {
       const query = params.toString()
       router.replace(query ? `/?${query}` : '/', { scroll: false })
     },
-    [router, searchParams],
+    [router, searchParams, feedConfig.subPlatformTabs],
   )
+
+  useEffect(() => {
+    setSubPlatform(parseSubPlatformId(searchParams.get('platform')))
+  }, [searchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -382,7 +405,7 @@ export function HomeFeed() {
         radiusKm: 15,
         storeType,
         openOnly: true,
-        sortBy: 'distance',
+        sortBy: categoryFilterActive ? 'rating' : 'distance',
       })
 
       if (cancelled) return
@@ -394,7 +417,8 @@ export function HomeFeed() {
       }
 
       try {
-        const res = await fetch('/api/shops')
+        const fallbackUrl = storeType ? `/api/shops?storeType=${storeType}` : '/api/shops'
+        const res = await fetch(fallbackUrl)
         const json = await res.json()
         if (json.success && !cancelled) {
           const mapped: ShopListItem[] = (json.data ?? []).map(
@@ -406,6 +430,8 @@ export function HomeFeed() {
               image: string | null
               deliveryFee?: number
               etaMinutes?: number
+              ratingAvg?: number
+              ratingCount?: number
             }) => ({
               id: s.id,
               slug: s.slug,
@@ -417,8 +443,11 @@ export function HomeFeed() {
               minOrderValue: 0,
               distanceKm: 0,
               etaMinutes: s.etaMinutes ?? 15,
+              ratingAvg: s.ratingAvg ?? 0,
+              ratingCount: s.ratingCount ?? 0,
             }),
           )
+          mapped.sort((a, b) => (b.ratingAvg ?? 0) - (a.ratingAvg ?? 0))
           setShops(mapped)
         }
       } catch {
@@ -432,7 +461,7 @@ export function HomeFeed() {
     return () => {
       cancelled = true
     }
-  }, [lat, lng, storeType])
+  }, [lat, lng, storeType, categoryFilterActive])
 
   useEffect(() => {
     const url = storeType ? `/api/shops?storeType=${storeType}` : '/api/shops'
@@ -442,6 +471,7 @@ export function HomeFeed() {
         if (!json.success) return
         const all: DealProduct[] = []
         for (const shop of json.data ?? []) {
+          const shopRating = Number(shop.ratingAvg ?? 0)
           for (const p of shop.products ?? []) {
             all.push({
               id: p.id,
@@ -455,16 +485,25 @@ export function HomeFeed() {
               shopSlug: shop.slug,
               storeType: shop.storeType,
               stock: p.stock,
+              shopRating,
             })
           }
         }
-        // Show more items when a category is selected (it's the focus of the page)
-        setDeals(shuffle(all).slice(0, storeType ? 12 : 8))
+        const filtered = pickHomeDeals(all, categoryFilterActive)
+        setDeals(filtered)
+        writeCachedDeals(filtered)
       })
       .catch(() => {})
-  }, [storeType])
+  }, [storeType, categoryFilterActive])
 
   const bannerProducts = useMemo(() => deals.slice(0, 4), [deals])
+
+  const promoModalProducts = useMemo(
+    () => [...deals].sort((a, b) => a.price - b.price),
+    [deals],
+  )
+
+  const lowestDealPrice = promoModalProducts[0]?.price
   const cartItems = useCartStore((s) => s.items)
   const showFreeDeliveryBar = cartTotal < 99 && cartItems.length === 0
   const remainingForFree = Math.max(0, 99 - cartTotal)
@@ -494,17 +533,96 @@ export function HomeFeed() {
         (d) => !d.storeType || platformConfig.storeTypes!.includes(d.storeType),
       )
     }
+    if (categoryFilterActive) {
+      const ratings = new Map(list.map((d) => [d.shopId, d.shopRating ?? 0]))
+      list = filterTopRatedDeals(list, ratings, true)
+    }
     if (subPlatform === 'fashion') {
-      const merged = [...FASHION_FALLBACK_DEALS, ...list]
-      const seen = new Set<string>()
-      return merged.filter((item) => {
-        if (seen.has(item.id)) return false
-        seen.add(item.id)
-        return true
-      })
+      if (list.length > 0) return list
+      return FASHION_FALLBACK_DEALS
     }
     return list
-  }, [deals, platformConfig.storeTypes, subPlatform])
+  }, [deals, platformConfig.storeTypes, subPlatform, categoryFilterActive])
+
+  const handleCategorySelect = useCallback((categoryId: string) => {
+    setActiveCategory(categoryId)
+    if (categoryId !== 'all') {
+      window.setTimeout(() => {
+        categoryFocusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+    }
+  }, [])
+
+  const storesSection = (
+    <section className="mb-2 bg-white p-4">
+      <h2 className="text-lg font-bold text-[#1C1C1C]">
+        {categoryFilterActive
+          ? `Top ${tab?.label ?? 'category'} stores`
+          : feedConfig.storesSection.title}
+      </h2>
+      <p className="text-xs text-[#878787]">
+        {categoryFilterActive
+          ? 'Highest-rated stores near you'
+          : subPlatform === 'fashion'
+            ? feedConfig.storesSection.subtitleFashion
+            : feedConfig.storesSection.subtitleGrocery}
+      </p>
+      <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
+        {loadingShops ? (
+          <>
+            <ShopSkeleton />
+            <ShopSkeleton />
+            <ShopSkeleton />
+          </>
+        ) : shops.length === 0 ? (
+          <p className="text-sm text-[#878787]">
+            {categoryFilterActive
+              ? `No ${tab?.label?.toLowerCase() ?? 'category'} stores nearby yet.`
+              : 'No stores nearby.'}
+          </p>
+        ) : (
+          shops.map((shop) => <HomeShopCard key={shop.id} shop={shop} />)
+        )}
+      </div>
+    </section>
+  )
+
+  const flashDealsSection = toggles.flashDeals ? (
+    <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
+      <h2 className="text-lg font-bold text-[#1C1C1C]">
+        {subPlatform === 'fashion'
+          ? feedConfig.dealsSection.fashionTitle
+          : categoryFilterActive
+            ? `${tab?.label} — Top Picks`
+            : feedConfig.dealsSection.title}
+      </h2>
+      <p className="text-xs text-[#878787]">
+        {subPlatform === 'fashion'
+          ? feedConfig.dealsSection.fashionSubtitle
+          : categoryFilterActive
+            ? 'Top-rated products from verified stores'
+            : feedConfig.dealsSection.subtitle}
+      </p>
+      {platformDeals.length === 0 ? (
+        <p className="mt-4 text-sm text-[#878787]">
+          {categoryFilterActive
+            ? 'No top-rated items in this category yet.'
+            : 'No items available in this category yet.'}
+        </p>
+      ) : (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {platformDeals.map((p) => (
+            <UnifiedProductCard
+              key={p.id}
+              product={toUnifiedProduct(p, platformConfig.productVariant)}
+              variant={platformConfig.productVariant}
+              eagerImage
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  ) : null
 
   return (
     <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F0F0F0] font-sans shadow-xl">
@@ -560,20 +678,22 @@ export function HomeFeed() {
         <SubPlatformTabs
           activeTab={subPlatform}
           onChange={handleSubPlatformChange}
+          labelOverrides={subPlatformLabelOverrides}
           className="px-0 pb-0 pt-2"
         />
       </div>
 
       {/* SECTION B: Category tabs */}
+      {toggles.categoryBar && (
       <div className="sticky top-[116px] z-40 border-b border-[#F0F0F0] bg-white">
         <div className="flex overflow-x-auto px-4 scrollbar-hide">
-          {HOME_CATEGORY_TABS.map((cat) => {
+          {categoryTabs.map((cat) => {
             const active = activeCategory === cat.id
             return (
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => handleCategorySelect(cat.id)}
                 className={cn(
                   'shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap transition-colors',
                   active
@@ -587,6 +707,7 @@ export function HomeFeed() {
           })}
         </div>
       </div>
+      )}
 
       {/* SECTION C: Main scrollable content */}
       <div className="py-2">
@@ -617,11 +738,11 @@ export function HomeFeed() {
         {platformConfig.showFashionDeals && activeCategory === 'all' && (
           <section className="mb-2 bg-white p-4">
             <h2 className="text-lg font-bold text-[#1C1C1C]">
-              Fashion Deals: Everything Under ₹599
+              {feedConfig.dealsSection.fashionTitle}
             </h2>
-            <p className="text-xs text-[#878787]">Same-day style drops from local boutiques</p>
+            <p className="text-xs text-[#878787]">{feedConfig.dealsSection.fashionSubtitle}</p>
             <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide">
-              {FASHION_DEAL_BADGES.map((badge) => (
+              {feedConfig.fashionDealBadges.map((badge) => (
                 <button
                   key={badge.label}
                   type="button"
@@ -637,22 +758,27 @@ export function HomeFeed() {
           </section>
         )}
 
+        {/* Restaurants / Cafés — inline when tab selected */}
+        {subPlatform === 'restaurants' && activeCategory === 'all' && (
+          <RestaurantsHomeSection />
+        )}
+
         {/* Grocery & Kitchen */}
-        {platformConfig.showGroceryLayouts && activeCategory === 'all' && (
+        {toggles.grocerySection && platformConfig.showGroceryLayouts && activeCategory === 'all' && subPlatform !== 'restaurants' && (
         <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Grocery & Kitchen</h2>
+          <h2 className="text-lg font-bold text-[#1C1C1C]">{feedConfig.groceryKitchen.title}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {GROCERY_KITCHEN.row1.map((item) => (
+            {feedConfig.groceryKitchen.row1.map((item) => (
               <CategoryCard key={item.label} {...item} tall />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {GROCERY_KITCHEN.row2.map((item) => (
+            {feedConfig.groceryKitchen.row2.map((item) => (
               <CategoryCard key={item.label} {...item} />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {GROCERY_KITCHEN.row3.map((item) => (
+            {feedConfig.groceryKitchen.row3.map((item) => (
               <CategoryCard key={item.label} {...item} />
             ))}
           </div>
@@ -660,21 +786,21 @@ export function HomeFeed() {
         )}
 
         {/* Snacks & Drinks */}
-        {platformConfig.showGroceryLayouts && activeCategory === 'all' && (
+        {toggles.snacksSection && platformConfig.showGroceryLayouts && activeCategory === 'all' && subPlatform !== 'restaurants' && (
         <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Snacks & Drinks</h2>
+          <h2 className="text-lg font-bold text-[#1C1C1C]">{feedConfig.snacksDrinks.title}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {SNACKS_DRINKS.row1.map((item) => (
+            {feedConfig.snacksDrinks.row1.map((item) => (
               <CategoryCard key={item.label} {...item} tall />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {SNACKS_DRINKS.row2.map((item) => (
+            {feedConfig.snacksDrinks.row2.map((item) => (
               <CategoryCard key={item.label} {...item} />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
-            {SNACKS_DRINKS.row3.map((item) => (
+            {feedConfig.snacksDrinks.row3.map((item) => (
               <CategoryCard key={item.label} {...item} />
             ))}
           </div>
@@ -682,28 +808,56 @@ export function HomeFeed() {
         )}
 
         {/* Promo banner ad */}
+        {!categoryFilterActive && (
         <section className="mb-2 px-4">
           <AdBanner placement="HOME_BANNER" className="h-36 w-full" />
         </section>
+        )}
 
-        {/* Deals Banner */}
+        {/* Deals Banner — opens exclusive offers modal */}
+        {!categoryFilterActive && toggles.promoBanner && (
         <section className="mb-2 px-4">
-          <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] p-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase text-white/70">DEALS STARTING AT</p>
-              <p className="text-5xl font-black text-white">₹9</p>
-              <p className="text-xs text-white/80">Add Any 10 Items</p>
+          <button
+            type="button"
+            onClick={() => setPromoModalOpen(true)}
+            className={cn(
+              'relative flex w-full cursor-pointer items-center justify-between overflow-hidden rounded-xl p-4 text-left transition active:scale-[0.99]',
+              !feedConfig.promoBanner.image &&
+                'bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] shadow-lg shadow-orange-200/40',
+            )}
+          >
+            {feedConfig.promoBanner.image ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={feedConfig.promoBanner.image}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/45" />
+              </>
+            ) : null}
+            <div className="relative min-w-0 flex-1 pr-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/75">
+                {feedConfig.promoBanner.badge}
+              </p>
+              <p className="mt-1 text-lg font-black leading-snug text-white sm:text-xl">
+                {feedConfig.promoBanner.headline ?? 'Products Starting from Just ₹1!'}
+              </p>
+              <p className="mt-1 text-xs text-white/85">
+                {lowestDealPrice != null
+                  ? `From ${formatCurrency(lowestDealPrice)} · Tap to explore`
+                  : feedConfig.promoBanner.subtitle}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="relative grid shrink-0 grid-cols-2 gap-1.5">
               {bannerProducts.map((p) => (
-                <div key={p.id} className="relative overflow-hidden rounded-lg bg-white/20">
+                <div key={p.id} className="relative overflow-hidden rounded-lg bg-white/20 ring-1 ring-white/30">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={
-                      p.image ??
-                      'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=100'
-                    }
+                    src={resolveImageSrc(p.image)}
                     alt=""
+                    loading="eager"
                     className="h-[60px] w-[60px] object-cover"
                   />
                   <span className="absolute bottom-0 left-0 right-0 bg-[#0C831F] py-0.5 text-center text-[9px] font-bold text-white">
@@ -712,80 +866,55 @@ export function HomeFeed() {
                 </div>
               ))}
             </div>
-          </div>
+          </button>
         </section>
+        )}
 
-        {/* Flash Deals */}
-        <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">
-            {subPlatform === 'fashion'
-              ? 'Boutique Picks: Under ₹599'
-              : activeCategory === 'all'
-                ? 'Flash Deals: All Time Low'
-                : `${tab?.label} — Top Picks`}
-          </h2>
-          <p className="text-xs text-[#878787]">
-            {subPlatform === 'fashion'
-              ? 'Curated apparel, footwear & accessories'
-              : 'Fresh Essentials Every Day'}
-          </p>
-          {platformDeals.length === 0 ? (
-            <p className="mt-4 text-sm text-[#878787]">
-              No items available in this category yet.
-            </p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {platformDeals.map((p) => (
-                <UnifiedProductCard
-                  key={p.id}
-                  product={toUnifiedProduct(p, platformConfig.productVariant)}
-                  variant={platformConfig.productVariant}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+        <PromoDealsModal
+          open={promoModalOpen}
+          onClose={() => setPromoModalOpen(false)}
+          products={promoModalProducts}
+          headline={feedConfig.promoBanner.headline ?? 'Products Starting from Just ₹1!'}
+        />
+
+        {categoryFilterActive ? (
+          <div ref={categoryFocusRef} className="scroll-mt-28">
+            {storesSection}
+            {flashDealsSection}
+          </div>
+        ) : (
+          <>
+            {flashDealsSection}
 
         {/* Coupons */}
+        {toggles.coupons && (
         <section ref={couponsRef} className="mb-2 scroll-mt-28 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">Coupons & offers</h2>
           <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
-            {COUPONS.map((c) => (
+            {feedConfig.coupons.map((c) => (
               <div
                 key={c.title}
-                className="min-w-[140px] shrink-0 rounded-xl border-[1.5px] border-[#0C831F] bg-white p-3"
+                className="min-w-[140px] shrink-0 overflow-hidden rounded-xl border-[1.5px] border-[#0C831F] bg-white"
               >
-                <div className="mb-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#0C831F]">
-                  <Percent className="h-3 w-3 text-white" />
+                {c.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.image} alt="" className="h-16 w-full object-cover" />
+                ) : null}
+                <div className="p-3">
+                  <div className="mb-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#0C831F]">
+                    <Percent className="h-3 w-3 text-white" />
+                  </div>
+                  <p className="text-base font-bold text-[#1C1C1C]">{c.title}</p>
+                  <p className="text-[11px] text-[#878787]">{c.sub}</p>
+                  <p className="mt-2 text-[10px] text-[#878787]">{c.cashback}</p>
                 </div>
-                <p className="text-base font-bold text-[#1C1C1C]">{c.title}</p>
-                <p className="text-[11px] text-[#878787]">{c.sub}</p>
-                <p className="mt-2 text-[10px] text-[#878787]">{c.cashback}</p>
               </div>
             ))}
           </div>
         </section>
+        )}
 
-        {/* Nearby Shops */}
-        <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Stores near you</h2>
-          <p className="text-xs text-[#878787]">
-            {subPlatform === 'fashion' ? 'Same-day delivery available' : 'Delivering in 15-30 mins'}
-          </p>
-          <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
-            {loadingShops ? (
-              <>
-                <ShopSkeleton />
-                <ShopSkeleton />
-                <ShopSkeleton />
-              </>
-            ) : shops.length === 0 ? (
-              <p className="text-sm text-[#878787]">No stores nearby.</p>
-            ) : (
-              shops.map((shop) => <HomeShopCard key={shop.id} shop={shop} />)
-            )}
-          </div>
-        </section>
+        {storesSection}
 
         {/* Buy Again */}
         {loggedIn && (
@@ -814,12 +943,9 @@ export function HomeFeed() {
                   <div className="h-20 w-20 overflow-hidden rounded-lg bg-[#F8F8F8]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={
-                        p.image ??
-                        'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=200'
-                      }
+                      src={resolveImageSrc(p.image)}
                       alt=""
-                      loading="lazy"
+                      loading="eager"
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -831,9 +957,12 @@ export function HomeFeed() {
             </div>
           </section>
         )}
+          </>
+        )}
       </div>
 
       {/* Offers floating button */}
+      {!categoryFilterActive && (
       <button
         type="button"
         onClick={scrollToCoupons}
@@ -841,6 +970,7 @@ export function HomeFeed() {
       >
         Offers ∧
       </button>
+      )}
 
       <ViewCartBar />
 

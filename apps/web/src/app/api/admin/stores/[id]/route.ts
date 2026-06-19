@@ -9,6 +9,7 @@ import {
   platformCommission,
   PLATFORM_COMMISSION_RATE,
 } from '@/lib/store-performance'
+import { syncAdsWithStoreStatus } from '@/lib/ad-store-sync'
 
 function daysAgo(n: number) {
   const d = new Date()
@@ -235,6 +236,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const shop = await prisma.shop.update({ where: { id }, data })
+    if (typeof body.isActive === 'boolean') {
+      await syncAdsWithStoreStatus(id, body.isActive)
+    }
     return NextResponse.json({ success: true, data: shop })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed'

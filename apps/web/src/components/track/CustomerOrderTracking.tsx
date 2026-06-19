@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, MapPin, Phone, Wifi, WifiOff } from 'lucide-react'
 import type { OrderStatus } from '@rabbit/database'
@@ -12,6 +12,9 @@ import { trackingFromOrderStatus } from '@/lib/tracking-status'
 import { formatCurrency, cn } from '@/lib/utils'
 import { TrackingTimeline } from '@/components/track/TrackingTimeline'
 import { GoogleOrderMap } from '@/components/track/GoogleOrderMap'
+import { RabbitProgressTrack } from '@/components/track/RabbitProgressTrack'
+import { OrderFeedbackModal } from '@/components/feedback/OrderFeedbackModal'
+import { OrderStatusPopup } from '@/components/track/OrderStatusPopup'
 import { TrackingPageSkeleton } from '@/components/track/TrackingPageSkeleton'
 
 type OrderData = {
@@ -33,9 +36,15 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<OrderData | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
 
   const customerCoordinates = useLocationStore((s) => s.coordinates)
-  const { connected, status: liveStatus, riderLocation } = useOrderTrackingSocket(orderId)
+  const { connected, status: liveStatus, riderStage, riderLocation } =
+    useOrderTrackingSocket(orderId)
+  const [popup, setPopup] = useState<'arrived' | 'picked-up' | 'delivered' | null>(null)
+  const [popupDetail, setPopupDetail] = useState<string | undefined>()
+  const seenStagesRef = useRef<Set<string>>(new Set())
 
   const syncOrder = useCallback(async () => {
     try {
@@ -114,8 +123,39 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
     }
   }, [currentStatus, riderLocation, destLat, destLng])
 
-  const showMap =
-    currentStatus === 'OUT_FOR_DELIVERY' || currentStatus === 'DELIVERED'
+  const showMap = currentStatus !== 'CANCELLED'
+  const delivered = currentStatus === 'DELIVERED'
+
+  useEffect(() => {
+    if (!delivered || reviewSubmitted) return
+    const timer = window.setTimeout(() => {
+      setPopup('delivered')
+      setPopupDetail(undefined)
+      setFeedbackOpen(true)
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [delivered, reviewSubmitted])
+
+  useEffect(() => {
+    if (!riderStage) return
+    const key = `${orderId}:${riderStage}`
+    if (seenStagesRef.current.has(key)) return
+    seenStagesRef.current.add(key)
+
+    if (riderStage === 'PICKED_UP') {
+      setPopup('picked-up')
+      setPopupDetail('Your order left the store and is heading to you')
+    }
+  }, [riderStage, orderId])
+
+  useEffect(() => {
+    if (!eta.arrived || currentStatus !== 'OUT_FOR_DELIVERY') return
+    const key = `${orderId}:arrived`
+    if (seenStagesRef.current.has(key)) return
+    seenStagesRef.current.add(key)
+    setPopup('arrived')
+    setPopupDetail('Your Rabbitor is at your location')
+  }, [eta.arrived, currentStatus, orderId])
 
   if (!mounted || loading) {
     return <TrackingPageSkeleton />
@@ -170,10 +210,14 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
         )}
       >
         <p className="text-xs font-bold uppercase tracking-widest opacity-90">
-          {currentStatus === 'DELIVERED' ? 'Completed' : 'Estimated arrival'}
+          {delivered ? 'Completed' : 'Estimated arrival'}
         </p>
         <p className="mt-2 text-2xl font-black sm:text-3xl">{eta.label}</p>
         <p className="mt-2 text-sm font-medium opacity-90">{order.shop.name}</p>
+      </div>
+
+      <div className="mx-4 mt-4">
+        <RabbitProgressTrack status={currentStatus} timeLeft={eta.minutes} />
       </div>
 
       <div className="mx-4 mt-4">
@@ -211,13 +255,13 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
             destLng={destLng}
           />
           <a
-            href={`https://www.google.com/maps/search/?api=1&query=${destLat},${destLng}`}
+            href={`https://www.google.com/maps/dir/?api=1&origin=${order.shopLat},${order.shopLng}&destination=${destLat},${destLng}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-800 shadow-sm"
           >
             <MapPin className="h-4 w-4 text-[#FF6B35]" />
-            Open in Google Maps
+            Open route in Google Maps
           </a>
         </div>
       )}
@@ -231,6 +275,46 @@ export function CustomerOrderTracking({ orderId }: { orderId: string }) {
           Order total {formatCurrency(order.grandTotal)}
         </p>
       </div>
+
+      {delivered && !reviewSubmitted && !feedbackOpen && (
+        <div className="mx-4 mt-4 rounded-2xl bg-white p-4 text-center shadow-sm">
+          <p className="text-sm font-bold text-slate-900">How was your order?</p>
+          <button
+            type="button"
+            onClick={() => setFeedbackOpen(true)}
+            className="mt-4 w-full rounded-xl bg-[#FF6B35] py-3 text-sm font-bold text-white"
+          >
+            Leave feedback
+          </button>
+        </div>
+      )}
+
+      {reviewSubmitted && (
+        <p className="mx-4 mt-4 rounded-xl bg-green-50 p-4 text-center text-sm font-semibold text-green-700">
+          Thanks for your feedback!
+        </p>
+      )}
+
+      <OrderFeedbackModal
+        open={feedbackOpen}
+        orderId={orderId}
+        shopName={order.shop.name}
+        riderName={order.rabbitorName}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmitted={() => {
+          setReviewSubmitted(true)
+          setFeedbackOpen(false)
+        }}
+      />
+
+      {popup && (
+        <OrderStatusPopup
+          variant={popup}
+          detail={popupDetail}
+          onClose={() => setPopup(null)}
+          autoCloseMs={popup === 'delivered' ? 0 : 7000}
+        />
+      )}
     </div>
   )
 }

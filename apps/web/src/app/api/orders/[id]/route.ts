@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
 import { canTransition, ORDER_STATUS_LABELS } from '@/lib/order-pipeline'
-import { broadcastOrderEvent } from '@/lib/order-events'
+import { broadcastAssignRider, broadcastOrderEvent } from '@/lib/order-events'
 import { orderGrandTotal } from '@/lib/order-totals'
 import type { OrderStatus } from '@rabbit/database'
 
@@ -160,22 +160,10 @@ export async function PATCH(
         throw new Error(`Cannot move from ${targetOrder.status} to ${status}`)
       }
 
-      let deliveryPartnerId = targetOrder.deliveryPartnerId
-      if (status === 'OUT_FOR_DELIVERY' && !deliveryPartnerId) {
-        const rider = await tx.user.findFirst({
-          where: { role: 'RABBITOR' },
-          orderBy: { createdAt: 'asc' },
-        })
-        if (rider) deliveryPartnerId = rider.id
-      }
-
       return tx.order.update({
         where: { id },
         data: {
           status,
-          ...(deliveryPartnerId && !targetOrder.deliveryPartnerId
-            ? { deliveryPartnerId }
-            : {}),
           statusHistory: {
             create: { status, note: `Updated via API by ${session.role}` },
           },
@@ -185,6 +173,10 @@ export async function PATCH(
     })
 
     await broadcastOrderEvent(id, { type: 'status', status: ORDER_STATUS_LABELS[status] })
+
+    if (status === 'OUT_FOR_DELIVERY') {
+      await broadcastAssignRider(id)
+    }
 
     return NextResponse.json({
       success: true,

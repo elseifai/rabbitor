@@ -10,6 +10,8 @@ import {
 } from '@/lib/geo'
 import { getPlatformSettings } from '@/lib/platform-settings'
 import { CATEGORY_SLUG_MAP } from '@/lib/order-pipeline'
+import { getActivePromoShopIds } from '@/lib/ad-subscription'
+import { effectiveSortDistance } from '@/lib/search-weight'
 
 export interface ShopListItem {
   id: string
@@ -22,6 +24,10 @@ export interface ShopListItem {
   minOrderValue: number
   distanceKm: number
   etaMinutes: number
+  ratingAvg?: number
+  ratingCount?: number
+  searchWeight?: number
+  hasPromoBoost?: boolean
 }
 
 export async function getNearbyShops(params: {
@@ -65,17 +71,37 @@ export async function getNearbyShops(params: {
           minOrderValue: shop.minOrderValue,
           distanceKm: Math.round(dist * 10) / 10,
           etaMinutes: estimateDeliveryMinutes(dist, shop.avgPrepMinutes),
+          ratingAvg: shop.ratingAvg,
+          ratingCount: shop.ratingCount,
+          _rawDist: dist,
         }
       })
-      .filter(Boolean) as ShopListItem[]
+      .filter(Boolean) as (ShopListItem & { _rawDist: number })[]
 
-    const sort = params.sortBy ?? 'distance'
-    mapped.sort((a, b) => {
-      if (sort === 'eta') return a.etaMinutes - b.etaMinutes
-      return a.distanceKm - b.distanceKm
+    const promoIds = await getActivePromoShopIds(mapped.map((s) => s.id))
+    const enriched = mapped.map((shop) => {
+      const hasPromo = promoIds.has(shop.id)
+      const { _rawDist, ...rest } = shop
+      return {
+        ...rest,
+        hasPromoBoost: hasPromo,
+        searchWeight: Math.round((100 - _rawDist * 10 + (hasPromo ? 50 : 0)) * 10) / 10,
+        _effectiveDist: effectiveSortDistance(_rawDist, hasPromo),
+      }
     })
 
-    return mapped
+    const sort = params.sortBy ?? 'distance'
+    enriched.sort((a, b) => {
+      if (sort === 'rating') {
+        const ratingDiff = (b.ratingAvg ?? 0) - (a.ratingAvg ?? 0)
+        if (ratingDiff !== 0) return ratingDiff
+        return (b.ratingCount ?? 0) - (a.ratingCount ?? 0)
+      }
+      if (sort === 'eta') return a.etaMinutes - b.etaMinutes
+      return a._effectiveDist - b._effectiveDist
+    })
+
+    return enriched.map(({ _effectiveDist, ...shop }) => shop)
   } catch (err) {
     console.error('getNearbyShops failed:', err)
     return []

@@ -101,6 +101,15 @@ enum PaymentIntentStatus {
   EXPIRED
 }
 
+enum UserEventType {
+  LOGIN
+  CART_ADD
+  CART_VIEW
+  CHECKOUT_START
+  ORDER_PLACED
+  PAYMENT_FAILED
+}
+
 enum SubscriptionTier {
   FREE
   SILVER
@@ -143,6 +152,23 @@ enum AdPlacement {
   CHECKOUT_PAGE
 }
 
+enum AdSubscriptionPlanType {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum AdSubscriptionStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
+enum AdSettlementMethod {
+  EXTERNAL_PAYMENT
+  PAYOUT_DEDUCTION
+}
+
 enum AddressLabel {
   HOME
   WORK
@@ -177,6 +203,8 @@ model User {
   deliveries      Order[] @relation("DeliveryPartnerOrders")
   addresses       CustomerAddress[]
   paymentIntents  PaymentIntent[]
+  userEvents      UserEvent[]
+  cartSnapshot    CartSnapshot?
 
   @@index([role])
   @@index([phone])
@@ -228,6 +256,7 @@ model VendorProfile {
 
   shops Shop[]
   kycDocuments KycDocument[]
+  adSubscriptionPlans AdSubscriptionPlan[]
 }
 
 model KycDocument {
@@ -280,6 +309,12 @@ model PlatformSettings {
   platformServiceFee        Float    @default(0)
   /// Cross-app feature toggles injected at runtime
   featureFlags              Json     @default("{}")
+  /// Admin-editable customer home feed (tabs, categories, coupons, copy)
+  homeFeedConfig            Json     @default("{}")
+  /// Merchant dashboard layout (banners, warnings, notices)
+  merchantLayoutConfig      Json     @default("{}")
+  /// Rider gateway layout (onboarding, payout tiers, announcements)
+  riderLayoutConfig         Json     @default("{}")
   updatedAt                 DateTime @updatedAt
 }
 
@@ -322,7 +357,8 @@ model Shop {
   orders         Order[]
   paymentIntents PaymentIntent[]
   coupons        ShopCoupon[]
-  ads       Ad[]
+  ads            Ad[]
+  adSubscriptionPlans AdSubscriptionPlan[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -546,6 +582,8 @@ model Ad {
   linkUrl     String?
   placement   AdPlacement
   isActive    Boolean     @default(true)
+  /// Set when paused by store kill switch — restored on reopen
+  pausedByKillSwitch Boolean @default(false)
   startDate   DateTime    @default(now())
   endDate     DateTime?
   /// Hyperlocal delivery zones (area names / pincodes)
@@ -556,8 +594,69 @@ model Ad {
   targetShopIds   Json @default("[]")
   impressions Int         @default(0)
   clicks      Int         @default(0)
+  uniqueClicks Int        @default(0)
+  uniqueClickSessions AdUniqueClick[]
   createdAt   DateTime    @default(now())
 
   @@index([placement, isActive])
   @@index([shopId, isActive])
+}
+
+model AdUniqueClick {
+  id        String   @id @default(uuid())
+  adId      String
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  visitorId String
+  createdAt DateTime @default(now())
+
+  @@unique([adId, visitorId])
+  @@index([adId])
+}
+
+/// Merchant advertising subscription — boosts search weight when ACTIVE
+model AdSubscriptionPlan {
+  id                 String                 @id @default(uuid())
+  merchantId         String
+  merchant           VendorProfile          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  shopId             String?
+  shop               Shop?                  @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  planType           AdSubscriptionPlanType
+  startDate          DateTime
+  endDate            DateTime
+  tierLevel          Int                    @default(1)
+  pricePaid          Float                  @default(0)
+  status             AdSubscriptionStatus   @default(ACTIVE)
+  pausedByKillSwitch Boolean                @default(false)
+  settlementMethod   AdSettlementMethod?
+  settlementRef      String?
+  settledAt          DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([merchantId, status])
+  @@index([shopId, status])
+  @@index([status, endDate])
+}
+
+model UserEvent {
+  id        String        @id @default(uuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  eventType UserEventType
+  metadata  Json?
+  sessionId String?
+  ipAddress String?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model CartSnapshot {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }

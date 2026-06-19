@@ -1,14 +1,17 @@
-import type { DeliveryMethod, OrderStatus } from "@rabbit/database";
+import type { DeliveryMethod, OrderStatus, Prisma } from "@rabbit/database";
 import { prisma } from "../lib/prisma";
 import { notFound, badRequest, forbidden } from "../lib/errors";
 import { getRedis } from "../lib/redis";
 import { haversineKm } from "../lib/geo";
+import { encryptAddress, decryptAddress } from "../lib/crypto";
 import { emitNewOrderToStore } from "./merchant-order-events";
-import { getIO, orderRoom } from "../socket/io";
+import { getIO, orderRoom, riderRoom } from "../socket/io";
+import { ORDER_STATUS_LABELS } from "../lib/order-labels";
 import { REDIS_KEYS } from "@rabbit/shared";
 import { invalidateAllShopProductCaches } from "../lib/inventory-cache";
 import { sendPushNotification } from "../lib/fcm";
 import { applyCouponInTransaction } from "./coupon.service";
+import { recordUserEvent } from "./analytics.service";
 
 function generateOrderNumber(): string {
   return `RBT-${Date.now().toString(36).toUpperCase()}`;
@@ -23,6 +26,25 @@ const STATUS_MAP: Record<string, OrderStatus> = {
   CANCELLED: "CANCELLED",
 };
 
+async function cacheOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+  try {
+    await getRedis().set(REDIS_KEYS.orderStatus(orderId), status, "EX", 86400);
+  } catch (err) {
+    console.warn("[redis] order status cache failed:", (err as Error).message);
+  }
+}
+
+async function recordOrderStatusEvent(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  status: OrderStatus,
+  note?: string,
+): Promise<void> {
+  await tx.orderStatusEvent.create({
+    data: { orderId, status, note },
+  });
+}
+
 export async function createOrder(
   customerId: string,
   input: {
@@ -33,39 +55,50 @@ export async function createOrder(
     couponCode?: string;
   }
 ) {
-  const shop = await prisma.shop.findUnique({
-    where: { id: input.storeId },
-    include: { products: { where: { id: { in: input.items.map((i) => i.productId) } } } },
-  });
+  const shop = await prisma.shop.findUnique({ where: { id: input.storeId } });
   if (!shop) throw notFound("Store not found");
   if (!shop.isActive) throw badRequest("Store is currently closed", "STORE_CLOSED");
 
-  let subtotal = 0;
-  const lineItems: { productId: string; quantity: number; price: number }[] = [];
-
-  for (const item of input.items) {
-    const product = shop.products.find((p) => p.id === item.productId);
-    if (!product || !product.isAvailable) {
-      throw badRequest(`Product unavailable: ${item.productId}`, "PRODUCT_UNAVAILABLE");
-    }
-    if (product.stock < item.quantity) {
-      throw badRequest(`Insufficient stock for ${product.name}`, "INSUFFICIENT_STOCK");
-    }
-    subtotal += product.price * item.quantity;
-    lineItems.push({ productId: product.id, quantity: item.quantity, price: product.price });
-  }
-
-  if (subtotal < shop.minOrderValue) {
-    throw badRequest(
-      `Minimum order value is ₹${shop.minOrderValue}`,
-      "MIN_ORDER_NOT_MET"
-    );
-  }
-
-  const totalPrice = subtotal + shop.baseDeliveryFee;
-  const deliveryAddressEnc = Buffer.from(input.deliveryAddress).toString("base64");
+  const deliveryAddressEnc = encryptAddress(input.deliveryAddress);
 
   const order = await prisma.$transaction(async (tx) => {
+    let subtotal = 0;
+    const lineItems: { productId: string; quantity: number; price: number }[] = [];
+
+    for (const item of input.items) {
+      const product = await tx.product.findFirst({
+        where: {
+          id: item.productId,
+          shopId: shop.id,
+          isAvailable: true,
+        },
+      });
+      if (!product) {
+        throw badRequest(`Product unavailable: ${item.productId}`, "PRODUCT_UNAVAILABLE");
+      }
+
+      const reserved = await tx.product.updateMany({
+        where: {
+          id: product.id,
+          stock: { gte: item.quantity },
+        },
+        data: { stock: { decrement: item.quantity } },
+      });
+      if (reserved.count !== 1) {
+        throw badRequest(`Insufficient stock for ${product.name}`, "INSUFFICIENT_STOCK");
+      }
+
+      subtotal += product.price * item.quantity;
+      lineItems.push({ productId: product.id, quantity: item.quantity, price: product.price });
+    }
+
+    if (subtotal < shop.minOrderValue) {
+      throw badRequest(
+        `Minimum order value is ₹${shop.minOrderValue}`,
+        "MIN_ORDER_NOT_MET"
+      );
+    }
+
     let appliedCouponCode: string | undefined;
     let discountAmount = 0;
     let orderSubtotal = subtotal;
@@ -96,16 +129,12 @@ export async function createOrder(
       include: { items: true, shop: { select: { name: true } } },
     });
 
-    for (const item of lineItems) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      });
-    }
+    await recordOrderStatusEvent(tx, created.id, created.status, "Order created");
+
     return created;
   });
 
-  await getRedis().set(REDIS_KEYS.orderStatus(order.id), order.status, "EX", 86400);
+  await cacheOrderStatus(order.id, order.status);
   await invalidateAllShopProductCaches(shop.id);
 
   try {
@@ -113,6 +142,12 @@ export async function createOrder(
   } catch (err) {
     console.warn("[merchant-order-events] emit failed:", (err as Error).message);
   }
+
+  void recordUserEvent({
+    userId: customerId,
+    eventType: "ORDER_PLACED",
+    metadata: { orderId: order.id, shopId: shop.id },
+  });
 
   return {
     id: order.id,
@@ -202,17 +237,19 @@ export async function updateMerchantOrderStatus(
 
   const mappedStatus = STATUS_MAP[status];
 
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: mappedStatus,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.order.update({
+      where: { id: order.id },
+      data: { status: mappedStatus },
+    });
+    await recordOrderStatusEvent(tx, order.id, mappedStatus, `Merchant set ${status}`);
+    return row;
   });
 
-  await getRedis().set(REDIS_KEYS.orderStatus(orderId), mappedStatus, "EX", 86400);
+  await cacheOrderStatus(orderId, mappedStatus);
 
-  if (mappedStatus === "ACCEPTED_BY_SHOP") {
-    await assignNearestRabbitor(orderId, order.shop.latitude, order.shop.longitude);
+  if (mappedStatus === "OUT_FOR_DELIVERY") {
+    await assignNearestRabbitorForOrder(orderId);
   }
 
   await notifyCustomerOrderStatus(order.customer.fcmToken, mappedStatus);
@@ -258,18 +295,22 @@ export async function updateOrderStatus(
     if (!isCustomer && !isVendor) throw forbidden();
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: mappedStatus,
-      ...(status === "DELIVERED" && { deliveredAt: new Date() }),
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: mappedStatus,
+        ...(status === "DELIVERED" && { deliveredAt: new Date() }),
+      },
+    });
+    await recordOrderStatusEvent(tx, orderId, mappedStatus, `Actor ${actorRole}`);
+    return row;
   });
 
-  await getRedis().set(REDIS_KEYS.orderStatus(orderId), mappedStatus, "EX", 86400);
+  await cacheOrderStatus(orderId, mappedStatus);
 
-  if (mappedStatus === "ACCEPTED_BY_SHOP") {
-    await assignNearestRabbitor(orderId, order.shop.latitude, order.shop.longitude);
+  if (mappedStatus === "OUT_FOR_DELIVERY") {
+    await assignNearestRabbitorForOrder(orderId);
   }
 
   await notifyCustomerOrderStatus(order.customer.fcmToken, mappedStatus);
@@ -308,12 +349,44 @@ async function notifyCustomerOrderStatus(
 
 const RABBITOR_SEARCH_RADIUS_KM = 10;
 
-async function assignNearestRabbitor(orderId: string, shopLat: number, shopLng: number) {
+export type RiderAssignResult = {
+  assigned: boolean;
+  riderId?: string;
+  displayName?: string;
+};
+
+/** Assign nearest online rider once the order is packed and ready for pickup. */
+export async function assignNearestRabbitorForOrder(orderId: string): Promise<RiderAssignResult> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      shop: { select: { latitude: true, longitude: true, name: true } },
+    },
+  });
+
+  if (!order || order.deliveryPartnerId) {
+    return { assigned: Boolean(order?.deliveryPartnerId), riderId: order?.deliveryPartnerId ?? undefined };
+  }
+
+  const shopLat = order.shop.latitude;
+  const shopLng = order.shop.longitude;
+  const latDelta = RABBITOR_SEARCH_RADIUS_KM / 111;
+  const lngDelta =
+    RABBITOR_SEARCH_RADIUS_KM / (111 * Math.max(0.1, Math.cos((shopLat * Math.PI) / 180)));
+
   const rabbitors = await prisma.rabbitorProfile.findMany({
     where: {
       isAvailable: true,
-      currentLat: { not: null },
-      currentLng: { not: null },
+      currentLat: {
+        not: null,
+        gte: shopLat - latDelta,
+        lte: shopLat + latDelta,
+      },
+      currentLng: {
+        not: null,
+        gte: shopLng - lngDelta,
+        lte: shopLng + lngDelta,
+      },
     },
     include: {
       user: { select: { id: true, displayName: true, name: true } },
@@ -335,7 +408,7 @@ async function assignNearestRabbitor(orderId: string, shopLat: number, shopLng: 
   const room = orderRoom(orderId);
 
   if (nearest && nearestDist <= RABBITOR_SEARCH_RADIUS_KM) {
-    const displayName = nearest.user.displayName ?? nearest.user.name;
+    const displayName = nearest.user.displayName ?? nearest.user.name ?? "Rabbitor";
 
     await prisma.$transaction([
       prisma.order.update({
@@ -351,8 +424,25 @@ async function assignNearestRabbitor(orderId: string, shopLat: number, shopLng: 
       }),
     ]);
 
+    await getRedis().set(REDIS_KEYS.riderStage(orderId), "ASSIGNED", "EX", 86400);
+
     io.to(room).emit("rabbitor-assigned", { displayName });
-    return;
+    io.to(room).emit("ORDER_STATUS_UPDATED", {
+      orderId,
+      status: ORDER_STATUS_LABELS.OUT_FOR_DELIVERY,
+    });
+    io.to(riderRoom(nearest.user.id)).emit("DELIVERY_ASSIGNED", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      storeName: order.shop.name,
+      storeLat: shopLat,
+      storeLng: shopLng,
+      destLat: order.destLatitude,
+      destLng: order.destLongitude,
+      payoutInr: Math.round(order.deliveryFee + order.riderTip),
+    });
+
+    return { assigned: true, riderId: nearest.user.id, displayName };
   }
 
   await prisma.order.update({
@@ -361,6 +451,56 @@ async function assignNearestRabbitor(orderId: string, shopLat: number, shopLng: 
   });
 
   io.to(room).emit("no-rabbitor-available", {});
+  return { assigned: false };
+}
+
+/** Cancel unpaid API orders after timeout and restore stock. */
+export async function expireStalePendingPaymentOrders(): Promise<number> {
+  const cutoff = new Date(Date.now() - 30 * 60 * 1000);
+  const stale = await prisma.order.findMany({
+    where: {
+      paymentStatus: "PENDING",
+      status: "PENDING",
+      createdAt: { lt: cutoff },
+    },
+    include: { items: true, customer: { select: { fcmToken: true } } },
+  });
+
+  let count = 0;
+  for (const order of stale) {
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: "CANCELLED", paymentStatus: "FAILED" },
+      });
+      for (const item of order.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      await recordOrderStatusEvent(
+        tx,
+        order.id,
+        "CANCELLED",
+        "Payment timeout — order auto-cancelled",
+      );
+    });
+
+    await cacheOrderStatus(order.id, "CANCELLED");
+
+    if (order.customer.fcmToken) {
+      await sendPushNotification(
+        order.customer.fcmToken,
+        "Complete your order",
+        "You left something behind — tap to finish checkout.",
+      ).catch(() => undefined);
+    }
+
+    count += 1;
+  }
+
+  return count;
 }
 
 export async function listCustomerOrders(
@@ -417,7 +557,6 @@ export async function getOrderForUser(userId: string, orderId: string) {
   });
   if (!order) throw notFound("Order not found");
 
-  // Address revealed only after delivery confirmed (privacy rule)
   const showAddress = order.status === "DELIVERED";
   return {
     id: order.id,
@@ -431,8 +570,10 @@ export async function getOrderForUser(userId: string, orderId: string) {
       quantity: i.quantity,
       unitPrice: i.price,
     })),
-    ...(showAddress && order.deliveryAddressEnc && {
-      deliveryAddress: Buffer.from(order.deliveryAddressEnc, "base64").toString("utf8"),
+    ...(showAddress && {
+      deliveryAddress: order.deliveryAddressEnc
+        ? decryptAddress(order.deliveryAddressEnc)
+        : order.deliveryAddress,
     }),
     createdAt: order.createdAt.toISOString(),
     deliveredAt: order.deliveredAt?.toISOString() ?? null,

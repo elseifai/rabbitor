@@ -1,3 +1,5 @@
+import nodemailer from 'nodemailer'
+
 interface SendEmailArgs {
   to: string
   subject: string
@@ -6,31 +8,17 @@ interface SendEmailArgs {
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
-/**
- * Sends a transactional email via Resend when RESEND_API_KEY is set.
- * In dev (or when unconfigured) it logs to the server console so the flow
- * still works without credentials.
- */
-export async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM ?? 'Rabbit <onboarding@resend.dev>'
-  const bypass =
-    process.env.ALLOW_DEV_OTP_BYPASS === 'true' ||
-    process.env.NODE_ENV !== 'production'
+function isBypassEnabled(): boolean {
+  return (
+    process.env.ALLOW_DEV_OTP_BYPASS === 'true' || process.env.NODE_ENV !== 'production'
+  )
+}
 
-  if (!apiKey) {
-    const msg = 'Email service is not configured (RESEND_API_KEY missing)'
-    if (bypass) {
-      console.warn(`[EMAIL] ${msg} — bypass enabled; OTP for ${to}: check server logs / dev UI`)
-      return
-    }
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(msg)
-    }
-    console.warn(`[EMAIL] RESEND_API_KEY not set — would send to ${to}: ${subject}`)
-    return
-  }
-
+async function sendViaResend(
+  apiKey: string,
+  from: string,
+  { to, subject, html }: SendEmailArgs,
+): Promise<void> {
   const res = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -44,6 +32,68 @@ export async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<v
     const detail = await res.text().catch(() => '')
     throw new Error(`Email send failed (${res.status}): ${detail}`)
   }
+}
+
+async function sendViaSmtp(
+  { to, subject, html }: SendEmailArgs,
+  from: string,
+): Promise<void> {
+  const user = process.env.SMTP_USER
+  const pass = process.env.SMTP_PASS
+  if (!user || !pass) {
+    throw new Error('SMTP credentials missing')
+  }
+
+  const host = process.env.SMTP_HOST ?? 'smtp.gmail.com'
+  const port = Number(process.env.SMTP_PORT ?? 587)
+
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  })
+
+  await transport.sendMail({
+    from,
+    to,
+    subject,
+    html,
+  })
+}
+
+/**
+ * Sends transactional email via Resend (preferred) or SMTP (Gmail etc.).
+ * In dev bypass mode, logs instead of sending when no provider is configured.
+ */
+export async function sendEmail({ to, subject, html }: SendEmailArgs): Promise<void> {
+  const resendKey = process.env.RESEND_API_KEY
+  const smtpConfigured = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
+  const from =
+    process.env.EMAIL_FROM ??
+    (process.env.SMTP_USER ? `Rabbit <${process.env.SMTP_USER}>` : 'Rabbit <onboarding@resend.dev>')
+
+  if (resendKey) {
+    await sendViaResend(resendKey, from, { to, subject, html })
+    return
+  }
+
+  if (smtpConfigured) {
+    await sendViaSmtp({ to, subject, html }, from)
+    return
+  }
+
+  const msg = 'Email service is not configured (set RESEND_API_KEY or SMTP_USER/SMTP_PASS)'
+  if (isBypassEnabled()) {
+    console.warn(`[EMAIL] ${msg} — bypass enabled; OTP for ${to}: check server logs / dev UI`)
+    return
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(msg)
+  }
+
+  console.warn(`[EMAIL] No email provider — would send to ${to}: ${subject}`)
 }
 
 export function verificationEmailHtml(code: string, link: string): string {

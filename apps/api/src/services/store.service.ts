@@ -2,6 +2,9 @@ import type { StoreType } from "@rabbit/database";
 import { prisma } from "../lib/prisma";
 import { distanceKm, boundingBox } from "../lib/geo";
 import { notFound, forbidden } from "../lib/errors";
+import { getActivePromoShopIds } from "../lib/ad-subscription";
+import { effectiveSortDistance, searchWeightFromDistance } from "../lib/search-weight";
+import { syncAdsWithStoreStatus } from "../lib/ad-store-sync";
 
 /** Public store shape — never includes address or vendor KYC */
 function toPublicStore(
@@ -61,16 +64,31 @@ export async function findNearbyStores(params: {
     include: { vendor: { select: { subscriptionTier: true } } },
   });
 
-  return shops
+  const filtered = shops
     .map((shop) => {
       const dist = distanceKm(params.lat, params.lng, shop.latitude, shop.longitude);
       return { shop, dist };
     })
-    .filter(({ shop, dist }) => dist <= Math.min(searchRadius, shop.deliveryRadiusKm))
-    .sort((a, b) => a.dist - b.dist)
-    .map(({ shop, dist }) => ({
+    .filter(({ shop, dist }) => dist <= Math.min(searchRadius, shop.deliveryRadiusKm));
+
+  const promoIds = await getActivePromoShopIds(filtered.map(({ shop }) => shop.id));
+
+  return filtered
+    .map(({ shop, dist }) => {
+      const hasPromo = promoIds.has(shop.id);
+      return {
+        shop,
+        dist,
+        hasPromo,
+        effectiveDist: effectiveSortDistance(dist, hasPromo),
+      };
+    })
+    .sort((a, b) => a.effectiveDist - b.effectiveDist)
+    .map(({ shop, dist, hasPromo }) => ({
       ...toPublicStore(shop, params.lat, params.lng),
       distanceKm: Math.round(dist * 100) / 100,
+      searchWeight: searchWeightFromDistance(dist, hasPromo),
+      hasPromoBoost: hasPromo,
     }));
 }
 
@@ -88,6 +106,7 @@ export async function createStore(
   data: {
     name: string;
     storeType: StoreType;
+    category?: string;
     latitude: number;
     longitude: number;
     address: string;
@@ -125,7 +144,7 @@ export async function createStore(
       vendorId: vendor.id,
       name: data.name,
       slug: `${slug}-${Date.now().toString(36)}`,
-      category: data.description?.trim() || data.storeType,
+      category: data.category?.trim() || data.description?.trim() || data.storeType,
       storeType: data.storeType,
       latitude: data.latitude,
       longitude: data.longitude,
@@ -155,5 +174,6 @@ export async function setStoreOpen(vendorUserId: string, storeId: string, isOpen
     data: { isActive: isOpen },
     include: { vendor: { select: { subscriptionTier: true } } },
   });
+  await syncAdsWithStoreStatus(storeId, isOpen);
   return toPublicStore(updated);
 }

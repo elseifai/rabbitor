@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { broadcastFeedbackReceived } from '@/lib/order-events'
 
 /** Persists a customer review and recomputes the shop's rating average. */
 export async function POST(request: Request) {
@@ -61,6 +62,15 @@ export async function POST(request: Request) {
         ratingAvg: agg._avg.shopRating ?? 0,
         ratingCount: agg._count._all,
       },
+    })
+
+    await broadcastFeedbackReceived({
+      orderId,
+      shopId: order.shopId,
+      riderId: order.deliveryPartnerId,
+      shopRating: review.shopRating,
+      riderRating: review.riderRating,
+      comment: review.comment,
     })
 
     return NextResponse.json({ success: true, data: review })

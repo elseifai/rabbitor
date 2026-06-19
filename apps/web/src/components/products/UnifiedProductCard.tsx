@@ -50,10 +50,12 @@ export function UnifiedProductCard({
   product,
   variant = 'GROCERY',
   className,
+  eagerImage = false,
 }: {
   product: UnifiedProductData
   variant?: ProductCardVariant
   className?: string
+  eagerImage?: boolean
 }) {
   const router = useRouter()
   const addItem = useCartStore((s) => s.addItem)
@@ -102,6 +104,7 @@ export function UnifiedProductCard({
             alt={product.name}
             fallback={placeholder.emoji}
             className={placeholder.bg}
+            eager={eagerImage}
           />
 
           {originalPrice && discount > 0 && (
@@ -219,6 +222,7 @@ export function UnifiedProductCard({
           alt={product.name}
           fallback={placeholder.emoji}
           className={cn('transition-transform duration-200 group-hover:scale-[1.02]', placeholder.bg)}
+          eager={eagerImage}
         />
 
         {originalPrice && discount > 0 && !outOfStock && (

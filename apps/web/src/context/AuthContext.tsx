@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       hydrated,
-      isLoggedIn: hydrated && Boolean(user && token),
+      isLoggedIn: hydrated && Boolean(user),
       login,
       logout,
     }),

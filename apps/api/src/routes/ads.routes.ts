@@ -17,7 +17,10 @@ router.get("/", async (req, res, next) => {
         placement,
         isActive: true,
         startDate: { lte: now },
-        OR: [{ endDate: null }, { endDate: { gte: now } }],
+        AND: [
+          { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+          { OR: [{ shopId: null }, { shop: { isActive: true } }] },
+        ],
       },
       orderBy: { createdAt: "desc" },
       take: 3,

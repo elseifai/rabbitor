@@ -53,6 +53,9 @@ const config: Config = {
         'run-bob': 'runBob 0.28s ease-in-out infinite',
         'run-leg-a': 'runLegA 0.28s ease-in-out infinite',
         'run-leg-b': 'runLegB 0.28s ease-in-out infinite',
+        'accordion-down': 'accordionDown 0.2s ease-out',
+        'accordion-up': 'accordionUp 0.2s ease-out',
+        shimmer: 'shimmer 2.5s linear infinite',
       },
       keyframes: {
         fadeIn: {
@@ -87,6 +90,18 @@ const config: Config = {
         runLegB: {
           '0%, 100%': { transform: 'rotate(42deg)' },
           '50%': { transform: 'rotate(-38deg)' },
+        },
+        accordionDown: {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        accordionUp: {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '-200% 0' },
         },
       },
     },

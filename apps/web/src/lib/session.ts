@@ -25,21 +25,25 @@ function decodeJwtExp(token: string): number | null {
 
 export function saveSession(token: string, user: SessionUser): void {
   if (typeof window === 'undefined') return
-  localStorage.setItem(TOKEN_KEY, token)
+  // Token intentionally not stored in localStorage — lives in httpOnly cookie only
+  void token
   localStorage.setItem(USER_KEY, JSON.stringify(user))
   sessionStorage.setItem(SESSION_ACTIVE_KEY, '1')
 }
 
 export function getSession(): { token: string; user: SessionUser } | null {
   if (typeof window === 'undefined') return null
-  const token = localStorage.getItem(TOKEN_KEY)
   const raw = localStorage.getItem(USER_KEY)
-  if (!token || !raw) return null
+  if (!raw) return null
 
-  const exp = decodeJwtExp(token)
-  if (exp && exp * 1000 < Date.now()) {
-    clearSession()
-    return null
+  const token = localStorage.getItem(TOKEN_KEY) ?? ''
+
+  if (token) {
+    const exp = decodeJwtExp(token)
+    if (exp && exp * 1000 < Date.now()) {
+      clearSession()
+      return null
+    }
   }
 
   try {

@@ -78,6 +78,27 @@ export function authenticate(
   }
 }
 
+/** Sets `req.user` when a valid Bearer token is present; does not fail when absent. */
+export function optionalAuthenticate(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+  const token = header.slice(7);
+  try {
+    const payload = jwt.verify(token, config.jwtSecret) as JwtPayload;
+    req.user = payload;
+  } catch {
+    // ignore invalid optional tokens
+  }
+  next();
+}
+
 export function requireRoles(...roles: UserRole[]) {
   return (req: AuthRequest, _res: Response, next: NextFunction): void => {
     if (!req.user) {

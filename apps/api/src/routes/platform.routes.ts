@@ -4,10 +4,13 @@ import { DiscountType, KycDocType, AdPlacement, OrderStatus } from "@rabbit/data
 import * as couponService from "../services/coupon.service";
 import * as kycService from "../services/kyc.service";
 import { prisma } from "../lib/prisma";
+import { getRedis } from "../lib/redis";
 import { uploadImage, isCloudinaryConfigured } from "../lib/cloudinary";
 import { imageUpload } from "../lib/upload";
 import { authenticate, requireRoles, type AuthRequest } from "../middleware/auth";
 import { badRequest } from "../lib/errors";
+import * as analyticsService from "../services/analytics.service";
+import { runGlobalCatalogSeed } from "../lib/global-catalog-seed";
 
 const router = Router();
 
@@ -265,6 +268,18 @@ adminRouter.get("/orders", authenticate, requireRoles("ADMIN"), async (req, res,
 adminRouter.get("/revenue", authenticate, requireRoles("ADMIN"), async (req, res, next) => {
   try {
     const range = String(req.query.range ?? "week");
+    const cacheKey = `admin:revenue:${range}`;
+
+    try {
+      const cached = await getRedis().get(cacheKey);
+      if (cached) {
+        res.json(JSON.parse(cached));
+        return;
+      }
+    } catch {
+      // Redis optional — compute live
+    }
+
     const now = new Date();
     const start =
       range === "month"
@@ -282,7 +297,7 @@ adminRouter.get("/revenue", authenticate, requireRoles("ADMIN"), async (req, res
     );
     const deliveryFees = delivered.reduce((s, o) => s + o.deliveryFee, 0);
 
-    res.json({
+    const payload = {
       success: true,
       data: {
         gmv: Math.round(gmv),
@@ -290,11 +305,46 @@ adminRouter.get("/revenue", authenticate, requireRoles("ADMIN"), async (req, res
         deliveryFees: Math.round(deliveryFees),
         orderCount: delivered.length,
       },
-    });
+    };
+
+    try {
+      await getRedis().set(cacheKey, JSON.stringify(payload), "EX", 300);
+    } catch {
+      // ignore cache write failures
+    }
+
+    res.json(payload);
   } catch (e) {
     next(e);
   }
 });
+
+adminRouter.get("/analytics/funnel", authenticate, requireRoles("ADMIN"), async (req, res, next) => {
+  try {
+    const from = req.query.from
+      ? new Date(String(req.query.from))
+      : new Date(Date.now() - 7 * 86400000);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const data = await analyticsService.getFunnelAnalytics(from, to);
+    res.json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+adminRouter.get(
+  "/customers/:id/journey",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try {
+      const data = await analyticsService.getCustomerJourney(String(req.params.id));
+      res.json({ success: true, data });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 adminRouter.get("/ads", authenticate, requireRoles("ADMIN"), async (_req, res, next) => {
   try {
@@ -345,3 +395,17 @@ adminRouter.patch("/ads/:id", authenticate, requireRoles("ADMIN"), async (req, r
     next(e);
   }
 });
+
+adminRouter.post(
+  "/catalog/seed",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (_req, res, next) => {
+    try {
+      const result = await runGlobalCatalogSeed();
+      res.json({ success: true, data: result });
+    } catch (e) {
+      next(e);
+    }
+  },
+);

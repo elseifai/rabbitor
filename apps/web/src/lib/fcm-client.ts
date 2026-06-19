@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app'
 import { getMessaging, getToken, isSupported } from 'firebase/messaging'
+import { authFetch } from '@/lib/session'
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -23,21 +24,30 @@ export async function requestNotificationPermission(): Promise<string | null> {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return null
 
-  const registration = await navigator.serviceWorker.register(
-    `/firebase-messaging-sw.js?apiKey=${encodeURIComponent(firebaseConfig.apiKey ?? '')}&projectId=${encodeURIComponent(firebaseConfig.projectId ?? '')}&messagingSenderId=${encodeURIComponent(firebaseConfig.messagingSenderId ?? '')}&appId=${encodeURIComponent(firebaseConfig.appId ?? '')}`,
-  )
+  const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+
+  const sendConfig = (sw: ServiceWorker) =>
+    sw.postMessage({ type: 'FIREBASE_CONFIG', config: firebaseConfig })
+
+  if (registration.active) {
+    sendConfig(registration.active)
+  } else {
+    const worker = registration.installing ?? registration.waiting
+    worker?.addEventListener('statechange', (e) => {
+      if ((e.target as ServiceWorker).state === 'activated' && registration.active) {
+        sendConfig(registration.active)
+      }
+    })
+  }
+
   const messaging = getMessaging(getFirebaseApp())
   const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
   if (!vapidKey) return null
 
-  const token = await getToken(messaging, {
-    vapidKey,
-    serviceWorkerRegistration: registration,
-  })
-
+  const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration })
   if (!token) return null
 
-  await fetch('/api/auth/fcm-token', {
+  await authFetch('/api/auth/fcm-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),

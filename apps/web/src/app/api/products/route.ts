@@ -12,7 +12,10 @@ export async function GET(request: Request) {
         where: { OR: [{ id: shopId }, { slug: shopId }] },
         select: { id: true },
       })
-      resolvedShopId = shop?.id
+      if (!shop) {
+        return NextResponse.json({ success: true, data: [] })
+      }
+      resolvedShopId = shop.id
     }
 
     const products = await prisma.product.findMany({

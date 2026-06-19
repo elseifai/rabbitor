@@ -1,16 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Minus, Plus, CreditCard, AlertCircle } from 'lucide-react'
+import { Minus, Plus, AlertCircle, ChevronRight } from 'lucide-react'
 import { useCartStore } from '@/store'
 import { formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { CartMilestoneTracker } from '@/components/cart/CartMilestoneTracker'
+import { resolveAppApiUrl } from '@/lib/app-api'
 
 const PLATFORM_FEE = 5
-const RAZORPAY_ENABLED = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID)
 
 export default function CartPage() {
   const router = useRouter()
@@ -22,6 +22,29 @@ export default function CartPage() {
   const [discount, setDiscount] = useState(0)
   const [couponError, setCouponError] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
+  const [paymentEnabled, setPaymentEnabled] = useState<boolean | null>(null)
+  const [codEnabled, setCodEnabled] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetch(resolveAppApiUrl('/api/payments/config'), { credentials: 'include' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json.success) {
+          setPaymentEnabled(Boolean(json.data?.enabled))
+          setCodEnabled(json.data?.codEnabled !== false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPaymentEnabled(false)
+          setCodEnabled(true)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const grandTotal = Math.max(0, itemTotal - discount) + deliveryFee + PLATFORM_FEE
 
@@ -50,8 +73,16 @@ export default function CartPage() {
   }
 
   const goToCheckout = () => {
+    if (items.length === 0) return
     router.push('/checkout')
   }
+
+  const checkoutHint =
+    paymentEnabled === false && codEnabled
+      ? 'Pay on delivery at checkout'
+      : paymentEnabled === true
+        ? 'Pay online or choose cash on delivery'
+        : null
 
   if (items.length === 0) {
     return (
@@ -182,21 +213,25 @@ export default function CartPage() {
             Total payable · <span className="text-gray-900">{formatCurrency(grandTotal)}</span>
           </p>
 
-          {!RAZORPAY_ENABLED && (
+          {paymentEnabled === false && !codEnabled && (
             <div className="flex items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              Online payment is temporarily unavailable
+              Checkout is temporarily unavailable
             </div>
+          )}
+
+          {checkoutHint && (
+            <p className="text-center text-[11px] font-medium text-[#878787]">{checkoutHint}</p>
           )}
 
           <button
             type="button"
             onClick={goToCheckout}
-            disabled={!RAZORPAY_ENABLED}
+            disabled={paymentEnabled === false && !codEnabled}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#FF6B35] py-3.5 text-sm font-bold text-white shadow-lg transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <CreditCard className="h-4 w-4" />
-            Pay &amp; Checkout
+            Proceed to Checkout
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
