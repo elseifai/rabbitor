@@ -127,13 +127,39 @@ export function AdminCatalogCommand() {
   const [binding, setBinding] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
 
-  // ── Image Audit Mode ──────────────────────────────────────────────────────
+  // ── Image Audit Mode state (handlers declared after `load` below) ──────────
   const [auditMode, setAuditMode] = useState(false)
   const [swapItem, setSwapItem] = useState<CatalogItem | null>(null)
   const [swapUrlInput, setSwapUrlInput] = useState('')
   const [swapLoading, setSwapLoading] = useState(false)
   const [swapError, setSwapError] = useState<string | null>(null)
   const [swapSuccess, setSwapSuccess] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [catRes, shopRes, statsRes] = await Promise.all([
+        fetch(`/api/admin/catalog?q=${encodeURIComponent(query)}`),
+        fetch('/api/admin/shops'),
+        fetch('/api/admin/catalog/stats'),
+      ])
+      const catJson = await catRes.json()
+      const shopJson = await shopRes.json()
+      const statsJson = await statsRes.json()
+      if (catJson.success) setItems(catJson.data ?? [])
+      if (shopJson.success) setShops(shopJson.data ?? [])
+      if (statsJson.success) setStats(statsJson.data ?? null)
+    } catch {
+      setError('Failed to load catalog')
+    } finally {
+      setLoading(false)
+    }
+  }, [query])
+
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 250)
+    return () => clearTimeout(t)
+  }, [load])
 
   const handleImageSwap = useCallback(
     async (itemId: string, file?: File, url?: string) => {
@@ -169,32 +195,6 @@ export function AdminCatalogCommand() {
     },
     [load],
   )
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [catRes, shopRes, statsRes] = await Promise.all([
-        fetch(`/api/admin/catalog?q=${encodeURIComponent(query)}`),
-        fetch('/api/admin/shops'),
-        fetch('/api/admin/catalog/stats'),
-      ])
-      const catJson = await catRes.json()
-      const shopJson = await shopRes.json()
-      const statsJson = await statsRes.json()
-      if (catJson.success) setItems(catJson.data ?? [])
-      if (shopJson.success) setShops(shopJson.data ?? [])
-      if (statsJson.success) setStats(statsJson.data ?? null)
-    } catch {
-      setError('Failed to load catalog')
-    } finally {
-      setLoading(false)
-    }
-  }, [query])
-
-  useEffect(() => {
-    const t = setTimeout(() => void load(), 250)
-    return () => clearTimeout(t)
-  }, [load])
 
   // Scroll log to bottom when new entries arrive
   useEffect(() => {
