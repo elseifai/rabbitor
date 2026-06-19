@@ -1,17 +1,30 @@
 import "dotenv/config";
-import { runGlobalCatalogSeed, MASTER_INVENTORY_DATA } from "../lib/global-catalog-seed";
+import { runMassCatalogSeed, MASS_CATALOG_DATA } from "../lib/mass-catalog-seed";
 import { prisma } from "../lib/prisma";
 
 async function main() {
   console.log(
     JSON.stringify({
       event: "catalog_seed_start",
-      rows: MASTER_INVENTORY_DATA.length,
+      rows: MASS_CATALOG_DATA.length,
+      mode: "mass-hyper-scale",
       timestamp: new Date().toISOString(),
     }),
   );
 
-  const result = await runGlobalCatalogSeed();
+  const result = await runMassCatalogSeed(MASS_CATALOG_DATA, (progress) => {
+    process.stdout.write(
+      JSON.stringify({
+        event: "chunk_progress",
+        chunk: progress.chunk,
+        totalChunks: progress.totalChunks,
+        processed: progress.processed,
+        total: progress.total,
+        created: progress.created,
+        sector: progress.sector,
+      }) + "\n",
+    );
+  });
 
   console.log(
     JSON.stringify({

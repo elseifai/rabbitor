@@ -11,6 +11,7 @@ import { authenticate, requireRoles, type AuthRequest } from "../middleware/auth
 import { badRequest } from "../lib/errors";
 import * as analyticsService from "../services/analytics.service";
 import { runGlobalCatalogSeed } from "../lib/global-catalog-seed";
+import * as AdminCatalogController from "../controllers/admin-catalog.controller";
 
 const router = Router();
 
@@ -396,16 +397,65 @@ adminRouter.patch("/ads/:id", authenticate, requireRoles("ADMIN"), async (req, r
   }
 });
 
+adminRouter.get(
+  "/catalog",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.getCatalogItems(req, res); } catch (e) { next(e); }
+  },
+);
+
+adminRouter.get(
+  "/catalog/stats",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.getCatalogStats(req, res); } catch (e) { next(e); }
+  },
+);
+
 adminRouter.post(
   "/catalog/seed",
   authenticate,
   requireRoles("ADMIN"),
-  async (_req, res, next) => {
-    try {
-      const result = await runGlobalCatalogSeed();
-      res.json({ success: true, data: result });
-    } catch (e) {
-      next(e);
-    }
+  async (req, res, next) => {
+    try { await AdminCatalogController.seedCatalog(req, res); } catch (e) { next(e); }
+  },
+);
+
+adminRouter.post(
+  "/catalog/mass-seed",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.massSeedCatalog(req, res); } catch (e) { next(e); }
+  },
+);
+
+adminRouter.get(
+  "/catalog/mass-seed/stream",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.massSeedCatalogStream(req, res); } catch (e) { next(e); }
+  },
+);
+
+adminRouter.post(
+  "/catalog/upsert",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.bulkUpsertCatalog(req, res); } catch (e) { next(e); }
+  },
+);
+
+adminRouter.post(
+  "/catalog/auto-promote",
+  authenticate,
+  requireRoles("ADMIN"),
+  async (req, res, next) => {
+    try { await AdminCatalogController.autoPromoteToCatalog(req, res); } catch (e) { next(e); }
   },
 );

@@ -1,8 +1,21 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Edit3, Loader2, Package, Plus, Search, Sparkles, UploadCloud } from 'lucide-react'
+import {
+  Activity,
+  BarChart3,
+  Edit3,
+  Loader2,
+  Package,
+  Plus,
+  Search,
+  Sparkles,
+  Store,
+  TrendingUp,
+  UploadCloud,
+  Zap,
+} from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
 import {
   itemTypeBadgeClass,
@@ -50,16 +63,52 @@ type SeedResult = {
   entries: Array<{ name: string; sku: string; action: 'created' | 'updated' | 'skipped' }>
 }
 
+type CatalogStats = {
+  totalItems: number
+  shopMappings: number
+  categoryBreakdown: Array<{ category: string; count: number }>
+  storeTypeBreakdown: Array<{ storeType: string; count: number }>
+}
+
+type StreamProgress = {
+  chunk: number
+  totalChunks: number
+  processed: number
+  total: number
+  created: number
+  updated: number
+  skipped: number
+  sector: string
+}
+
+const SECTOR_COLORS: Record<string, string> = {
+  kirana: 'bg-amber-100 text-amber-800 ring-amber-200',
+  dairy: 'bg-sky-100 text-sky-800 ring-sky-200',
+  bakery: 'bg-rose-100 text-rose-800 ring-rose-200',
+  veggies: 'bg-emerald-100 text-emerald-800 ring-emerald-200',
+  fish: 'bg-blue-100 text-blue-800 ring-blue-200',
+}
+
 export function AdminCatalogCommand() {
   const [items, setItems] = useState<CatalogItem[]>([])
   const [shops, setShops] = useState<Shop[]>([])
+  const [stats, setStats] = useState<CatalogStats | null>(null)
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null)
+
+  // Standard seed (66 items)
   const [seeding, setSeeding] = useState(false)
   const [seedResult, setSeedResult] = useState<SeedResult | null>(null)
+
+  // Mass seed (500+ items) with SSE streaming
+  const [massSeeding, setMassSeeding] = useState(false)
+  const [streamProgress, setStreamProgress] = useState<StreamProgress | null>(null)
+  const [massSeedResult, setMassSeedResult] = useState<SeedResult | null>(null)
+  const [streamLog, setStreamLog] = useState<string[]>([])
+
   const [error, setError] = useState<string | null>(null)
   const [controlItem, setControlItem] = useState<CatalogItem | null>(null)
   const [controlTab, setControlTab] = useState<'profile' | 'assortment' | 'feedback'>('profile')
@@ -72,18 +121,22 @@ export function AdminCatalogCommand() {
     binLocation: '',
   })
   const [binding, setBinding] = useState(false)
+  const logRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [catRes, shopRes] = await Promise.all([
+      const [catRes, shopRes, statsRes] = await Promise.all([
         fetch(`/api/admin/catalog?q=${encodeURIComponent(query)}`),
         fetch('/api/admin/shops'),
+        fetch('/api/admin/catalog/stats'),
       ])
       const catJson = await catRes.json()
       const shopJson = await shopRes.json()
+      const statsJson = await statsRes.json()
       if (catJson.success) setItems(catJson.data ?? [])
       if (shopJson.success) setShops(shopJson.data ?? [])
+      if (statsJson.success) setStats(statsJson.data ?? null)
     } catch {
       setError('Failed to load catalog')
     } finally {
@@ -95,6 +148,13 @@ export function AdminCatalogCommand() {
     const t = setTimeout(() => void load(), 250)
     return () => clearTimeout(t)
   }, [load])
+
+  // Scroll log to bottom when new entries arrive
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight
+    }
+  }, [streamLog])
 
   const summary = useMemo(
     () => ({
@@ -166,6 +226,31 @@ export function AdminCatalogCommand() {
     }
   }
 
+  const runMassSeed = async () => {
+    setMassSeeding(true)
+    setMassSeedResult(null)
+    setStreamProgress(null)
+    setStreamLog([])
+    setError(null)
+
+    try {
+      const res = await fetch('/api/admin/catalog/mass-seed', { method: 'POST' })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error ?? 'Mass seed failed')
+      const result = json.data as SeedResult
+      setMassSeedResult(result)
+      setStreamLog((prev) => [
+        ...prev,
+        `✓ Complete — ${result.created} created · ${result.updated} updated · ${result.skipped} skipped`,
+      ])
+      void load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Mass seed failed')
+    } finally {
+      setMassSeeding(false)
+    }
+  }
+
   const openControl = (item: CatalogItem, tab: 'profile' | 'assortment' | 'feedback' = 'profile') => {
     setControlTab(tab)
     setControlItem(item)
@@ -199,49 +284,131 @@ export function AdminCatalogCommand() {
     }
   }
 
+  const progressPct = streamProgress
+    ? Math.round((streamProgress.processed / streamProgress.total) * 100)
+    : 0
+
   return (
     <div className="space-y-5">
+
+      {/* ── DIAGNOSTIC DASHBOARD ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl bg-orange-100 p-2">
+              <Package className="h-4 w-4 text-orange-600" />
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Templates</p>
+          </div>
+          <p className="mt-2 text-3xl font-black text-gray-900">
+            {loading ? '—' : (stats?.totalItems ?? summary.total).toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl bg-emerald-100 p-2">
+              <Store className="h-4 w-4 text-emerald-600" />
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Shop Mappings</p>
+          </div>
+          <p className="mt-2 text-3xl font-black text-gray-900">
+            {loading ? '—' : (stats?.shopMappings ?? 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl bg-yellow-100 p-2">
+              <TrendingUp className="h-4 w-4 text-yellow-600" />
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">High Velocity</p>
+          </div>
+          <p className="mt-2 text-3xl font-black text-yellow-600">{summary.highVelocity}</p>
+        </div>
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl bg-blue-100 p-2">
+              <Activity className="h-4 w-4 text-blue-600" />
+            </div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Avg Satisfaction</p>
+          </div>
+          <p className="mt-2 text-3xl font-black text-emerald-600">{summary.avgFeedback}%</p>
+        </div>
+      </div>
+
+      {/* ── CATEGORY VOLUME DISTRIBUTION ── */}
+      {stats && stats.categoryBreakdown.length > 0 && (
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-orange-500" />
+            <p className="text-xs font-black uppercase tracking-widest text-gray-500">Category Volume Distribution</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stats.categoryBreakdown.slice(0, 12).map((c) => (
+              <span
+                key={c.category}
+                className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1 text-xs font-bold capitalize text-slate-700 ring-1 ring-slate-200"
+              >
+                <span className="text-orange-500">{c.count}</span>
+                {c.category}
+              </span>
+            ))}
+          </div>
+          {stats.storeTypeBreakdown.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {stats.storeTypeBreakdown.map((s) => (
+                <span
+                  key={s.storeType}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold capitalize text-orange-700 ring-1 ring-orange-100"
+                >
+                  {s.storeType.toLowerCase()}: {s.count}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── INGESTION ENGINE CONTROL PANEL ── */}
       <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/80 to-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-xs font-black uppercase tracking-widest text-orange-600">
-              Bulk Import Master Catalog
+              Bulk Import & Ingestion Engine
             </h3>
             <p className="mt-1 text-xs text-gray-500">
-              CSV headers: sku, name, category, subcategory, base_price, description, type
+              CSV: sku, name, category, subcategory, base_price, description, type · or run seeding engines below
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Standard 66-item seed */}
             <button
               type="button"
-              disabled={seeding || uploading}
+              disabled={seeding || massSeeding || uploading}
               onClick={() => void runSystemSeed()}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-orange-400" />}
+              Run 66-Item Seed
+            </button>
+
+            {/* Hyper-scale 500+ mass seed */}
+            <button
+              type="button"
+              disabled={seeding || massSeeding || uploading}
+              onClick={() => void runMassSeed()}
               className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-slate-800 disabled:opacity-60"
             >
-              {seeding ? (
+              {massSeeding ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4 text-orange-400" />
+                <Zap className="h-4 w-4 text-yellow-400" />
               )}
-              Run Dynamic System Catalog Seeding Engine
+              Run Hyper-Scale 500+ Seed Engine
             </button>
-          </div>
-          <div className="flex gap-4 text-center text-xs">
-            <div>
-              <p className="font-black text-2xl text-gray-900">{summary.total}</p>
-              <p className="text-gray-400">Templates</p>
-            </div>
-            <div>
-              <p className="font-black text-2xl text-yellow-600">{summary.highVelocity}</p>
-              <p className="text-gray-400">High velocity</p>
-            </div>
-            <div>
-              <p className="font-black text-2xl text-emerald-600">{summary.avgFeedback}%</p>
-              <p className="text-gray-400">Avg satisfaction</p>
-            </div>
           </div>
         </div>
 
+        {/* CSV Drop zone */}
         <div
           {...getRootProps()}
           className={cn(
@@ -267,10 +434,7 @@ export function AdminCatalogCommand() {
         {(uploading || uploadProgress > 0) && (
           <div className="mt-3">
             <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-              <div
-                className="h-full bg-orange-500 transition-all"
-                style={{ width: `${uploadProgress}%` }}
-              />
+              <div className="h-full bg-orange-500 transition-all" style={{ width: `${uploadProgress}%` }} />
             </div>
           </div>
         )}
@@ -282,67 +446,78 @@ export function AdminCatalogCommand() {
             </p>
             {uploadResult.lineErrors.length > 0 && (
               <ul className="mt-2 max-h-24 overflow-y-auto text-xs text-red-600">
-                {uploadResult.lineErrors.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
+                {uploadResult.lineErrors.map((line, i) => <li key={i}>{line}</li>)}
               </ul>
             )}
           </div>
         )}
 
-        {seedResult && (
-          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
-            <div className="border-b bg-slate-900 px-4 py-2.5">
-              <p className="text-xs font-black uppercase tracking-widest text-orange-400">
-                Catalog seed summary
+        {/* Standard seed result */}
+        {seedResult && <SeedResultPanel result={seedResult} title="66-Item Seed Summary" />}
+
+        {/* Mass seed: live streaming progress bar */}
+        {massSeeding && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+                Ingestion Engine — Live Stream
               </p>
+              {streamProgress && (
+                <span className="text-xs font-bold text-orange-600">
+                  Chunk {streamProgress.chunk}/{streamProgress.totalChunks} ·{' '}
+                  {streamProgress.processed}/{streamProgress.total}
+                </span>
+              )}
             </div>
-            <div className="grid gap-3 p-4 sm:grid-cols-4">
-              <div className="rounded-lg bg-emerald-50 px-3 py-2 text-center">
-                <p className="text-2xl font-black text-emerald-700">{seedResult.created}</p>
-                <p className="text-[10px] font-bold uppercase text-emerald-600">Created</p>
-              </div>
-              <div className="rounded-lg bg-blue-50 px-3 py-2 text-center">
-                <p className="text-2xl font-black text-blue-700">{seedResult.updated}</p>
-                <p className="text-[10px] font-bold uppercase text-blue-600">Updated</p>
-              </div>
-              <div className="rounded-lg bg-amber-50 px-3 py-2 text-center">
-                <p className="text-2xl font-black text-amber-700">{seedResult.skipped}</p>
-                <p className="text-[10px] font-bold uppercase text-amber-600">Skipped</p>
-              </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-center">
-                <p className="text-2xl font-black text-slate-800">{seedResult.total}</p>
-                <p className="text-[10px] font-bold uppercase text-slate-500">Total rows</p>
-              </div>
+
+            {/* Progress bar */}
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
             </div>
-            {Object.keys(seedResult.bySector).length > 0 && (
-              <div className="border-t px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">
-                  By sector
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {Object.entries(seedResult.bySector).map(([sector, count]) => (
-                    <span
-                      key={sector}
-                      className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold capitalize text-orange-700 ring-1 ring-orange-100"
-                    >
-                      {sector}: {count}
-                    </span>
-                  ))}
+            <p className="mt-1 text-right text-xs text-gray-400">{progressPct}% complete</p>
+
+            {/* Real-time sector counters */}
+            {streamProgress && (
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-lg bg-emerald-50 py-2">
+                  <p className="text-lg font-black text-emerald-700">{streamProgress.created}</p>
+                  <p className="text-[10px] font-bold uppercase text-emerald-600">Created</p>
+                </div>
+                <div className="rounded-lg bg-blue-50 py-2">
+                  <p className="text-lg font-black text-blue-700">{streamProgress.updated}</p>
+                  <p className="text-[10px] font-bold uppercase text-blue-600">Updated</p>
+                </div>
+                <div className="rounded-lg bg-amber-50 py-2">
+                  <p className="text-lg font-black text-amber-700">{streamProgress.skipped}</p>
+                  <p className="text-[10px] font-bold uppercase text-amber-600">Skipped</p>
                 </div>
               </div>
             )}
-            {seedResult.errors.length > 0 && (
-              <ul className="max-h-24 overflow-y-auto border-t px-4 py-2 text-xs text-red-600">
-                {seedResult.errors.map((line, i) => (
-                  <li key={i}>{line}</li>
+
+            {/* Live log scroll */}
+            {streamLog.length > 0 && (
+              <div
+                ref={logRef}
+                className="mt-3 max-h-32 overflow-y-auto rounded-xl bg-slate-900 p-3 font-mono text-[10px] text-slate-300"
+              >
+                {streamLog.map((line, i) => (
+                  <p key={i} className="leading-relaxed">{line}</p>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         )}
+
+        {/* Mass seed final result */}
+        {massSeedResult && !massSeeding && (
+          <SeedResultPanel result={massSeedResult} title="Hyper-Scale Ingestion Summary" />
+        )}
       </div>
 
+      {/* ── SEARCH ── */}
       <div className="flex items-center gap-2 rounded-2xl border bg-white p-3">
         <Search className="h-4 w-4 shrink-0 text-gray-400" />
         <input
@@ -355,6 +530,7 @@ export function AdminCatalogCommand() {
 
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
+      {/* ── CATALOG TABLE ── */}
       <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-white">
@@ -379,7 +555,7 @@ export function AdminCatalogCommand() {
             ) : items.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
-                  No templates — bulk import a CSV to begin
+                  No templates — run a seed engine or bulk import a CSV
                 </td>
               </tr>
             ) : (
@@ -494,9 +670,7 @@ export function AdminCatalogCommand() {
               >
                 <option value="">Select shop…</option>
                 {shops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
               <input
@@ -531,6 +705,67 @@ export function AdminCatalogCommand() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── SHARED SEED RESULT PANEL ──
+function SeedResultPanel({ result, title }: { result: SeedResult; title: string }) {
+  const SECTOR_COLORS: Record<string, string> = {
+    kirana: 'bg-amber-50 text-amber-700 ring-amber-100',
+    dairy: 'bg-sky-50 text-sky-700 ring-sky-100',
+    bakery: 'bg-rose-50 text-rose-700 ring-rose-100',
+    veggies: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    fish: 'bg-blue-50 text-blue-700 ring-blue-100',
+  }
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm shadow-sm">
+      <div className="border-b bg-slate-900 px-4 py-2.5 flex items-center justify-between">
+        <p className="text-xs font-black uppercase tracking-widest text-orange-400">{title}</p>
+        <span className="text-xs font-bold text-slate-400">{result.total} rows processed</span>
+      </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-4">
+        <div className="rounded-xl bg-emerald-50 px-3 py-3 text-center">
+          <p className="text-3xl font-black text-emerald-700">{result.created}</p>
+          <p className="text-[10px] font-bold uppercase text-emerald-600">Created</p>
+        </div>
+        <div className="rounded-xl bg-blue-50 px-3 py-3 text-center">
+          <p className="text-3xl font-black text-blue-700">{result.updated}</p>
+          <p className="text-[10px] font-bold uppercase text-blue-600">Updated</p>
+        </div>
+        <div className="rounded-xl bg-amber-50 px-3 py-3 text-center">
+          <p className="text-3xl font-black text-amber-700">{result.skipped}</p>
+          <p className="text-[10px] font-bold uppercase text-amber-600">Skipped</p>
+        </div>
+        <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
+          <p className="text-3xl font-black text-slate-800">{result.total}</p>
+          <p className="text-[10px] font-bold uppercase text-slate-500">Total</p>
+        </div>
+      </div>
+      {Object.keys(result.bySector).length > 0 && (
+        <div className="border-t px-4 py-3">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-400">By Sector</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(result.bySector).map(([sector, count]) => (
+              <span
+                key={sector}
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-bold capitalize ring-1',
+                  SECTOR_COLORS[sector] ?? 'bg-orange-50 text-orange-700 ring-orange-100',
+                )}
+              >
+                {sector}: {count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {result.errors.length > 0 && (
+        <ul className="max-h-24 overflow-y-auto border-t px-4 py-2 text-xs text-red-600">
+          {result.errors.map((line, i) => <li key={i}>{line}</li>)}
+        </ul>
       )}
     </div>
   )

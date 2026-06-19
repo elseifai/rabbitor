@@ -195,24 +195,66 @@ export async function addProductAction(input: {
       image = input.imageDataUrl
     }
 
+    const productName = input.name.trim()
+    const productCategory = input.category?.trim() || 'general'
+    const productUnit = input.unit?.trim() || 'piece'
+
+    // Cross-pollination: auto-promote custom product into MasterCatalog
+    let masterCatalogItemId: string | undefined
+    try {
+      const storeType = shop.storeType ?? 'KIRANA'
+      const sku = `GC-${storeType}-${productName.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)}`
+      const existing = await prisma.masterCatalogItem.findFirst({
+        where: {
+          OR: [
+            { sku },
+            { AND: [{ name: { equals: productName, mode: 'insensitive' } }, { storeType }] },
+          ],
+        },
+        select: { id: true },
+      })
+      if (existing) {
+        masterCatalogItemId = existing.id
+      } else {
+        const catalogEntry = await prisma.masterCatalogItem.create({
+          data: {
+            sku,
+            name: productName,
+            storeType,
+            category: productCategory,
+            basePrice: input.price,
+            defaultUnit: productUnit,
+            description: input.description?.trim() || null,
+            imageUrl: image ?? null,
+            itemType: 'VEG',
+            isActive: true,
+          },
+        })
+        masterCatalogItemId = catalogEntry.id
+      }
+    } catch {
+      // Cross-pollination is best-effort — don't fail the product add
+    }
+
     const product = await prisma.product.create({
       data: {
         shopId: input.shopId,
-        name: input.name.trim(),
+        name: productName,
         description: input.description?.trim() || null,
         price: input.price,
-        category: input.category?.trim() || 'general',
-        unit: input.unit?.trim() || 'piece',
+        category: productCategory,
+        unit: productUnit,
         stock: input.stock ?? 10,
         image,
         isAvailable: input.isAvailable ?? true,
+        ...(masterCatalogItemId && { masterCatalogItemId }),
       },
     })
 
     revalidatePath('/merchant')
     revalidatePath('/merchant/products')
     revalidatePath(`/shops/${shop.slug}`)
-    return { ok: true as const, productId: product.id }
+    return { ok: true as const, productId: product.id, promoted: !!masterCatalogItemId }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not add product'
     return { ok: false as const, error: message }
