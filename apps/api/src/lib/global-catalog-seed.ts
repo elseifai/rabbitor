@@ -1,5 +1,6 @@
 import type { CatalogItemType, StoreType } from "@rabbit/database";
 import { prisma } from "./prisma";
+import { resolveProductImage } from "./catalog-images";
 
 /** Merchant import template columns (merchant-import-template.csv). */
 export type MerchantCatalogSeedRow = {
@@ -66,18 +67,10 @@ const CATEGORY_HIERARCHY: Record<string, string> = {
   "personal-care": "Personal Care",
 };
 
-export function resolveImageUrl(imageFile: string): string | null {
+export function resolveImageUrl(imageFile: string, category = "general", sector = "kirana"): string | null {
   const trimmed = imageFile.trim();
   if (!trimmed) return null;
-  if (
-    trimmed.startsWith("http://") ||
-    trimmed.startsWith("https://") ||
-    trimmed.startsWith("/media/")
-  ) {
-    return trimmed;
-  }
-  const filename = trimmed.replace(/^catalog\//, "");
-  return `/media/catalog/${filename}`;
+  return resolveProductImage(trimmed, category, sector);
 }
 
 export function generateCatalogSku(name: string, sector: string): string {
@@ -120,7 +113,7 @@ export function mapSeedRowToMasterCatalog(row: MerchantCatalogSeedRow) {
     basePrice: row.price,
     defaultUnit: row.unit.trim() || "1 unit",
     description,
-    imageUrl: resolveImageUrl(row.imageFile),
+    imageUrl: resolveImageUrl(row.imageFile, category, row.sector),
     itemType: inferItemType(row),
   };
 }
