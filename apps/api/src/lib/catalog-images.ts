@@ -337,34 +337,64 @@ export const SECTOR_FALLBACK_IMAGES: Record<string, string> = {
 };
 
 /**
- * Resolve a product image URL with 3-level fallback:
- * 1. Per-product override map
- * 2. Category fallback
- * 3. Sector fallback
+ * Deterministic slug generator matching the product name.
+ * Produces dash-normalised filename key for PRODUCT_IMAGE_OVERRIDES lookup.
+ */
+export function productNameToImageSlug(productName: string): string {
+  return (
+    productName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") + ".jpg"
+  );
+}
+
+/**
+ * Resolve a product image URL with 4-level fallback:
+ * 1. Already-a-URL pass-through
+ * 2. Exact filename key in PRODUCT_IMAGE_OVERRIDES (dash & underscore normalised)
+ * 3. Category fallback
+ * 4. Sector fallback
  */
 export function resolveProductImage(
   imageFile: string,
   category: string,
   sector: string,
+  productName?: string,
 ): string {
   const trimmed = imageFile.trim();
 
-  // Already a full URL — pass through
+  // Pass-through full URLs unchanged
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
   }
 
-  // Per-product override
-  const filename = trimmed.replace(/^catalog\//, "");
-  if (PRODUCT_IMAGE_OVERRIDES[filename]) {
-    return PRODUCT_IMAGE_OVERRIDES[filename];
+  // Normalise to dash-based slug for lookup (handles both _ and - separators)
+  const raw = trimmed.replace(/^catalog\//, "").replace(/\.jpg$/i, "");
+  const dashSlug = raw
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    + ".jpg";
+
+  if (PRODUCT_IMAGE_OVERRIDES[dashSlug]) return PRODUCT_IMAGE_OVERRIDES[dashSlug];
+
+  // Try deterministic name-based slug if a product name was supplied
+  if (productName) {
+    const nameSlug = productNameToImageSlug(productName);
+    if (PRODUCT_IMAGE_OVERRIDES[nameSlug]) return PRODUCT_IMAGE_OVERRIDES[nameSlug];
+
+    // Try first-word prefix match (e.g. "maggi" matches "maggi-atta")
+    const firstWord = nameSlug.split("-")[0];
+    for (const [key, url] of Object.entries(PRODUCT_IMAGE_OVERRIDES)) {
+      if (key.startsWith(firstWord + "-") || key === firstWord + ".jpg") return url;
+    }
   }
 
   // Category fallback
   const cat = category.trim().toLowerCase();
-  if (CATEGORY_FALLBACK_IMAGES[cat]) {
-    return CATEGORY_FALLBACK_IMAGES[cat];
-  }
+  if (CATEGORY_FALLBACK_IMAGES[cat]) return CATEGORY_FALLBACK_IMAGES[cat];
 
   // Sector fallback
   const sec = sector.trim().toLowerCase();

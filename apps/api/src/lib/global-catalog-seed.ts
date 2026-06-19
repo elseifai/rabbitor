@@ -67,10 +67,18 @@ const CATEGORY_HIERARCHY: Record<string, string> = {
   "personal-care": "Personal Care",
 };
 
-export function resolveImageUrl(imageFile: string, category = "general", sector = "kirana"): string | null {
+export function resolveImageUrl(
+  imageFile: string,
+  category = "general",
+  sector = "kirana",
+  productName?: string,
+): string | null {
   const trimmed = imageFile.trim();
-  if (!trimmed) return null;
-  return resolveProductImage(trimmed, category, sector);
+  if (!trimmed && !productName) return null;
+  // Use name-derived slug as imageFile when none supplied
+  const effectiveFile = trimmed || (productName ? productName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".jpg" : "");
+  if (!effectiveFile) return null;
+  return resolveProductImage(effectiveFile, category, sector, productName);
 }
 
 export function generateCatalogSku(name: string, sector: string): string {
@@ -113,7 +121,7 @@ export function mapSeedRowToMasterCatalog(row: MerchantCatalogSeedRow) {
     basePrice: row.price,
     defaultUnit: row.unit.trim() || "1 unit",
     description,
-    imageUrl: resolveImageUrl(row.imageFile, category, row.sector),
+    imageUrl: resolveImageUrl(row.imageFile, category, row.sector, row.name),
     itemType: inferItemType(row),
   };
 }

@@ -118,6 +118,11 @@ export async function addProductFromCatalogAction(input: {
         return { ok: false as const, error: 'Master catalog template not found' }
       }
 
+      // Inherit the verified catalog imageUrl when the merchant didn't override it
+      if (!productPayload.image && catalogItem.imageUrl) {
+        productPayload.image = catalogItem.imageUrl
+      }
+
       const existing = await prisma.product.findFirst({
         where: { shopId: input.shopId, masterCatalogItemId },
       })

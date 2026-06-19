@@ -5,7 +5,10 @@ import { useDropzone } from 'react-dropzone'
 import {
   Activity,
   BarChart3,
+  CheckCircle2,
   Edit3,
+  Eye,
+  ImageIcon,
   Loader2,
   Package,
   Plus,
@@ -14,6 +17,7 @@ import {
   Store,
   TrendingUp,
   UploadCloud,
+  X,
   Zap,
 } from 'lucide-react'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -122,6 +126,49 @@ export function AdminCatalogCommand() {
   })
   const [binding, setBinding] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+
+  // ── Image Audit Mode ──────────────────────────────────────────────────────
+  const [auditMode, setAuditMode] = useState(false)
+  const [swapItem, setSwapItem] = useState<CatalogItem | null>(null)
+  const [swapUrlInput, setSwapUrlInput] = useState('')
+  const [swapLoading, setSwapLoading] = useState(false)
+  const [swapError, setSwapError] = useState<string | null>(null)
+  const [swapSuccess, setSwapSuccess] = useState<string | null>(null)
+
+  const handleImageSwap = useCallback(
+    async (itemId: string, file?: File, url?: string) => {
+      setSwapLoading(true)
+      setSwapError(null)
+      setSwapSuccess(null)
+      try {
+        let res: Response
+        if (file) {
+          const form = new FormData()
+          form.append('file', file)
+          res = await fetch(`/api/admin/catalog/${itemId}/image`, { method: 'POST', body: form })
+        } else if (url) {
+          res = await fetch(`/api/admin/catalog/${itemId}/image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl: url }),
+          })
+        } else {
+          throw new Error('Provide a file or URL')
+        }
+        const json = await res.json()
+        if (!json.success) throw new Error(json.error ?? 'Swap failed')
+        setSwapSuccess(`Image updated · propagated to ${json.data.propagatedToProducts} store products`)
+        setSwapItem(null)
+        setSwapUrlInput('')
+        void load()
+      } catch (e) {
+        setSwapError(e instanceof Error ? e.message : 'Swap failed')
+      } finally {
+        setSwapLoading(false)
+      }
+    },
+    [load],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -517,18 +564,102 @@ export function AdminCatalogCommand() {
         )}
       </div>
 
-      {/* ── SEARCH ── */}
-      <div className="flex items-center gap-2 rounded-2xl border bg-white p-3">
-        <Search className="h-4 w-4 shrink-0 text-gray-400" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search SKU, name, category…"
-          className="flex-1 bg-transparent text-sm outline-none"
-        />
+      {/* ── SEARCH + MODE TOGGLE ── */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-2xl border bg-white p-3">
+          <Search className="h-4 w-4 shrink-0 text-gray-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search SKU, name, category…"
+            className="flex-1 bg-transparent text-sm outline-none"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => { setAuditMode((v) => !v); setSwapSuccess(null) }}
+          className={cn(
+            'flex shrink-0 items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition',
+            auditMode
+              ? 'border-violet-300 bg-violet-600 text-white shadow-md'
+              : 'border-gray-200 bg-white text-gray-700 hover:border-violet-300 hover:text-violet-700',
+          )}
+        >
+          {auditMode ? <Eye className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+          {auditMode ? 'Exit Audit' : 'Image Audit'}
+        </button>
       </div>
 
       {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      {swapSuccess && (
+        <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {swapSuccess}
+        </p>
+      )}
+
+      {/* ── IMAGE AUDIT GRID ── */}
+      {auditMode && (
+        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-gray-900">Image Audit Mode</h3>
+              <p className="text-xs text-gray-500">
+                {items.filter((i) => !i.imageUrl).length} missing · {items.filter((i) => i.imageUrl).length} have images
+              </p>
+            </div>
+            <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700 ring-1 ring-violet-200">
+              {items.length} items
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className={cn(
+                  'group relative overflow-hidden rounded-xl border bg-white shadow-sm transition hover:shadow-md',
+                  !item.imageUrl && 'border-red-200 ring-1 ring-red-200',
+                )}
+              >
+                <div className="relative aspect-square w-full overflow-hidden bg-gray-50">
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const el = e.currentTarget as HTMLImageElement
+                        el.style.display = 'none'
+                        el.nextElementSibling?.classList.remove('hidden')
+                      }}
+                    />
+                  ) : null}
+                  <div className={cn('flex h-full w-full flex-col items-center justify-center gap-1', item.imageUrl && 'hidden')}>
+                    <Package className="h-8 w-8 text-red-300" />
+                    <p className="text-[9px] font-bold text-red-400">NO IMAGE</p>
+                  </div>
+                  {/* Swap overlay on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => { setSwapItem(item); setSwapUrlInput(''); setSwapError(null); setSwapSuccess(null) }}
+                      className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-black text-gray-900 shadow-lg hover:bg-violet-50"
+                    >
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      Swap Image
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2">
+                  <p className="truncate text-[10px] font-bold leading-tight text-gray-800">{item.name}</p>
+                  <p className="mt-0.5 truncate text-[9px] capitalize text-gray-400">{item.category}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── CATALOG TABLE ── */}
       <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
@@ -657,6 +788,20 @@ export function AdminCatalogCommand() {
         onSaved={() => void load()}
       />
 
+      {/* ── SWAP IMAGE MODAL ── */}
+      {swapItem && (
+        <SwapImageModal
+          item={swapItem}
+          urlInput={swapUrlInput}
+          onUrlChange={setSwapUrlInput}
+          loading={swapLoading}
+          error={swapError}
+          onClose={() => { setSwapItem(null); setSwapError(null) }}
+          onSwapFile={(file) => void handleImageSwap(swapItem.id, file)}
+          onSwapUrl={() => void handleImageSwap(swapItem.id, undefined, swapUrlInput)}
+        />
+      )}
+
       {bindItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
@@ -767,6 +912,152 @@ function SeedResultPanel({ result, title }: { result: SeedResult; title: string 
           {result.errors.map((line, i) => <li key={i}>{line}</li>)}
         </ul>
       )}
+    </div>
+  )
+}
+
+// ── SWAP IMAGE MODAL ──────────────────────────────────────────────────────────
+function SwapImageModal({
+  item,
+  urlInput,
+  onUrlChange,
+  loading,
+  error,
+  onClose,
+  onSwapFile,
+  onSwapUrl,
+}: {
+  item: { id: string; name: string; imageUrl: string | null }
+  urlInput: string
+  onUrlChange: (v: string) => void
+  loading: boolean
+  error: string | null
+  onClose: () => void
+  onSwapFile: (file: File) => void
+  onSwapUrl: () => void
+}) {
+  const [preview, setPreview] = useState<string | null>(null)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.gif'] },
+    maxFiles: 1,
+    maxSize: 2_000_000,
+    disabled: loading,
+    onDrop: (files) => {
+      const f = files[0]
+      if (!f) return
+      setPendingFile(f)
+      setPreview(URL.createObjectURL(f))
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <div>
+            <h3 className="font-black text-gray-900">Swap Product Image</h3>
+            <p className="max-w-[280px] truncate text-xs text-gray-500">{item.name}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          {/* Current vs new preview */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Current</p>
+              <div className="aspect-square overflow-hidden rounded-xl border bg-gray-50">
+                {item.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <Package className="h-10 w-10 text-gray-300" />
+                  </div>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-gray-400">New Preview</p>
+              <div className="aspect-square overflow-hidden rounded-xl border bg-gray-50">
+                {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={preview} alt="" className="h-full w-full object-cover" />
+                ) : urlInput.startsWith('http') ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={urlInput} alt="" className="h-full w-full object-cover" onError={() => {}} />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-1">
+                    <ImageIcon className="h-8 w-8 text-gray-200" />
+                    <p className="text-[9px] text-gray-300">Drop or paste URL</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Drag-drop zone */}
+          <div
+            {...getRootProps()}
+            className={cn(
+              'cursor-pointer rounded-xl border-2 border-dashed px-4 py-5 text-center transition',
+              isDragActive
+                ? 'border-violet-400 bg-violet-50'
+                : 'border-gray-200 hover:border-violet-300 hover:bg-violet-50/40',
+            )}
+          >
+            <input {...getInputProps()} />
+            <UploadCloud className="mx-auto mb-1.5 h-6 w-6 text-gray-400" />
+            <p className="text-sm font-semibold text-gray-600">
+              {isDragActive ? 'Drop image here' : 'Drag & drop an image'}
+            </p>
+            <p className="text-xs text-gray-400">JPG, PNG, WebP — max 2 MB</p>
+          </div>
+
+          {pendingFile && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => onSwapFile(pendingFile)}
+              className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-black text-white disabled:opacity-60"
+            >
+              {loading ? 'Uploading…' : `Upload "${pendingFile.name}"`}
+            </button>
+          )}
+
+          {/* — OR — URL input */}
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-gray-200" />
+            <span className="text-xs font-bold text-gray-400">OR paste URL</span>
+            <div className="h-px flex-1 bg-gray-200" />
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={urlInput}
+              onChange={(e) => onUrlChange(e.target.value)}
+              placeholder="https://images.unsplash.com/…"
+              className="flex-1 rounded-xl border px-3 py-2 text-sm focus:border-violet-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={loading || !urlInput.startsWith('http')}
+              onClick={onSwapUrl}
+              className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Apply'}
+            </button>
+          </div>
+
+          {error && (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
