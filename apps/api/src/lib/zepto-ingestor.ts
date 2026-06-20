@@ -66,7 +66,9 @@ export type IngestionOptions = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_IMAGE_DIR = "/var/lib/docker/volumes/rabbitor_media/_data/catalog";
+// Shared uploads volume: mounted at this path in both api and web containers.
+// Web serves these files at /media/catalog/<slug>.jpg as static assets.
+const DEFAULT_IMAGE_DIR = "/app/apps/web/public/media/catalog";
 
 const SECTOR_TO_STORE: Record<ZeptoSector, StoreType> = {
   kirana: "KIRANA",
