@@ -1,6 +1,6 @@
 import type { CatalogItemType, StoreType } from "@rabbit/database";
 import { prisma } from "./prisma";
-import { resolveProductImage } from "./catalog-images";
+import { resolveProductImage, getProductAssetPath } from "./catalog-images";
 
 /** Merchant import template columns (merchant-import-template.csv). */
 export type MerchantCatalogSeedRow = {
@@ -73,12 +73,16 @@ export function resolveImageUrl(
   sector = "kirana",
   productName?: string,
 ): string | null {
+  // If a product name is available, use the deterministic /media/catalog/ path.
+  // The web proxy will auto-resolve this to the correct CDN image via keyword matching,
+  // giving each product its own stable, subcategory-specific URL.
+  if (productName) {
+    return getProductAssetPath(productName, category);
+  }
+
   const trimmed = imageFile.trim();
-  if (!trimmed && !productName) return null;
-  // Use name-derived slug as imageFile when none supplied
-  const effectiveFile = trimmed || (productName ? productName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".jpg" : "");
-  if (!effectiveFile) return null;
-  return resolveProductImage(effectiveFile, category, sector, productName);
+  if (!trimmed) return null;
+  return resolveProductImage(trimmed, category, sector, productName);
 }
 
 export function generateCatalogSku(name: string, sector: string): string {

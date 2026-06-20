@@ -350,6 +350,30 @@ export function productNameToImageSlug(productName: string): string {
 }
 
 /**
+ * Brand/variant-aware deterministic catalog asset path generator.
+ * Returns a `/media/catalog/{snake_slug}.jpg` URL.
+ * The web media proxy resolves this to the correct Unsplash CDN image
+ * when no local file exists, guaranteeing a correct subcategory image
+ * rather than a generic cross-category fallback.
+ *
+ * Examples:
+ *   "Priya Refined Sunflower Oil"  → /media/catalog/priya_refined_sunflower_oil.jpg
+ *   "Raw Prawns"                   → /media/catalog/raw_prawns.jpg
+ *   "Head & Shoulders 90 mL"       → /media/catalog/head_and_shoulders_90_ml.jpg
+ */
+export function getProductAssetPath(name: string, _category?: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[()[\]{}'"]/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .replace(/_+/g, "_")
+    .slice(0, 80);
+  return `/media/catalog/${slug}.jpg`;
+}
+
+/**
  * Resolve a product image URL with 4-level fallback:
  * 1. Already-a-URL pass-through
  * 2. Exact filename key in PRODUCT_IMAGE_OVERRIDES (dash & underscore normalised)

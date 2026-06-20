@@ -6,6 +6,7 @@ import { requireSession } from '@/lib/auth'
 import { mintApiAccessToken } from '@/lib/api-jwt'
 import { syncAdsWithStoreStatus } from '@/lib/ad-store-sync'
 import { parseMasterCatalogItemId } from '@/lib/catalog-baseline-stock'
+import { getProductAssetPath } from '@/lib/catalog-asset-path'
 
 function resolveStoredImage(url?: string | null): string | undefined {
   if (!url) return undefined
@@ -221,6 +222,9 @@ export async function addProductAction(input: {
       if (existing) {
         masterCatalogItemId = existing.id
       } else {
+        // Use deterministic asset path so the new catalog entry always gets
+        // a subcategory-correct image via the media proxy, never a generic fallback.
+        const catalogImageUrl = image ?? getProductAssetPath(productName, productCategory)
         const catalogEntry = await prisma.masterCatalogItem.create({
           data: {
             sku,
@@ -230,7 +234,7 @@ export async function addProductAction(input: {
             basePrice: input.price,
             defaultUnit: productUnit,
             description: input.description?.trim() || null,
-            imageUrl: image ?? null,
+            imageUrl: catalogImageUrl,
             itemType: 'VEG',
             isActive: true,
           },
