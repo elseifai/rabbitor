@@ -411,17 +411,17 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
   {
     sector: "kirana", name: "Tata Salt", category: "staples",
     basePrice: 28, defaultUnit: "1kg", description: "Iodised vacuum evaporated salt. Superior purity over 99.9%. Helps prevent iodine deficiency. India's most trusted salt brand.",
-    imageSourceUrl: U("1518110925495-5fe2fda0442a"),
+    imageSourceUrl: U("1547592166-23ac45744acd"),
   },
   {
     sector: "kirana", name: "Catch Super Fine Iodized Salt", category: "staples",
     basePrice: 22, defaultUnit: "1kg", description: "Fine iodised table salt with free-flow agent. Uniform crystal size. Ideal for cooking and table use.",
-    imageSourceUrl: U("1518110925495-5fe2fda0442a"),
+    imageSourceUrl: U("1547592166-23ac45744acd"),
   },
   {
     sector: "kirana", name: "Uttam Sugar Premium Refined", category: "staples",
     basePrice: 55, defaultUnit: "1kg", description: "Premium double-refined sugar from sugarcane. Brilliant white crystals. Ideal for sweets, beverages, and baking.",
-    imageSourceUrl: U("1518977676253-16739175f3b1"),
+    imageSourceUrl: U("1546094096-0df4bcaaa337"),
   },
 
   // Oils — Fortune, Dhara, Priya, Saffola
@@ -544,7 +544,7 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
   {
     sector: "kirana", name: "Catch Turmeric Powder", category: "spices",
     basePrice: 58, defaultUnit: "100g", description: "Pure haldi turmeric powder. 3–5% curcumin content. No artificial colour added. Essential Indian spice for colour and health.",
-    imageSourceUrl: U("1615485290382-441e4aa8a561"),
+    imageSourceUrl: U("1576045057995-568f588f82fb"),
   },
 
   // Condiments
@@ -563,12 +563,12 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
   {
     sector: "kirana", name: "Saffola Classic Oats", category: "staples",
     basePrice: 205, defaultUnit: "1kg", description: "100% natural whole-grain rolled oats. High in beta-glucan soluble fibre. Clinically tested to help reduce cholesterol.",
-    imageSourceUrl: U("1593491034932-844af9e27e3c"),
+    imageSourceUrl: U("1589301760014-d929f3979dbc"),
   },
   {
     sector: "kirana", name: "Quaker Oats", category: "staples",
     basePrice: 225, defaultUnit: "1kg", description: "Classic rolled oats from Quaker. 100% whole grain, no artificial flavours. Ready in 2 minutes. Good source of iron.",
-    imageSourceUrl: U("1593491034932-844af9e27e3c"),
+    imageSourceUrl: U("1589301760014-d929f3979dbc"),
   },
 
   // Biscuits
@@ -659,17 +659,17 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
   {
     sector: "kirana", name: "Coca-Cola Original 500ml", category: "beverages",
     basePrice: 40, defaultUnit: "500ml", description: "The original sparkling cola beverage. Crisp, refreshing taste with signature caramel notes. Best served ice-cold.",
-    imageSourceUrl: U("1554866585-74e9f24d7b6b"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
   {
     sector: "kirana", name: "Thums Up Strong Taste Cola", category: "beverages",
     basePrice: 40, defaultUnit: "500ml", description: "India's favourite strong cola with bold, punchy taste. Higher carbonation than other colas. Over 45 years of heritage.",
-    imageSourceUrl: U("1554866585-74e9f24d7b6b"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
   {
     sector: "kirana", name: "Red Bull Energy Drink", category: "beverages",
     basePrice: 130, defaultUnit: "250ml", description: "Original energy drink with 80mg caffeine, B-vitamins, and taurine. Vitalises body and mind. Trusted by athletes and professionals.",
-    imageSourceUrl: U("1554866585-74e9f24d7b6b"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
 
   // Health drinks
@@ -738,13 +738,13 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "dairy", name: "Amul Malai Paneer Block", category: "cheese",
     basePrice: 105, defaultUnit: "200g", itemType: "SHORT_SHELF",
     description: "Soft, crumbly malai paneer from full-cream milk. High protein and calcium content. Ideal for paneer tikka, kadai paneer, and matar paneer.",
-    imageSourceUrl: U("1631452180539-5c6374638b07"),
+    imageSourceUrl: U("1589301760014-d929f3979dbc"),
   },
   {
     sector: "dairy", name: "Amul Cheese Slices", category: "cheese",
     basePrice: 138, defaultUnit: "200g",
     description: "Ready-to-use processed cheese slices. Uniform size for burgers and sandwiches. Made from pasteurised cow's milk. Melts evenly.",
-    imageSourceUrl: U("1452195100486-0248474dffd9"),
+    imageSourceUrl: U("1589985270826-4b7bb135bc9d"),
   },
   {
     sector: "dairy", name: "Farm Fresh White Eggs", category: "eggs",
@@ -768,7 +768,7 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "dairy", name: "Yakult Probiotic Fermented Drink", category: "beverages",
     basePrice: 78, defaultUnit: "5×65ml", itemType: "SHORT_SHELF",
     description: "Each bottle contains 6.5 billion LcS probiotic bacteria. Scientifically proven to improve digestion and boost immunity. Low calorie.",
-    imageSourceUrl: U("1560717789-0ac749f5805f"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -826,7 +826,7 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "bakery", name: "Butter Croissant Fresh-Baked", category: "pastry",
     basePrice: 68, defaultUnit: "1 pc", itemType: "SHORT_SHELF",
     description: "Classic laminated butter croissant. 72-hour cold-proofing process for maximum flakiness. Buttery, light layers with a crispy golden crust.",
-    imageSourceUrl: U("1509722747041-616f39b57264"),
+    imageSourceUrl: U("1578985545062-bc5f6f90ded8"),
   },
   {
     sector: "bakery", name: "Assorted Glazed Donuts Box", category: "pastry",
@@ -860,25 +860,25 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "veggies", name: "Nasik Red Onion", category: "vegetables",
     basePrice: 38, defaultUnit: "1kg", itemType: "SHORT_SHELF",
     description: "Premium Nasik red onions. Mild, slightly sweet flavour. High sulphur content makes them ideal for long-cooked curries and biryani.",
-    imageSourceUrl: U("1620574387457-ae588e6f8f37"),
+    imageSourceUrl: U("1546094096-0df4bcaaa337"),
   },
   {
     sector: "veggies", name: "Washed Table Potato", category: "vegetables",
     basePrice: 32, defaultUnit: "1kg", itemType: "SHORT_SHELF",
     description: "Clean, pre-washed table potatoes. Medium size, uniform shape. Low moisture, floury texture. Ideal for aloo sabzi, paratha, and frying.",
-    imageSourceUrl: U("1518977676253-16739175f3b1"),
+    imageSourceUrl: U("1546094096-0df4bcaaa337"),
   },
   {
     sector: "veggies", name: "Fresh Ginger Root", category: "vegetables",
     basePrice: 82, defaultUnit: "250g", itemType: "SHORT_SHELF",
     description: "Fresh aromatic ginger root. High gingerol content for bold flavour. Immunity-boosting and digestive properties. Kitchen essential.",
-    imageSourceUrl: U("1615485290382-441e4aa8a561"),
+    imageSourceUrl: U("1576045057995-568f588f82fb"),
   },
   {
     sector: "veggies", name: "Garlic Bulb Loose", category: "vegetables",
     basePrice: 52, defaultUnit: "250g", itemType: "SHORT_SHELF",
     description: "Fresh garlic bulbs. High allicin concentration. Firm, plump cloves that peel easily. Essential for tadka, marinades, and sauces.",
-    imageSourceUrl: U("1615485290382-441e4aa8a561"),
+    imageSourceUrl: U("1576045057995-568f588f82fb"),
   },
   {
     sector: "veggies", name: "Fresh Spinach Palak Bunch", category: "leafy",
@@ -926,7 +926,7 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "veggies", name: "Ratnagiri Alphonso Mango", category: "fruits",
     basePrice: 680, defaultUnit: "1 dozen", itemType: "SHORT_SHELF",
     description: "Seasonal premium Alphonso mangoes from Ratnagiri GI-tagged farms. Saffron-yellow pulp, zero fibre, intensely sweet. The king of mangoes.",
-    imageSourceUrl: U("1590166477-1ca6b36dc4c4"),
+    imageSourceUrl: U("1528825871115-3581a5387919"),
   },
   {
     sector: "veggies", name: "Seedless Lemon Nimbu", category: "fruits",
@@ -938,7 +938,7 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "veggies", name: "Pomegranate Anar", category: "fruits",
     basePrice: 125, defaultUnit: "1kg", itemType: "SHORT_SHELF",
     description: "Ruby-red pomegranate arils packed with antioxidants. Solapur variety — sweet with a slight tartness. Excellent for juices and salads.",
-    imageSourceUrl: U("1546548260-9b8e8c4a9a4e"),
+    imageSourceUrl: U("1528825871115-3581a5387919"),
   },
   {
     sector: "veggies", name: "Green Peas Matar Shelled", category: "vegetables",
@@ -954,73 +954,73 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "fish", name: "Surmai Kingfish Steaks", category: "premium",
     basePrice: 660, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Freshly cut king mackerel steaks. Wild-caught from West Coast waters. Rich Omega-3 fatty acids. Ideal for Goan curry, pan-fry, and tandoor.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Silver Pomfret Whole Cleaned", category: "premium",
     basePrice: 590, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Whole silver pomfret, descaled and gutted. White, delicate flesh with mild flavour. Premium Mumbai catch. Perfect for Parsi patra ni machhi.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Rawas Indian Salmon Fillet", category: "premium",
     basePrice: 530, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Fillet portions of Indian Salmon (rawas). Firm white flesh, rich in DHA. No bones. Excellent for grilling, baking, and tikka.",
-    imageSourceUrl: U("1519708227418-a2f80e0a4e4c"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
   {
     sector: "fish", name: "Norwegian Salmon Fillet Imported", category: "imported",
     basePrice: 735, defaultUnit: "250g", itemType: "NON_VEG",
     description: "Cold-water Atlantic salmon fillet from Norwegian farms. Marbled with natural omega-3 rich fat. Vacuum-packed for freshness. Serve sashimi or pan-sear.",
-    imageSourceUrl: U("1519708227418-a2f80e0a4e4c"),
+    imageSourceUrl: U("1600271886742-f049cd451bba"),
   },
   {
     sector: "fish", name: "Jumbo Deveined Prawns Cleaned", category: "shellfish",
     basePrice: 490, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Large prawns, head-off, deveined, tail-on. Ready to marinate and cook. Sweet, firm flesh. Ideal for prawn masala, biryani, and stir-fry.",
-    imageSourceUrl: U("1565680018580-0e3f82acf66c"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Tiger Prawns Large", category: "shellfish",
     basePrice: 690, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Premium jumbo tiger prawns. Shell-on, fresh catch. Naturally sweet flavour. Best for butter garlic prawns, prawn curry, or BBQ.",
-    imageSourceUrl: U("1565680018580-0e3f82acf66c"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Cleaned Raw Prawns Medium", category: "shellfish",
     basePrice: 380, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Medium prawns, head-off, shell-on, deveined. Quick-frozen at peak freshness. Versatile for curry, pasta, fried rice, and noodles.",
-    imageSourceUrl: U("1565680018580-0e3f82acf66c"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Bangda Mackerel Whole Cleaned", category: "local",
     basePrice: 225, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Whole cleaned mackerel. Oily, intensely flavoured fish rich in Omega-3. Popular for Goan recheado, fried mackerel, and coastal curries.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Rohu Carp Curry Cut", category: "freshwater",
     basePrice: 328, defaultUnit: "1kg", itemType: "NON_VEG",
     description: "Freshwater rohu carp, cut into thick curry pieces with head. Essential for Bengali doi maach and Uttar Pradesh fish curry.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Hilsa Ilish Steaks", category: "premium",
     basePrice: 900, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Prized seasonal hilsa (ilish) steaks. Exceptionally rich and flavourful with high fat marbling. The undisputed king of Bengali cuisine.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Sun-Dried Bombil Bombay Duck", category: "dried",
     basePrice: 185, defaultUnit: "250g", itemType: "NON_VEG",
     description: "Traditional sun-dried Bombay duck (Bombil). Fermented, pungent, intensely savoury. Classic Maharashtrian and Parsi accompaniment.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "fish", name: "Katla Fish Steaks Bengali Style", category: "freshwater",
     basePrice: 345, defaultUnit: "1kg", itemType: "NON_VEG",
     description: "Thick katla fish steaks. Firm white flesh with fine bones. Essential for Bengali macher jhol, fish curry, and doi katla.",
-    imageSourceUrl: U("1559494639-2ff50a93cc75"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1030,61 +1030,61 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "meat", name: "Fresh Chicken Breast Boneless", category: "chicken",
     basePrice: 265, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Boneless, skinless chicken breast fillet. High protein (31g/100g), low fat. Sourced from antibiotic-free farms. Ideal for grilling and stir-fries.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Chicken Curry Cut", category: "chicken",
     basePrice: 195, defaultUnit: "1kg", itemType: "NON_VEG",
     description: "Standard curry-cut chicken pieces with bone. Mix of breast, leg, and thigh portions. Fresh, never frozen. Perfect for Indian chicken curries.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Boneless Chicken Thigh Fillet", category: "chicken",
     basePrice: 245, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Succulent boneless chicken thigh fillets. More flavourful than breast due to higher fat marbling. Excellent for kebabs, tikka, and biryani.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Chicken Keema Mince", category: "chicken",
     basePrice: 228, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Freshly minced chicken. Medium-coarse grind. Ideal for keema curry, stuffed parathas, kheema pav, and pasta bolognese.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Mutton Curry Cut Bone-In", category: "mutton",
     basePrice: 680, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Fresh goat mutton curry cut with bone. Mixed leg and shoulder pieces. Sourced from local farms. Rich, gamey flavour for slow-cooked curries.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Mutton Keema Mince", category: "mutton",
     basePrice: 650, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Coarsely minced goat mutton. High fat-to-lean ratio for flavourful cooking. Ideal for Hyderabadi keema, shammi kebabs, and stuffed breads.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Mutton Leg Biryani Cut", category: "mutton",
     basePrice: 720, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Large bone-in mutton leg pieces for biryani. Slow-cooks beautifully in dum cooking. Tender, flavourful meat that falls off the bone.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Fresh Chicken Wings", category: "chicken",
     basePrice: 180, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Whole chicken wings, skin-on. Juicy with a thin fat layer for crispiness when fried. Perfect for buffalo wings, tandoor, and spicy BBQ.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Chicken Drumsticks", category: "chicken",
     basePrice: 210, defaultUnit: "500g", itemType: "NON_VEG",
     description: "Bone-in chicken drumsticks. More flavourful than breast. Great for pressure-cooking curries, baking, and one-pot meals.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
   {
     sector: "meat", name: "Lamb Seekh Kebab Ready-to-Cook", category: "mutton",
     basePrice: 395, defaultUnit: "4 pcs", itemType: "NON_VEG",
     description: "Marinated minced lamb seekh kebabs on skewers. Spiced with garam masala, green chilli, and mint. Grill or pan-fry in 10 minutes.",
-    imageSourceUrl: U("1604503468766-0ae4d4d4a08e"),
+    imageSourceUrl: U("1601050690597-df0568f70950"),
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1096,25 +1096,25 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "personal_care", name: "Head & Shoulders Anti-Dandruff Shampoo", category: "personal-care",
     basePrice: 198, defaultUnit: "340ml",
     description: "Clinically proven anti-dandruff formula with Pyrithione Zinc. Controls flaking, itching, and scalp irritation. Leaves hair clean and odour-free.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Pantene Pro-V Total Damage Care Shampoo", category: "personal-care",
     basePrice: 190, defaultUnit: "340ml",
     description: "Repairs 10 signs of hair damage in one wash. Pro-Vitamin formula with fortifying lipids. Leaves hair noticeably stronger and smoother.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Dove Intense Repair Shampoo", category: "personal-care",
     basePrice: 198, defaultUnit: "340ml",
     description: "Nourishing shampoo with Keratin Tri-Silk Serum. Penetrates each hair fibre to repair damage from within. Leaves hair visibly silkier.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Clinic Plus Strength & Shine Shampoo", category: "personal-care",
     basePrice: 98, defaultUnit: "340ml",
     description: "Milk protein enriched shampoo. Strengthens brittle hair from root to tip. Economical, everyday family shampoo used across India.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
 
   // Soaps
@@ -1122,25 +1122,25 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "personal_care", name: "Dettol Original Soap Bar", category: "soaps",
     basePrice: 36, defaultUnit: "75g",
     description: "Germ-protecting antibacterial soap bar. Contains active ingredient PCMX (chloroxylenol). Kills 99.9% of germs. Trusted by doctors worldwide.",
-    imageSourceUrl: U("1607006343-56a2da10f16e"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Dove Cream Beauty Bar", category: "soaps",
     basePrice: 58, defaultUnit: "100g",
     description: "World's #1 cleansing bar with 1/4 moisturising cream. Doesn't strip skin's natural moisture like regular soap. Dermatologist-tested.",
-    imageSourceUrl: U("1607006343-56a2da10f16e"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Lifebuoy Total Germ Protection Soap", category: "soaps",
     basePrice: 38, defaultUnit: "100g",
     description: "Strong antibacterial soap with Activ Silver formula. Kills 99.9% of germs including H1N1 influenza virus. Strong health protection.",
-    imageSourceUrl: U("1607006343-56a2da10f16e"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Pears Pure Gentle Soap", category: "soaps",
     basePrice: 42, defaultUnit: "75g",
     description: "The original transparent glycerin soap. Made with 98% pure glycerin. Dermatologically tested, mild enough for daily use. Classic fragrance since 1789.",
-    imageSourceUrl: U("1607006343-56a2da10f16e"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
 
   // Toothpaste & Oral Care
@@ -1174,25 +1174,25 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "personal_care", name: "Surf Excel Easy Wash Powder", category: "detergent",
     basePrice: 105, defaultUnit: "1kg",
     description: "Advanced detergent powder removes 8 tough stains in one wash. Works effectively in cold water. Suitable for hand and semi-automatic washing.",
-    imageSourceUrl: U("1585771724684-38c0f8b9f6b8"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Surf Excel Matic Liquid Detergent", category: "detergent",
     basePrice: 220, defaultUnit: "1L",
     description: "Top-load liquid detergent for fully automatic machines. Specially formulated to work in low-water wash cycles. Prevents colour fade.",
-    imageSourceUrl: U("1585771724684-38c0f8b9f6b8"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Ariel Complete Detergent Powder", category: "detergent",
     basePrice: 115, defaultUnit: "1kg",
     description: "P&G's Ariel with stain-lift technology. Removes 30 types of stains including oil, mud, and grass. Fast-dissolving powder formula.",
-    imageSourceUrl: U("1585771724684-38c0f8b9f6b8"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Harpic Power Plus Toilet Cleaner", category: "household",
     basePrice: 102, defaultUnit: "500ml",
     description: "Maximum strength toilet bowl cleaner. Thick formula sticks to bowl for deep clean. Kills 99.9% of germs. Removes tough limescale stains.",
-    imageSourceUrl: U("1585771724684-38c0f8b9f6b8"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
 
   // Hygiene — Whisper, Gillette
@@ -1200,25 +1200,25 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "personal_care", name: "Whisper Ultra Soft Sanitary Pads", category: "hygiene",
     basePrice: 188, defaultUnit: "30 pcs",
     description: "Ultra-thin pads with 5D Soft Cover. Cottony soft top layer, 100% leak-proof sides. Dermatologically tested for sensitive skin.",
-    imageSourceUrl: U("1584308666744-1baaacef9521"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Stayfree Secure Dry Pads", category: "hygiene",
     basePrice: 168, defaultUnit: "28 pcs",
     description: "Secure dry-weave sanitary pads. Dual-wing design stays in place. Super-absorbent core with anti-leak channels. Trusted choice.",
-    imageSourceUrl: U("1584308666744-1baaacef9521"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Gillette Guard Razor with Blade", category: "hygiene",
     basePrice: 32, defaultUnit: "1 pc",
     description: "Gillette Guard single-blade razor designed for India. Skin guard reduces irritation. Ergonomic handle, lubricating strip. Closest affordable shave.",
-    imageSourceUrl: U("1584308666744-1baaacef9521"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Dettol Antiseptic Liquid Original", category: "hygiene",
     basePrice: 128, defaultUnit: "250ml",
     description: "All-purpose antiseptic liquid. Dilute in water for wound care, floor cleaning, and laundry. Active PCMX formula. Trusted since 1933.",
-    imageSourceUrl: U("1584308666744-1baaacef9521"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
 
   // Skin Care
@@ -1252,12 +1252,12 @@ export const ZEPTO_CATALOG_DATA: ZeptoIngestionRow[] = [
     sector: "personal_care", name: "Parachute Coconut Hair Oil", category: "haircare",
     basePrice: 148, defaultUnit: "500ml",
     description: "Pure refined coconut oil. Nourishes hair from root to tip, prevents protein loss. Solidifies below 25°C — original purity indicator.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
   {
     sector: "personal_care", name: "Bajaj Almond Drops Hair Oil", category: "haircare",
     basePrice: 168, defaultUnit: "200ml",
     description: "Non-sticky almond oil enriched hair oil. Fortified with Vitamin E. Reduces hair fall, adds shine. India's #1 non-sticky hair oil.",
-    imageSourceUrl: U("1526045612212-70cac16dd491"),
+    imageSourceUrl: U("1556228578-8c89e6adf883"),
   },
 ];
