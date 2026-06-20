@@ -6,6 +6,7 @@ import type { OrderStatus } from '@rabbit/database'
 import { getAuthHeader } from '@/lib/session'
 import { useOrderTrackingSocket } from '@/hooks/useOrderTrackingSocket'
 import { distanceKm } from '@/lib/geo'
+import { fetchDrivingRoute, type LatLng } from '@/lib/directions'
 import { Loader2 } from 'lucide-react'
 
 const MAP_CONTAINER_STYLE = { width: '100%', height: '340px', borderRadius: '1rem' }
@@ -36,9 +37,11 @@ export function GoogleOrderMap({
   const [displayLng, setDisplayLng] = useState<number | null>(null)
   const [bearing, setBearing] = useState(0)
   const [mapError, setMapError] = useState(false)
+  const [routePath, setRoutePath] = useState<LatLng[] | null>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const animRef = useRef<number | null>(null)
   const targetRef = useRef<{ lat: number; lng: number; bearing?: number } | null>(null)
+  const routeFetchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { riderLocation } = useOrderTrackingSocket(orderId)
 
   const pollRider = useCallback(async () => {
@@ -77,6 +80,28 @@ export function GoogleOrderMap({
     }
   }, [riderLocation])
 
+  // Fetch real-road Directions API polyline; re-fetch when rider moves significantly
+  useEffect(() => {
+    if (routeFetchRef.current) clearTimeout(routeFetchRef.current)
+    routeFetchRef.current = setTimeout(() => {
+      const rider =
+        displayLat != null && displayLng != null
+          ? { lat: displayLat, lng: displayLng }
+          : null
+      void fetchDrivingRoute(
+        { lat: shopLat, lng: shopLng },
+        { lat: destLat, lng: destLng },
+        rider,
+      ).then((result) => {
+        if (result.path.length > 1) setRoutePath(result.path)
+      })
+    }, 2000) // debounce: refetch at most once per 2 s after rider moves
+    return () => {
+      if (routeFetchRef.current) clearTimeout(routeFetchRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayLat, displayLng, shopLat, shopLng, destLat, destLng])
+
   useEffect(() => {
     if (riderLat == null || riderLng == null) return
 
@@ -113,12 +138,14 @@ export function GoogleOrderMap({
     status !== 'CANCELLED' &&
     status !== 'PENDING'
 
+  // Use Directions API road geometry when available; straight-line as fallback
   const routeLine = useMemo(() => {
+    if (routePath && routePath.length > 1) return routePath
     const points = [{ lat: shopLat, lng: shopLng }]
     if (showRider) points.push({ lat: displayLat!, lng: displayLng! })
     points.push({ lat: destLat, lng: destLng })
     return points
-  }, [shopLat, shopLng, destLat, destLng, showRider, displayLat, displayLng])
+  }, [routePath, shopLat, shopLng, destLat, destLng, showRider, displayLat, displayLng])
 
   const center = useMemo(
     () => ({

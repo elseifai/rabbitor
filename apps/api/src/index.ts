@@ -9,6 +9,7 @@ import { connectRedis } from "./lib/redis";
 import { errorHandler } from "./middleware/errorHandler";
 import routes from "./routes";
 import { setupTrackingSocket } from "./socket/tracking";
+import { setupDeliveryHandler } from "./sockets/delivery-handler";
 import * as paymentService from "./services/payment.service";
 import { expireStalePendingPaymentOrders } from "./services/order.service";
 
@@ -97,6 +98,7 @@ async function start() {
   });
 
   setupTrackingSocket(io);
+  setupDeliveryHandler(io);
 
   setInterval(() => {
     void expireStalePendingPaymentOrders().then((count) => {

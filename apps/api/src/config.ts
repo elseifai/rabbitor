@@ -37,6 +37,7 @@ export const config = {
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
   msg91AuthKey: process.env.MSG91_AUTH_KEY ?? "",
   msg91TemplateId: process.env.MSG91_TEMPLATE_ID ?? "",
+  googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY ?? "",
 };
 
 const PRODUCTION_REQUIRED = [
@@ -56,6 +57,7 @@ const PRODUCTION_OPTIONAL = [
   "MSG91_AUTH_KEY",
   "MSG91_TEMPLATE_ID",
   "FIREBASE_SERVICE_ACCOUNT",
+  "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",
 ] as const;
 
 export function validateConfig(): void {
