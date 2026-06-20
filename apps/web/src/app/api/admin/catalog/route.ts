@@ -8,6 +8,8 @@ import {
 } from '@/lib/catalog-performance'
 import { aggregateCatalogMetrics } from '@/lib/master-catalog-metrics'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   try {
     await requireSession(['ADMIN'])
