@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getActivePromoShopIds } from '@/lib/ad-subscription'
 
 export async function GET(request: Request) {
   try {
@@ -26,17 +27,25 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' },
     })
 
-    const data = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      desc: p.description,
-      price: p.price,
-      weight: p.unit,
-      isAvailable: p.isAvailable,
-      shopId: p.shopId,
-      category: p.shop.category,
-      shopName: p.shop.name,
-    }))
+    const uniqueShopIds = [...new Set(products.map((p) => p.shopId))]
+    const promoIds = await getActivePromoShopIds(uniqueShopIds)
+
+    const data = products
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        desc: p.description,
+        price: p.price,
+        weight: p.unit,
+        isAvailable: p.isAvailable,
+        shopId: p.shopId,
+        category: p.shop.category,
+        shopName: p.shop.name,
+        hasPromoBoost: promoIds.has(p.shopId),
+        searchWeight: promoIds.has(p.shopId) ? 150 : 100,
+      }))
+      // Sponsored-store products surface first
+      .sort((a, b) => b.searchWeight - a.searchWeight)
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

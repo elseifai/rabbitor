@@ -27,7 +27,7 @@ const NAV: {
   { href: '/merchant', label: 'Overview', short: 'Home', icon: LayoutDashboard, exact: true },
   { href: '/merchant/orders', label: 'Orders', short: 'Orders', icon: ShoppingBag },
   { href: '/merchant/products', label: 'Product Listing', short: 'Products', icon: Package },
-  { href: '/merchant/ads', label: 'Manage Ads', short: 'Ads', icon: Megaphone },
+  { href: '/merchant/manage-ads', label: 'Manage Ads', short: 'Ads', icon: Megaphone },
   { href: '/merchant/coupons', label: 'Coupons & Offers', short: 'Deals', icon: Ticket },
   { href: '/merchant/revenue', label: 'Revenue & Payouts', short: 'Revenue', icon: IndianRupee },
 ]

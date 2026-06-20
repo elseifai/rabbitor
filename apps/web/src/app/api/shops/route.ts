@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import type { StoreType } from '@rabbit/database'
 
 import { isRestaurantShop } from '@/lib/home-feed-config'
+import { getActivePromoShopIds } from '@/lib/ad-subscription'
+import { searchWeightFromDistance } from '@/lib/search-weight'
 
 const VALID_STORE_TYPES = new Set([
   'KIRANA',
@@ -57,40 +59,55 @@ export async function GET(request: NextRequest) {
           )
         : shops
 
-    const data = filtered.map((shop) => ({
-      id: shop.id,
-      name: shop.name,
-      slug: shop.slug,
-      storeType: shop.storeType,
-      latitude: shop.latitude,
-      longitude: shop.longitude,
-      rating: shop.ratingCount > 0 ? shop.ratingAvg.toFixed(1) : 'New',
-      ratingAvg: shop.ratingAvg,
-      ratingCount: shop.ratingCount,
-      time: `${shop.avgPrepMinutes}-${shop.avgPrepMinutes + 5} mins`,
-      cuisine: shop.category,
-      category: shop.category,
-      location: shop.address,
-      deliveryFee: shop.baseDeliveryFee,
-      etaMinutes: shop.avgPrepMinutes,
-      image:
-        shop.image ??
-        'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=500&q=80',
-      products: shop.products.map((p) => ({
-        id: p.id,
-        name: p.name,
-        desc: p.description,
-        price: p.price,
-        mrp: p.mrp,
-        weight: p.unit,
-        unit: p.unit,
-        image: p.image,
-        stock: p.stock,
-        isAvailable: p.isAvailable,
-        shopId: p.shopId,
-      })),
-      createdAt: shop.createdAt,
-    }))
+    // Apply +50 search weight boost for stores with active ad subscriptions
+    const promoIds = await getActivePromoShopIds(filtered.map((s) => s.id))
+
+    const data = filtered
+      .map((shop) => {
+        const hasPromo = promoIds.has(shop.id)
+        const weight = searchWeightFromDistance(0, hasPromo) // distance-agnostic boost for web feed
+        return {
+          id: shop.id,
+          name: shop.name,
+          slug: shop.slug,
+          storeType: shop.storeType,
+          latitude: shop.latitude,
+          longitude: shop.longitude,
+          rating: shop.ratingCount > 0 ? shop.ratingAvg.toFixed(1) : 'New',
+          ratingAvg: shop.ratingAvg,
+          ratingCount: shop.ratingCount,
+          time: `${shop.avgPrepMinutes}-${shop.avgPrepMinutes + 5} mins`,
+          cuisine: shop.category,
+          category: shop.category,
+          location: shop.address,
+          deliveryFee: shop.baseDeliveryFee,
+          etaMinutes: shop.avgPrepMinutes,
+          image:
+            shop.image ??
+            'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=500&q=80',
+          products: shop.products.map((p) => ({
+            id: p.id,
+            name: p.name,
+            desc: p.description,
+            price: p.price,
+            mrp: p.mrp,
+            weight: p.unit,
+            unit: p.unit,
+            image: p.image,
+            stock: p.stock,
+            isAvailable: p.isAvailable,
+            shopId: p.shopId,
+          })),
+          searchWeight: weight,
+          hasPromoBoost: hasPromo,
+          createdAt: shop.createdAt,
+        }
+      })
+      // Sponsored stores float to the top; within same tier sort by rating
+      .sort((a, b) => {
+        if (b.searchWeight !== a.searchWeight) return b.searchWeight - a.searchWeight
+        return b.ratingAvg - a.ratingAvg
+      })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
