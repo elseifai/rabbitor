@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireCustomerCheckoutSession } from '@/lib/auth'
 import { getPlatformSettings } from '@/lib/platform-settings'
 import {
   createCodOrderFromCheckout,
@@ -18,17 +17,13 @@ export async function POST(request: Request) {
       )
     }
 
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Please log in to continue' }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: session.userId } })
-    if (!user || session.role !== 'CUSTOMER') {
-      return NextResponse.json(
-        { success: false, error: 'Only customers can checkout' },
-        { status: 403 },
-      )
+    let user: Awaited<ReturnType<typeof requireCustomerCheckoutSession>>['user']
+    try {
+      ;({ user } = await requireCustomerCheckoutSession())
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Please log in to continue'
+      const status = /log in|expired/i.test(message) ? 401 : 403
+      return NextResponse.json({ success: false, error: message }, { status })
     }
 
     const body = (await request.json()) as CheckoutInput

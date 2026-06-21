@@ -133,23 +133,27 @@ export function AddAddressSheet({
     setSaving(true)
     setError(null)
     try {
-      const res = await authFetch('/api/user/addresses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label,
-          customLabel: label === 'OTHER' ? customLabel : undefined,
-          line1: line1.trim(),
-          line2: line2.trim() || undefined,
-          landmark: landmark.trim() || undefined,
-          area: area.trim() || undefined,
-          city: city.trim() || 'Mumbai',
-          pincode: pincode.trim() || undefined,
-          latitude: lat,
-          longitude: lng,
-          isDefault: true,
-        }),
-      })
+      const res = await authFetch(
+        '/api/user/addresses',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            label,
+            customLabel: label === 'OTHER' ? customLabel : undefined,
+            line1: line1.trim(),
+            line2: line2.trim() || undefined,
+            landmark: landmark.trim() || undefined,
+            area: area.trim() || undefined,
+            city: city.trim() || 'Mumbai',
+            pincode: pincode.trim() || undefined,
+            latitude: lat,
+            longitude: lng,
+            isDefault: true,
+          }),
+        },
+        { skipLogoutRedirect: true },
+      )
       const json = await res.json()
       if (!json.success) {
         setError(json.error ?? 'Could not save address')

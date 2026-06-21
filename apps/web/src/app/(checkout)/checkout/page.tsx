@@ -39,6 +39,8 @@ import { loadRazorpayScript } from '@/lib/razorpay'
 import { resolveAppApiUrl } from '@/lib/app-api'
 import { authFetch } from '@/lib/session'
 import { getSession as getClientSession } from '@/lib/session'
+import { ensureCustomerCheckoutSession } from '@/lib/checkout-auth'
+import { fetchCurrentAuth } from '@/lib/client-auth'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { useCartStore } from '@/store/useCartStore'
 import type { FulfillmentStore } from '@/app/api/stores/fulfillment/route'
@@ -111,12 +113,25 @@ export default function DynamicCheckoutPage() {
   const lng = selectedAddress?.longitude ?? 72.8296
   const shopBackHref = shopIds.length === 1 ? `/shops/${shopIds[0]}` : '/cart'
 
-  // DEV SANDBOX REFACTOR — trust localStorage + AuthContext; avoid re-prompting when session exists.
+  // Trust httpOnly cookie session — localStorage alone is not enough for payment APIs.
   useEffect(() => {
     if (!authHydrated) return
-    const hasClientSession = Boolean(getClientSession())
-    setNeedsAuth(!(isLoggedIn || hasClientSession))
-  }, [authHydrated, isLoggedIn])
+
+    let cancelled = false
+    void fetchCurrentAuth().then((current) => {
+      if (cancelled) return
+      if (current) {
+        login(current.token, current.user)
+        setNeedsAuth(false)
+        return
+      }
+      setNeedsAuth(!(isLoggedIn || Boolean(getClientSession())))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authHydrated, isLoggedIn, login])
 
   useEffect(() => {
     if (!authHydrated || needsAuth) {
@@ -388,6 +403,14 @@ export default function DynamicCheckoutPage() {
     })),
   }
 
+  const ensureCustomerSession = useCallback(async (): Promise<boolean> => {
+    return ensureCustomerCheckoutSession(login)
+  }, [login])
+
+  const redirectToCheckoutLogin = useCallback(() => {
+    router.push('/auth?role=customer&redirect=/checkout')
+  }, [router])
+
   const handlePlaceOrder = async () => {
     if (paymentMethod === 'cod') {
       await handlePlaceCodOrder()
@@ -399,6 +422,7 @@ export default function DynamicCheckoutPage() {
   const runOnlinePayment = async (
     mode: OnlinePayMode = 'card',
     upiApp: 'gpay' | 'phonepe' | 'paytm' | null = null,
+    allowAuthRetry = true,
   ) => {
     if (items.length === 0 || shopIds.length === 0) return
     if (!selectedAddress || !deliveryAddress.trim()) {
@@ -412,6 +436,17 @@ export default function DynamicCheckoutPage() {
 
     setIsPlacing(true)
     setError(null)
+
+    const authed = await ensureCustomerSession()
+    if (!authed) {
+      setIsPlacing(false)
+      if (sandbox) {
+        setNeedsAuth(true)
+        return
+      }
+      redirectToCheckoutLogin()
+      return
+    }
 
     const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
     let activeIntentId: string | null = null
@@ -429,13 +464,21 @@ export default function DynamicCheckoutPage() {
 
       const intentJson = await intentRes.json()
       if (!intentJson.success) {
-        if (intentRes.status === 401) {
+        if (intentRes.status === 401 || intentRes.status === 403) {
+          if (allowAuthRetry) {
+            const retried = await ensureCustomerSession()
+            if (retried) {
+              setIsPlacing(false)
+              await runOnlinePayment(mode, upiApp, false)
+              return
+            }
+          }
           setError(intentJson.error ?? 'Please log in again.')
           if (sandbox) {
             setNeedsAuth(true)
             return
           }
-          router.push('/auth?redirect=/checkout')
+          redirectToCheckoutLogin()
           return
         }
         setError(intentJson.error ?? 'Could not start payment. Please try again.')
@@ -554,7 +597,7 @@ export default function DynamicCheckoutPage() {
     }
   }
 
-  const handlePlaceCodOrder = async () => {
+  const handlePlaceCodOrder = async (allowAuthRetry = true) => {
     if (items.length === 0 || shopIds.length === 0) return
     if (!selectedAddress || !deliveryAddress.trim()) {
       setError('Please add and select a delivery address.')
@@ -567,6 +610,17 @@ export default function DynamicCheckoutPage() {
 
     setIsPlacing(true)
     setError(null)
+
+    const authed = await ensureCustomerSession()
+    if (!authed) {
+      setIsPlacing(false)
+      if (sandbox) {
+        setNeedsAuth(true)
+        return
+      }
+      redirectToCheckoutLogin()
+      return
+    }
 
     const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
 
@@ -583,13 +637,21 @@ export default function DynamicCheckoutPage() {
 
       const json = await res.json()
       if (!json.success) {
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
+          if (allowAuthRetry) {
+            const retried = await ensureCustomerSession()
+            if (retried) {
+              setIsPlacing(false)
+              await handlePlaceCodOrder(false)
+              return
+            }
+          }
           setError(json.error ?? 'Please log in again.')
           if (sandbox) {
             setNeedsAuth(true)
             return
           }
-          router.push('/auth?redirect=/checkout')
+          redirectToCheckoutLogin()
           return
         }
         setError(json.error ?? 'Could not place order. Please try again.')
@@ -620,6 +682,16 @@ export default function DynamicCheckoutPage() {
       return
     }
     setError(null)
+
+    const authed = await ensureCustomerSession()
+    if (!authed) {
+      if (sandbox) {
+        setNeedsAuth(true)
+        return
+      }
+      redirectToCheckoutLogin()
+      return
+    }
 
     const canProceed = await runFulfillmentCheck()
     if (!canProceed) return  // fulfillment modal is now open, waiting for store selection

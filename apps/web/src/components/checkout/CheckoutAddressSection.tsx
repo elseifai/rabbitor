@@ -43,7 +43,7 @@ export function CheckoutAddressSection({
     setLoading(true)
     setFetchError(null)
     try {
-      const res = await authFetch('/api/user/addresses')
+      const res = await authFetch('/api/user/addresses', undefined, { skipLogoutRedirect: true })
       const json = await res.json()
       if (!json.success) {
         setFetchError(json.error ?? 'Could not load addresses')

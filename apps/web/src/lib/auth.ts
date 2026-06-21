@@ -610,6 +610,29 @@ export async function switchToCustomerPortal(): Promise<{ token: string; user: A
   return { token, user: toAuthUser(user, 'CUSTOMER') }
 }
 
+/** Storefront checkout — ensures an active CUSTOMER portal session (auto-switches partner accounts). */
+export async function requireCustomerCheckoutSession(): Promise<{
+  session: SessionPayload
+  user: NonNullable<Awaited<ReturnType<typeof resolveSessionUser>>>
+}> {
+  let session = await getSession()
+  if (!session) throw new Error('Please log in to continue')
+
+  if (session.role !== 'CUSTOMER') {
+    const switched = await switchToCustomerPortal()
+    if (!switched) throw new Error('Only customers can checkout')
+    session = await getSession()
+    if (!session || session.role !== 'CUSTOMER') {
+      throw new Error('Only customers can checkout')
+    }
+  }
+
+  const user = await resolveSessionUser(session)
+  if (!user) throw new Error('Your session expired. Please log in again.')
+
+  return { session, user }
+}
+
 export async function requireSession(roles?: string[]): Promise<SessionPayload> {
   const session = await getSession()
   if (!session) throw new Error('Please log in to continue')
@@ -624,7 +647,7 @@ export async function requireSession(roles?: string[]): Promise<SessionPayload> 
     role: session.role,
   }
 
-  if (roles && !roles.includes(user.role) && user.role !== 'ADMIN') {
+  if (roles && !roles.includes(session.role) && user.role !== 'ADMIN') {
     throw new Error('Access denied')
   }
 
