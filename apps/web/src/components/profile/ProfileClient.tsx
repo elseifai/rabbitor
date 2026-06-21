@@ -260,19 +260,6 @@ export function ProfileClient({ user: serverUser }: Props) {
         </div>
       </div>
 
-      {sandbox && (
-        <div className="mt-8 px-4">
-          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Switch sandbox role
-          </p>
-          <DevRoleLoginPanel
-            mode="inline"
-            redirectOnSuccess={false}
-            onSuccess={() => router.refresh()}
-          />
-        </div>
-      )}
-
       {/* Footer */}
       <div className="mt-10 text-center">
         <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300">rabbitor</p>
