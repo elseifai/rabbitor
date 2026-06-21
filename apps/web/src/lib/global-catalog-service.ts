@@ -1,15 +1,11 @@
 /**
  * Global Catalog Service
  *
- * Fetches Essentials catalog data from the central repository:
- *   https://rabbitor.elseif.ai/admin  (production admin panel)
- *
- * Used for Grocery, Pharmacy, Vegetables, and Fish/Meat.
- * All items are served from the nearest dark store — customers never
- * need to select a specific merchant shop for Essentials.
+ * Fetches Essentials catalog via the public BFF route `/api/catalog/essentials`
+ * which reads from the MasterCatalogItem table (same data as admin global catalog).
  */
 
-import { ADMIN_API_BASE } from '@/lib/platform-categories'
+import { resolveAppApiUrl } from '@/lib/app-api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -106,11 +102,9 @@ function normaliseCatalogItem(raw: RawCatalogItem, fallbackCategory: string): Gl
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch the master Essentials catalog for a given category from the admin API.
+ * Fetch the master Essentials catalog for a given category.
  *
- * Hits: GET https://rabbitor.elseif.ai/api/admin/master-catalog?category=…
- *
- * Falls back gracefully on network errors — callers should handle empty arrays.
+ * Hits: GET /api/catalog/essentials?category=…
  */
 export async function fetchEssentialsCatalog(
   category: string,
@@ -123,15 +117,11 @@ export async function fetchEssentialsCatalog(
   if (cached) return cached
 
   try {
-    const url = new URL(`${ADMIN_API_BASE}/api/admin/master-catalog`)
+    const url = new URL(resolveAppApiUrl('/api/catalog/essentials'))
     url.searchParams.set('category', category)
     url.searchParams.set('limit', String(limit))
-    url.searchParams.set('inStock', 'true')
 
-    const res = await fetch(url.toString(), {
-      signal,
-      next: { revalidate: 300 }, // Next.js fetch cache 5 min
-    })
+    const res = await fetch(url.toString(), { signal, cache: 'no-store' })
 
     if (!res.ok) {
       throw new Error(`Master catalog API returned ${res.status}`)
@@ -139,12 +129,7 @@ export async function fetchEssentialsCatalog(
 
     const json = await res.json()
 
-    // Tolerate both { data: [] } and { items: [] } shapes
-    const raw: RawCatalogItem[] = Array.isArray(json.data)
-      ? json.data
-      : Array.isArray(json.items)
-        ? json.items
-        : []
+    const raw: RawCatalogItem[] = Array.isArray(json.data) ? json.data : []
 
     const items = raw
       .filter((r) => r.id && r.name)
@@ -195,7 +180,7 @@ export async function fetchEssentialsStores(
   if (cached) return cached
 
   try {
-    const url = new URL(`${ADMIN_API_BASE}/api/shops`)
+    const url = new URL(resolveAppApiUrl('/api/shops'))
     url.searchParams.set('lat', String(lat))
     url.searchParams.set('lng', String(lng))
     url.searchParams.set('model', 'ESSENTIALS')

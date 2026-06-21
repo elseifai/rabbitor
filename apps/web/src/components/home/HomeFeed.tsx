@@ -26,6 +26,12 @@ import { cn, formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { RestaurantsHomeSection } from '@/components/home/RestaurantsHomeSection'
 import { PromoDealsModal } from '@/components/home/PromoDealsModal'
+import {
+  ESSENTIALS_STORE_ID,
+  ESSENTIALS_STORE_NAME,
+  ESSENTIALS_STORE_SLUG,
+} from '@/lib/essentials-catalog'
+import { ESSENTIALS_STORE_TYPES } from '@/lib/platform-categories'
 
 type DealProduct = {
   id: string
@@ -44,7 +50,36 @@ type DealProduct = {
 
 const TOP_RATED_MIN = 4
 const TOP_SHOP_LIMIT = 5
-const HOME_DEALS_CACHE_KEY = 'rabbit_home_deals_v1'
+const HOME_DEALS_CACHE_KEY = 'rabbit_home_deals_v2'
+
+function isMarketplaceSubPlatform(sub: SubPlatformId): boolean {
+  return sub === 'fashion' || sub === 'restaurants'
+}
+
+function mapEssentialsToDeal(p: {
+  id: string
+  name: string
+  unit: string
+  price: number
+  mrp?: number | null
+  image: string | null
+  storeType: string
+}): DealProduct {
+  return {
+    id: p.id,
+    name: p.name,
+    unit: p.unit,
+    price: p.price,
+    mrp: p.mrp ?? null,
+    image: p.image,
+    shopId: ESSENTIALS_STORE_ID,
+    shopName: ESSENTIALS_STORE_NAME,
+    shopSlug: ESSENTIALS_STORE_SLUG,
+    storeType: p.storeType,
+    stock: 99,
+    shopRating: 4.5,
+  }
+}
 
 function readCachedDeals(): DealProduct[] {
   if (typeof window === 'undefined') return []
@@ -104,56 +139,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-const FASHION_FALLBACK_DEALS: DealProduct[] = [
-  {
-    id: 'fashion-1',
-    name: 'Urban Runner Sneakers',
-    unit: 'UK 6-11',
-    price: 549,
-    mrp: 1299,
-    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400',
-    shopId: 'boutique-hub',
-    shopName: 'Boutique Hub',
-    shopSlug: 'boutique-hub',
-    storeType: 'GENERAL',
-  },
-  {
-    id: 'fashion-2',
-    name: 'Linen Casual Shirt',
-    unit: 'S-XXL',
-    price: 499,
-    mrp: 999,
-    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400',
-    shopId: 'boutique-hub',
-    shopName: 'Boutique Hub',
-    shopSlug: 'boutique-hub',
-    storeType: 'GENERAL',
-  },
-  {
-    id: 'fashion-3',
-    name: 'High-Rise Slim Jeans',
-    unit: '28-36',
-    price: 599,
-    mrp: 1499,
-    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400',
-    shopId: 'boutique-hub',
-    shopName: 'Boutique Hub',
-    shopSlug: 'boutique-hub',
-    storeType: 'GENERAL',
-  },
-  {
-    id: 'fashion-4',
-    name: 'Everyday Tote Bag',
-    unit: 'One Size',
-    price: 399,
-    mrp: 799,
-    image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400',
-    shopId: 'boutique-hub',
-    shopName: 'Boutique Hub',
-    shopSlug: 'boutique-hub',
-    storeType: 'GENERAL',
-  },
-]
 
 function CategoryCard({
   label,
@@ -342,6 +327,9 @@ export function HomeFeed() {
   const [shops, setShops] = useState<ShopListItem[]>([])
   const [deals, setDeals] = useState<DealProduct[]>(() => readCachedDeals())
   const [loadingShops, setLoadingShops] = useState(true)
+  const [loadingDeals, setLoadingDeals] = useState(true)
+  const [dealsError, setDealsError] = useState<string | null>(null)
+  const [catalogSource, setCatalogSource] = useState<'global' | 'marketplace' | null>(null)
   const { isLoggedIn: loggedIn } = useAuth()
   const [buyAgainTab, setBuyAgainTab] = useState('all')
   const [promoModalOpen, setPromoModalOpen] = useState(false)
@@ -464,37 +452,87 @@ export function HomeFeed() {
   }, [lat, lng, storeType, categoryFilterActive])
 
   useEffect(() => {
-    const url = storeType ? `/api/shops?storeType=${storeType}` : '/api/shops'
-    fetch(url)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!json.success) return
-        const all: DealProduct[] = []
-        for (const shop of json.data ?? []) {
-          const shopRating = Number(shop.ratingAvg ?? 0)
-          for (const p of shop.products ?? []) {
-            all.push({
-              id: p.id,
-              name: p.name,
-              unit: p.weight ?? p.unit ?? '',
-              price: p.price,
-              mrp: p.mrp ?? null,
-              image: p.image ?? null,
-              shopId: shop.id,
-              shopName: shop.name,
-              shopSlug: shop.slug,
-              storeType: shop.storeType,
-              stock: p.stock,
-              shopRating,
-            })
+    let cancelled = false
+    setLoadingDeals(true)
+    setDealsError(null)
+
+    async function loadDeals() {
+      try {
+        if (isMarketplaceSubPlatform(subPlatform)) {
+          setCatalogSource('marketplace')
+          const url =
+            subPlatform === 'restaurants'
+              ? '/api/shops?vertical=restaurants'
+              : storeType
+                ? `/api/shops?storeType=${storeType}`
+                : '/api/shops?storeType=GENERAL'
+          const res = await fetch(url)
+          const json = await res.json()
+          if (cancelled || !json.success) {
+            if (!cancelled) setDeals([])
+            return
           }
+          const all: DealProduct[] = []
+          for (const shop of json.data ?? []) {
+            const shopRating = Number(shop.ratingAvg ?? 0)
+            for (const p of shop.products ?? []) {
+              all.push({
+                id: p.id,
+                name: p.name,
+                unit: p.weight ?? p.unit ?? '',
+                price: p.price,
+                mrp: p.mrp ?? null,
+                image: p.image ?? null,
+                shopId: shop.id,
+                shopName: shop.name,
+                shopSlug: shop.slug,
+                storeType: shop.storeType,
+                stock: p.stock,
+                shopRating,
+              })
+            }
+          }
+          const filtered = pickHomeDeals(all, categoryFilterActive)
+          if (!cancelled) {
+            setDeals(filtered)
+            writeCachedDeals(filtered)
+          }
+          return
         }
-        const filtered = pickHomeDeals(all, categoryFilterActive)
+
+        // Essentials — global master catalog (not per-shop dummy data)
+        setCatalogSource('global')
+        const params = new URLSearchParams({ limit: '48' })
+        if (storeType && ESSENTIALS_STORE_TYPES.has(storeType)) {
+          params.set('storeType', storeType)
+        }
+        const res = await fetch(`/api/catalog/essentials?${params}`)
+        const json = await res.json()
+        if (cancelled) return
+        if (!json.success) {
+          setDeals([])
+          setDealsError(json.error ?? 'Could not load global catalog')
+          return
+        }
+        const mapped = (json.data ?? []).map(mapEssentialsToDeal)
+        const filtered = pickHomeDeals(mapped, categoryFilterActive)
         setDeals(filtered)
         writeCachedDeals(filtered)
-      })
-      .catch(() => {})
-  }, [storeType, categoryFilterActive])
+      } catch {
+        if (!cancelled) {
+          setDeals([])
+          setDealsError('Network error — pull to refresh')
+        }
+      } finally {
+        if (!cancelled) setLoadingDeals(false)
+      }
+    }
+
+    void loadDeals()
+    return () => {
+      cancelled = true
+    }
+  }, [storeType, categoryFilterActive, subPlatform])
 
   const bannerProducts = useMemo(() => deals.slice(0, 4), [deals])
 
@@ -538,8 +576,7 @@ export function HomeFeed() {
       list = filterTopRatedDeals(list, ratings, true)
     }
     if (subPlatform === 'fashion') {
-      if (list.length > 0) return list
-      return FASHION_FALLBACK_DEALS
+      return list
     }
     return list
   }, [deals, platformConfig.storeTypes, subPlatform, categoryFilterActive])
@@ -601,9 +638,22 @@ export function HomeFeed() {
           ? feedConfig.dealsSection.fashionSubtitle
           : categoryFilterActive
             ? 'Top-rated products from verified stores'
-            : feedConfig.dealsSection.subtitle}
+            : catalogSource === 'global'
+              ? 'Live from Rabbit Global Catalog · nearest dark store fulfills'
+              : feedConfig.dealsSection.subtitle}
       </p>
-      {platformDeals.length === 0 ? (
+      {loadingDeals ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-52 animate-pulse rounded-xl bg-[#F0F0F0]" />
+          ))}
+        </div>
+      ) : dealsError ? (
+        <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-6 text-center">
+          <p className="text-sm font-semibold text-red-700">{dealsError}</p>
+          <p className="mt-1 text-xs text-red-500">Check your connection and try again.</p>
+        </div>
+      ) : platformDeals.length === 0 ? (
         <p className="mt-4 text-sm text-[#878787]">
           {categoryFilterActive
             ? 'No top-rated items in this category yet.'

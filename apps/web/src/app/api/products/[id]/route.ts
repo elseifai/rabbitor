@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/auth'
+import {
+  ESSENTIALS_STORE_ID,
+  ESSENTIALS_STORE_NAME,
+  ESSENTIALS_STORE_SLUG,
+  mapMasterItemToEssentialsProduct,
+} from '@/lib/essentials-catalog'
 
 const PRODUCT_SELECT = {
   id: true,
@@ -38,6 +44,67 @@ export async function GET(
     })
 
     if (!product) {
+      const catalogItem = await prisma.masterCatalogItem.findFirst({
+        where: { id, isActive: true },
+      })
+
+      if (catalogItem) {
+        const mapped = mapMasterItemToEssentialsProduct(catalogItem)
+        const similar = await prisma.masterCatalogItem.findMany({
+          where: {
+            id: { not: id },
+            isActive: true,
+            category: catalogItem.category,
+            storeType: catalogItem.storeType,
+          },
+          orderBy: { name: 'asc' },
+          take: 10,
+        })
+
+        const essentialsProduct = {
+          id: mapped.id,
+          name: mapped.name,
+          description: mapped.description,
+          price: mapped.price,
+          mrp: mapped.mrp,
+          unit: mapped.unit,
+          image: mapped.image,
+          stock: 99,
+          category: mapped.category,
+          isAvailable: true,
+          shopId: ESSENTIALS_STORE_ID,
+          shopName: ESSENTIALS_STORE_NAME,
+          shopSlug: ESSENTIALS_STORE_SLUG,
+          storeType: mapped.storeType,
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            product: essentialsProduct,
+            similar: similar.map((s) => {
+              const m = mapMasterItemToEssentialsProduct(s)
+              return {
+                id: m.id,
+                name: m.name,
+                description: m.description,
+                price: m.price,
+                mrp: m.mrp,
+                unit: m.unit,
+                image: m.image,
+                stock: 99,
+                category: m.category,
+                isAvailable: true,
+                shopId: ESSENTIALS_STORE_ID,
+                shopName: ESSENTIALS_STORE_NAME,
+                shopSlug: ESSENTIALS_STORE_SLUG,
+                storeType: m.storeType,
+              }
+            }),
+          },
+        })
+      }
+
       return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 })
     }
 

@@ -81,10 +81,13 @@ export async function POST(request: NextRequest) {
         baseDeliveryFee: true,
         products: {
           where: {
-            id: { in: productIds },
             isAvailable: true,
+            OR: [
+              { id: { in: productIds } },
+              { masterCatalogItemId: { in: productIds } },
+            ],
           },
-          select: { id: true, name: true, stock: true },
+          select: { id: true, name: true, stock: true, masterCatalogItemId: true },
         },
       },
     })
@@ -95,7 +98,11 @@ export async function POST(request: NextRequest) {
       const dist = distanceKm(lat, lng, store.latitude, store.longitude)
       if (dist > radiusKm) continue
 
-      const productMap = new Map(store.products.map((p) => [p.id, p]))
+      const productMap = new Map<string, (typeof store.products)[0]>()
+      for (const p of store.products) {
+        productMap.set(p.id, p)
+        if (p.masterCatalogItemId) productMap.set(p.masterCatalogItemId, p)
+      }
 
       const availableItems: FulfillmentStore['availableItems'] = []
       const missingItems: FulfillmentStore['missingItems'] = []

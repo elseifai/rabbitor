@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Star, Percent, Clock } from 'lucide-react'
+import { Star, Percent, Clock, WifiOff } from 'lucide-react'
 
 type ApiShop = {
   id: string
@@ -28,42 +28,6 @@ const FALLBACK_DISCOUNTS = [
   '50% OFF up to ₹100',
   '₹125 OFF on Premium Packs',
   'Free Rabbit Delivery',
-]
-
-const STATIC_FALLBACK: ApiShop[] = [
-  {
-    id: 'shop-1',
-    slug: 'royal-coastal-seafood',
-    name: 'Royal Coastal Seafood Stall',
-    rating: '4.4',
-    time: '20-25 mins',
-    cuisine: 'Sea Fish, Cleaned Shrimp, Pomfret',
-    location: 'Crawford Market Area',
-    image:
-      'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?auto=format&fit=crop&w=500&q=80',
-  },
-  {
-    id: 'shop-2',
-    slug: 'sharma-kirana',
-    name: 'Balaji Super Kirana Hub',
-    rating: '4.1',
-    time: '10-15 mins',
-    cuisine: 'Atta, Dals, Spices, Household Essentials',
-    location: 'Sector 4 Arcade',
-    image:
-      'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?auto=format&fit=crop&w=500&q=80',
-  },
-  {
-    id: 'shop-3',
-    slug: 'walkwell-footwear',
-    name: 'Metro Steps Footwear',
-    rating: '4.5',
-    time: '30-35 mins',
-    cuisine: 'Daily Slippers, Sandals, Local Crafts',
-    location: 'Colaba Runway Store',
-    image:
-      'https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=500&q=80',
-  },
 ]
 
 function parseEtaMinutes(time: string): number {
@@ -118,6 +82,7 @@ export function LiveStoreList({
   const [stores, setStores] = useState<ApiShop[]>([])
   const [loading, setLoading] = useState(true)
   const [live, setLive] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     fetch('/api/shops')
@@ -127,10 +92,13 @@ export function LiveStoreList({
           setStores(json.data)
           setLive(true)
         } else {
-          setStores(STATIC_FALLBACK)
+          setStores([])
         }
       })
-      .catch(() => setStores(STATIC_FALLBACK))
+      .catch(() => {
+        setFetchError(true)
+        setStores([])
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -156,10 +124,22 @@ export function LiveStoreList({
     )
   }
 
+  if (fetchError) {
+    return (
+      <div className="rounded-2xl border border-red-100 bg-red-50 py-10 text-center">
+        <WifiOff className="mx-auto h-8 w-8 text-red-400" />
+        <p className="mt-2 text-sm font-semibold text-red-700">Could not load stores</p>
+        <p className="text-xs text-red-500">Please check your connection and refresh.</p>
+      </div>
+    )
+  }
+
   if (visibleStores.length === 0) {
     return (
       <p className="rounded-2xl border border-slate-100 bg-white py-10 text-center text-sm font-medium text-slate-400">
-        No stores match your search or filters.
+        {stores.length === 0
+          ? 'No stores available in your area yet.'
+          : 'No stores match your search or filters.'}
       </p>
     )
   }

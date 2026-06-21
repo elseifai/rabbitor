@@ -4,7 +4,10 @@ import {
   resolveShop,
   resolveProductForShop,
   productUnavailableMessage,
+  resolveEssentialsCheckoutShop,
+  normalizeCheckoutShopsInput,
 } from '@/lib/resolve-cart-product'
+import { isEssentialsStoreId } from '@/lib/essentials-catalog'
 import { broadcastNewMerchantOrder } from '@/lib/order-events'
 import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
 import { getPlatformSettings } from '@/lib/platform-settings'
@@ -30,6 +33,8 @@ export type CheckoutInput = {
   items?: CheckoutLineItem[]
   /** Multi-store grouped checkout */
   shops?: ShopCheckoutInput[]
+  /** Dark store chosen via fulfillment modal for global-catalog Essentials carts */
+  fulfillmentStoreId?: string
 }
 
 export type ShopFulfillment = {
@@ -61,12 +66,45 @@ export type ValidatedCheckout = {
 
 function normalizeShopInputs(input: CheckoutInput): ShopCheckoutInput[] {
   if (input.shops?.length) {
-    return input.shops.filter((s) => s.shopId && s.items?.length)
+    const raw = input.shops.filter((s) => s.shopId && s.items?.length)
+    const hasEssentials = raw.some((s) => isEssentialsStoreId(s.shopId))
+    if (hasEssentials && !input.fulfillmentStoreId) {
+      throw new Error('Please select a fulfillment store before checkout')
+    }
+    return normalizeCheckoutShopsInput({
+      shops: raw,
+      fulfillmentStoreId: input.fulfillmentStoreId,
+    })
   }
   if (input.shopId && input.items?.length) {
     return [{ shopId: input.shopId, items: input.items }]
   }
   return []
+}
+
+async function resolveShopInputs(input: CheckoutInput): Promise<ShopCheckoutInput[]> {
+  const normalized = normalizeShopInputs(input)
+  if (normalized.length === 0) return []
+
+  const essentialsShop = input.shops?.find((s) => isEssentialsStoreId(s.shopId))
+  if (essentialsShop && input.fulfillmentStoreId) {
+    const resolved = await resolveEssentialsCheckoutShop(
+      input.fulfillmentStoreId,
+      essentialsShop.items,
+    )
+    const otherShops = normalized.filter((s) => s.shopId !== input.fulfillmentStoreId)
+    const merged = otherShops.find((s) => s.shopId === resolved.shopId)
+    if (merged) {
+      return otherShops.map((s) =>
+        s.shopId === resolved.shopId
+          ? { shopId: s.shopId, items: [...s.items, ...resolved.items] }
+          : s,
+      )
+    }
+    return [...otherShops, { shopId: resolved.shopId, items: resolved.items }]
+  }
+
+  return normalized
 }
 
 export function parseValidatedCheckoutFromIntent(payload: unknown): ValidatedCheckout {
@@ -78,7 +116,7 @@ export function parseValidatedCheckoutFromIntent(payload: unknown): ValidatedChe
 
 export async function validateCheckoutInput(input: CheckoutInput): Promise<ValidatedCheckout> {
   const { address } = input
-  const shopInputs = normalizeShopInputs(input)
+  const shopInputs = await resolveShopInputs(input)
 
   if (!address?.trim() || shopInputs.length === 0) {
     throw new Error('Address and at least one shop with items are required')
