@@ -8,6 +8,7 @@ import {
   normalizeCheckoutShopsInput,
 } from '@/lib/resolve-cart-product'
 import { isEssentialsStoreId } from '@/lib/essentials-catalog'
+import { pickAutoFulfillmentStoreId } from '@/lib/store-fulfillment'
 import { broadcastNewMerchantOrder } from '@/lib/order-events'
 import { calculateDeliveryFee, distanceKm } from '@/lib/geo'
 import { getPlatformSettings } from '@/lib/platform-settings'
@@ -83,16 +84,39 @@ function normalizeShopInputs(input: CheckoutInput): ShopCheckoutInput[] {
 }
 
 async function resolveShopInputs(input: CheckoutInput): Promise<ShopCheckoutInput[]> {
-  const normalized = normalizeShopInputs(input)
+  let fulfillmentStoreId = input.fulfillmentStoreId
+  const raw = input.shops?.filter((s) => s.shopId && s.items?.length) ?? []
+  const essentialsShop = raw.find((s) => isEssentialsStoreId(s.shopId))
+
+  if (essentialsShop && !fulfillmentStoreId) {
+    fulfillmentStoreId =
+      (await pickAutoFulfillmentStoreId(
+        essentialsShop.items.map((i) => ({
+          productId: i.productId,
+          quantity: i.quantity,
+        })),
+        input.destLatitude ?? 19.076,
+        input.destLongitude ?? 72.8777,
+      )) ?? undefined
+
+    if (!fulfillmentStoreId) {
+      throw new Error('No nearby store can fulfill your Essentials order')
+    }
+  }
+
+  const normalized = normalizeShopInputs({
+    ...input,
+    shops: raw,
+    fulfillmentStoreId,
+  })
   if (normalized.length === 0) return []
 
-  const essentialsShop = input.shops?.find((s) => isEssentialsStoreId(s.shopId))
-  if (essentialsShop && input.fulfillmentStoreId) {
+  if (essentialsShop && fulfillmentStoreId) {
     const resolved = await resolveEssentialsCheckoutShop(
-      input.fulfillmentStoreId,
+      fulfillmentStoreId,
       essentialsShop.items,
     )
-    const otherShops = normalized.filter((s) => s.shopId !== input.fulfillmentStoreId)
+    const otherShops = normalized.filter((s) => s.shopId !== fulfillmentStoreId)
     const merged = otherShops.find((s) => s.shopId === resolved.shopId)
     if (merged) {
       return otherShops.map((s) =>

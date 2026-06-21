@@ -42,6 +42,7 @@ import { authFetch } from '@/lib/session'
 import { getSession as getClientSession } from '@/lib/session'
 import { ensureCustomerCheckoutSession } from '@/lib/checkout-auth'
 import { fetchCurrentAuth } from '@/lib/client-auth'
+import { isEssentialsStoreId } from '@/lib/essentials-catalog'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { useCartStore } from '@/store/useCartStore'
 import type { FulfillmentStore } from '@/app/api/stores/fulfillment/route'
@@ -123,6 +124,7 @@ export default function DynamicCheckoutPage() {
   const lat = selectedAddress?.latitude ?? 19.1364
   const lng = selectedAddress?.longitude ?? 72.8296
   const shopBackHref = shopIds.length === 1 ? `/shops/${shopIds[0]}` : '/cart'
+  const cartHasEssentials = shopIds.some(isEssentialsStoreId)
 
   useEffect(() => {
     if (!hasDeliveryAddress && !selectedAddress) {
@@ -357,7 +359,31 @@ export default function DynamicCheckoutPage() {
       const json = await res.json()
 
       if (!json.success || !Array.isArray(json.data) || json.data.length === 0) {
-        // No stores available — let checkout proceed with existing cart store
+        const wideRes = await fetch(resolveAppApiUrl('/api/stores/fulfillment'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, radiusKm: 80 }),
+        })
+        const wideJson = await wideRes.json()
+        if (wideJson.success && Array.isArray(wideJson.data) && wideJson.data.length > 0) {
+          const store = wideJson.data[0] as FulfillmentStore
+          setFulfillmentStore(store.storeId)
+          confirmFulfillmentStoreFn()
+          return true
+        }
+
+        try {
+          const shopsRes = await fetch('/api/shops?storeType=KIRANA')
+          const shopsJson = await shopsRes.json()
+          const fallbackId = shopsJson.data?.[0]?.id as string | undefined
+          if (fallbackId) {
+            setFulfillmentStore(fallbackId)
+            confirmFulfillmentStoreFn()
+            return true
+          }
+        } catch {
+          // Server auto-resolves fulfillment on checkout if needed
+        }
         return true
       }
 
@@ -402,23 +428,41 @@ export default function DynamicCheckoutPage() {
     setShowPaymentSheet(true)
   }
 
-  const checkoutPayload = {
-    riderTip: partnerTip,
-    address: deliveryAddress,
-    instruction: instructionLabel(selectedInstruction),
-    destLatitude: lat,
-    destLongitude: lng,
-    couponCode: appliedCoupon ?? undefined,
-    ...(selectedFulfillmentStoreId ? { fulfillmentStoreId: selectedFulfillmentStoreId } : {}),
-    shops: shopIds.map((shopId) => ({
-      shopId,
-      items: (itemsByShop[shopId] ?? []).map((item) => ({
-        productId: item.id,
-        quantity: item.quantity,
-        price: item.price,
+  const ensureFulfillmentForCheckout = useCallback(async (): Promise<boolean> => {
+    if (!cartHasEssentials) return true
+    if (selectedFulfillmentStoreId) return true
+    return runFulfillmentCheck()
+  }, [cartHasEssentials, selectedFulfillmentStoreId, runFulfillmentCheck])
+
+  const buildCheckoutPayload = useCallback(() => {
+    const fulfillmentStoreId = useCartStore.getState().selectedFulfillmentStoreId
+    return {
+      riderTip: partnerTip,
+      address: deliveryAddress,
+      instruction: instructionLabel(selectedInstruction),
+      destLatitude: lat,
+      destLongitude: lng,
+      couponCode: appliedCoupon ?? undefined,
+      ...(fulfillmentStoreId ? { fulfillmentStoreId } : {}),
+      shops: shopIds.map((shopId) => ({
+        shopId,
+        items: (itemsByShop[shopId] ?? []).map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+          price: item.price,
+        })),
       })),
-    })),
-  }
+    }
+  }, [
+    partnerTip,
+    deliveryAddress,
+    selectedInstruction,
+    lat,
+    lng,
+    appliedCoupon,
+    shopIds,
+    itemsByShop,
+  ])
 
   const ensureCustomerSession = useCallback(async (): Promise<boolean> => {
     return ensureCustomerCheckoutSession(login)
@@ -429,6 +473,11 @@ export default function DynamicCheckoutPage() {
   }, [router])
 
   const handlePlaceOrder = async () => {
+    if (cartHasEssentials && !useCartStore.getState().selectedFulfillmentStoreId) {
+      const ready = await ensureFulfillmentForCheckout()
+      if (!ready) return
+    }
+
     if (paymentMethod === 'cod') {
       await handlePlaceCodOrder()
       return
@@ -465,7 +514,7 @@ export default function DynamicCheckoutPage() {
       return
     }
 
-    const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
+    const payload = { ...buildCheckoutPayload(), address: deliveryAddress.trim() }
     let activeIntentId: string | null = null
 
     try {
@@ -639,7 +688,7 @@ export default function DynamicCheckoutPage() {
       return
     }
 
-    const payload = { ...checkoutPayload, address: deliveryAddress.trim() }
+    const payload = { ...buildCheckoutPayload(), address: deliveryAddress.trim() }
 
     try {
       const res = await authFetch(
@@ -711,7 +760,7 @@ export default function DynamicCheckoutPage() {
     }
 
     const canProceed = await runFulfillmentCheck()
-    if (!canProceed) return  // fulfillment modal is now open, waiting for store selection
+    if (!canProceed) return
 
     setShowPaymentSheet(true)
   }
@@ -915,6 +964,8 @@ export default function DynamicCheckoutPage() {
                   else redirectToCheckoutLogin()
                   return
                 }
+                const canProceed = await ensureFulfillmentForCheckout()
+                if (!canProceed) return
                 setShowPaymentSheet(true)
               })()
             }}
