@@ -90,6 +90,12 @@ const SOURCE_LOOKUP = new Map<string, CatalogSegmentSlug>(
   Object.entries(SOURCE_CATEGORY_TO_SEGMENT).map(([k, v]) => [k.toLowerCase(), v]),
 )
 
+export function sourceCategoriesForSegment(segment: CatalogSegmentSlug): string[] {
+  return Object.entries(SOURCE_CATEGORY_TO_SEGMENT)
+    .filter(([, slug]) => slug === segment)
+    .map(([source]) => source)
+}
+
 export function lookupSourceCategorySegment(
   sourceCategory: string | null | undefined,
 ): CatalogSegmentSlug | null {

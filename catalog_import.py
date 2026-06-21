@@ -110,22 +110,33 @@ def rows_to_csv(rows: list[dict]) -> str:
 # ── Step 1: Deactivate all existing catalog items ─────────────────────────────
 def deactivate_all():
     print("Fetching existing catalog items...")
-    resp = api_get("/api/admin/catalog?take=1000")
-    resp.raise_for_status()
-    items = resp.json().get("items") or resp.json().get("data", [])
-    print(f"  Found {len(items)} items to deactivate.")
+    total = 0
+    rounds = 0
+    while rounds < 30:
+        rounds += 1
+        resp = api_get("/api/admin/catalog?take=500")
+        resp.raise_for_status()
+        items = resp.json().get("items") or resp.json().get("data", [])
+        if not items:
+            break
 
-    failed = 0
-    for i, item in enumerate(items, 1):
-        r = api_patch(f"/api/admin/catalog/{item['id']}", {"isActive": False})
-        if r.status_code not in (200, 204):
-            failed += 1
-            print(f"  [!] Failed to deactivate {item['id']}: {r.status_code}")
-        if i % 25 == 0:
-            print(f"  Deactivated {i}/{len(items)}...")
-        time.sleep(0.05)   # gentle rate-limit
+        failed = 0
+        for i, item in enumerate(items, 1):
+            r = api_patch(f"/api/admin/catalog/{item['id']}", {"isActive": False})
+            if r.status_code not in (200, 204):
+                failed += 1
+                print(f"  [!] Failed to deactivate {item['id']}: {r.status_code}")
+            if i % 25 == 0:
+                print(f"  Round {rounds}: deactivated {i}/{len(items)}...")
+            time.sleep(0.03)
 
-    print(f"  Done. {len(items) - failed} deactivated, {failed} failed.\n")
+        batch_ok = len(items) - failed
+        total += batch_ok
+        print(f"  Round {rounds}: {batch_ok} deactivated ({failed} failed).")
+        if len(items) < 500:
+            break
+
+    print(f"  Done. {total} deactivated in {rounds} round(s).\n")
 
 
 # ── Step 3: Upload in chunks ───────────────────────────────────────────────────

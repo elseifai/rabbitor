@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import {
-  buildEssentialsBroadWhere,
+  buildEssentialsSegmentWhere,
   dedupeEssentialsCatalogProducts,
   filterEssentialsByCategorySlug,
   mapMasterItemToEssentialsProduct,
@@ -30,12 +30,15 @@ export async function GET(request: NextRequest) {
     const q = url.searchParams.get('q')?.trim()
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 48) || 48))
 
-    const where = buildEssentialsBroadWhere(q)
+    const categorySlug = category ? normalizeCategorySlug(category) : null
+    const segment = categorySlug ? normalizeCatalogSegmentSlug(categorySlug) : null
+
+    const where = buildEssentialsSegmentWhere(segment, q)
 
     const items = await prisma.masterCatalogItem.findMany({
       where,
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
-      take: 2000,
+      orderBy: [{ name: 'asc' }],
+      take: segment && segment !== 'kirana' ? 1000 : 3000,
     })
 
     const mapped = items.map(mapMasterItemToEssentialsProduct)
@@ -43,9 +46,6 @@ export async function GET(request: NextRequest) {
       ? filterEssentialsByCategorySlug(mapped, category)
       : mapped
     const data = dedupeEssentialsCatalogProducts(filtered).slice(0, limit)
-
-    const categorySlug = category ? normalizeCategorySlug(category) : null
-    const segment = categorySlug ? normalizeCatalogSegmentSlug(categorySlug) : null
 
     return NextResponse.json({
       success: true,

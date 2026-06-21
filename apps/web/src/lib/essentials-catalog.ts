@@ -10,6 +10,7 @@ import {
   resolveProductCatalogSegment,
   type CatalogSegmentSlug,
 } from '@/lib/essentials-catalog-segments'
+import { sourceCategoriesForSegment } from '@/lib/essentials-source-category-map'
 import { ESSENTIALS_STORE_TYPES } from '@/lib/platform-categories'
 
 /** Virtual store id used in cart for global-catalog Essentials items. */
@@ -84,6 +85,28 @@ export function buildEssentialsBroadWhere(q?: string) {
   }
 
   return searchFilter ? { AND: [base, searchFilter] } : base
+}
+
+/** Prisma filter scoped to a segment — uses DB category slug + source subcategories. */
+export function buildEssentialsSegmentWhere(
+  segment: CatalogSegmentSlug | null,
+  q?: string,
+) {
+  const base = buildEssentialsBroadWhere(q)
+  if (!segment || segment === 'kirana' || segment === 'pharmacy') return base
+
+  const subcategories = sourceCategoriesForSegment(segment)
+  return {
+    AND: [
+      base,
+      {
+        OR: [
+          { category: segment },
+          ...(subcategories.length > 0 ? [{ subcategory: { in: subcategories } }] : []),
+        ],
+      },
+    ],
+  }
 }
 
 /** @deprecated Use buildEssentialsBroadWhere + filterProductsBySegment */
