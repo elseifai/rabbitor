@@ -54,7 +54,7 @@ export async function GET(
           where: {
             id: { not: id },
             isActive: true,
-            category: catalogItem.category,
+            segmentSlug: catalogItem.segmentSlug,
             storeType: catalogItem.storeType,
           },
           orderBy: { name: 'asc' },

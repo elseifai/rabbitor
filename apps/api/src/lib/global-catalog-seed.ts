@@ -254,7 +254,7 @@ export async function runGlobalCatalogSeed(
           sku: mapped.sku,
           name: mapped.name,
           storeType: mapped.storeType,
-          category: mapped.category,
+          segmentSlug: mapped.category,
           subcategory: mapped.subcategory,
           basePrice: mapped.basePrice,
           defaultUnit: mapped.defaultUnit,
@@ -266,7 +266,7 @@ export async function runGlobalCatalogSeed(
         update: {
           name: mapped.name,
           storeType: mapped.storeType,
-          category: mapped.category,
+          segmentSlug: mapped.category,
           subcategory: mapped.subcategory,
           basePrice: mapped.basePrice,
           defaultUnit: mapped.defaultUnit,

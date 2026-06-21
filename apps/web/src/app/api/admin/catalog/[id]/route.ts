@@ -90,7 +90,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
           name: item.name,
           description: item.description,
           itemType: item.itemType,
-          category: item.category,
+          category: item.segmentSlug,
           subcategory: item.subcategory,
           basePrice: item.basePrice,
           imageUrl: item.imageUrl,
@@ -153,7 +153,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const data: Record<string, unknown> = {}
     if (body.name?.trim()) data.name = body.name.trim()
     if (body.description !== undefined) data.description = body.description
-    if (body.category?.trim()) data.category = body.category.trim()
+    if (body.category?.trim()) data.segmentSlug = body.category.trim()
     if (body.subcategory !== undefined) data.subcategory = body.subcategory
     if (body.basePrice != null) data.basePrice = Math.max(0, body.basePrice)
     if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl

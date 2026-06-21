@@ -21,7 +21,7 @@ export async function GET(request: Request) {
         id: `db-${i.id}`,
         name: i.name,
         description: i.description ?? '',
-        category: i.category,
+        category: i.segmentSlug,
         defaultUnit: i.defaultUnit,
         suggestedPrice: i.basePrice,
         imageUrl: i.imageUrl ?? undefined,

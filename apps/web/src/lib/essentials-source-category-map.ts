@@ -90,6 +90,39 @@ const SOURCE_LOOKUP = new Map<string, CatalogSegmentSlug>(
   Object.entries(SOURCE_CATEGORY_TO_SEGMENT).map(([k, v]) => [k.toLowerCase(), v]),
 )
 
+/** Source categories that belong exclusively to Dairy, Bread & Eggs. */
+export const DAIRY_SOURCE_CATEGORIES = new Set([
+  'Milk & Paneer',
+  'Butter & Cheese',
+  'Curd & Yoghurt',
+  'Eggs',
+  'Bread & Bakery',
+])
+
+/** Source categories that belong exclusively to Masala & Dry Fruits. */
+export const MASALA_SOURCE_CATEGORIES = new Set([
+  'Sugar, Salt & Spices',
+  'Dry Fruits & Nuts',
+  'Herbs & Leafy Greens',
+])
+
+const DAIRY_SOURCE_LOOKUP = new Set(
+  [...DAIRY_SOURCE_CATEGORIES].map((c) => c.toLowerCase()),
+)
+const MASALA_SOURCE_LOOKUP = new Set(
+  [...MASALA_SOURCE_CATEGORIES].map((c) => c.toLowerCase()),
+)
+
+export function isDairySourceCategory(sourceCategory: string | null | undefined): boolean {
+  if (!sourceCategory?.trim()) return false
+  return DAIRY_SOURCE_LOOKUP.has(sourceCategory.trim().toLowerCase())
+}
+
+export function isMasalaSourceCategory(sourceCategory: string | null | undefined): boolean {
+  if (!sourceCategory?.trim()) return false
+  return MASALA_SOURCE_LOOKUP.has(sourceCategory.trim().toLowerCase())
+}
+
 export function sourceCategoriesForSegment(segment: CatalogSegmentSlug): string[] {
   return Object.entries(SOURCE_CATEGORY_TO_SEGMENT)
     .filter(([, slug]) => slug === segment)

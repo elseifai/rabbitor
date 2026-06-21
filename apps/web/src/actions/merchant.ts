@@ -230,7 +230,7 @@ export async function addProductAction(input: {
             sku,
             name: productName,
             storeType,
-            category: productCategory,
+            segmentSlug: productCategory,
             basePrice: input.price,
             defaultUnit: productUnit,
             description: input.description?.trim() || null,

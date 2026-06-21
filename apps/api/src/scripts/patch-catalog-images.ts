@@ -18,7 +18,7 @@ const STORE_TYPE_TO_SECTOR: Record<string, string> = {
 
 async function main() {
   const items = await prisma.masterCatalogItem.findMany({
-    select: { id: true, name: true, imageUrl: true, category: true, storeType: true, sku: true },
+    select: { id: true, name: true, imageUrl: true, segmentSlug: true, storeType: true, sku: true },
   });
 
   console.log(JSON.stringify({ event: "patch_start", total: items.length }));
@@ -44,7 +44,7 @@ async function main() {
     const skuSlug = item.sku?.replace(/^GC-[A-Z]+-/, "").toLowerCase().replace(/-/g, "-") ?? "";
     const guessedFilename = `${skuSlug}.jpg`;
 
-    let imageUrl = resolveProductImage(guessedFilename, item.category, sector);
+    let imageUrl = resolveProductImage(guessedFilename, item.segmentSlug, sector);
 
     // If still category fallback, try product name-based lookup
     const isFallback = Object.values(CATEGORY_FALLBACK_IMAGES).includes(imageUrl) ||
@@ -57,7 +57,7 @@ async function main() {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 40) + ".jpg";
-      const fromName = resolveProductImage(nameSlug, item.category, sector);
+      const fromName = resolveProductImage(nameSlug, item.segmentSlug, sector);
       if (fromName !== imageUrl) imageUrl = fromName;
     }
 

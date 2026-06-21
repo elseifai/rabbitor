@@ -6,6 +6,8 @@
 
 import type { StoreType } from '@rabbit/database'
 import {
+  isDairySourceCategory,
+  isMasalaSourceCategory,
   isNonEssentialsSourceCategory,
   lookupSourceCategorySegment,
 } from '@/lib/essentials-source-category-map'
@@ -172,11 +174,30 @@ function isAttaRiceOilDal(text: string): boolean {
   ])
 }
 
-function isMasalaDryFruit(text: string, input: ClassifyInput): boolean {
-  if (matchesAny(text, [/\b(cheese|butter|yogurt|yoghurt|bread|milk)\b/])) return false
-  if (input.category === 'herbs-leafy-greens') return true
+function isDrySpiceHerb(text: string, input: ClassifyInput): boolean {
+  if (isFreshProduce(text, input)) return false
+  if (
+    matchesAny(text, [
+      /\b(fresh\b|leaves\b|bunch|hydroponic|basket|bunched)\b/,
+    ]) &&
+    matchesAny(text, [
+      /\b(mint|coriander leaves|cilantro|fenugreek leaves|methi leaves|spinach|palak|lettuce|basil|parsley|dill|curry leaves)\b/,
+    ])
+  ) {
+    return false
+  }
   return matchesAny(text, [
-    /\b(powder|masala|spice|fenugreek|coriander powder|turmeric|chilli|chili|jeera|cumin|cardamom|pepper|clove|nutmeg|dry fruit|almond|cashew|raisin|pista|walnut|kaju|badam|dates|anjeer)\b/,
+    /\b(powder|whole|seeds|masala|spice|dhania|coriander powder|fenugreek|methi seeds|turmeric|chilli|chili|jeera|cumin|pepper|clove|nutmeg|cardamom|bay leaf|star anise|mustard seed|ajwain|saunf|fennel|organic india|pouch\b.*\b\d+\s*g)\b/,
+  ])
+}
+
+function isMasalaDryFruit(text: string, input: ClassifyInput): boolean {
+  if (matchesAny(text, [/\b(cheese|butter|yogurt|yoghurt|bread|milk|curd)\b/])) return false
+  if (isFreshProduce(text, input)) return false
+  const sub = (input.subcategory ?? '').toLowerCase()
+  if (sub === 'herbs & leafy greens') return isDrySpiceHerb(text, input)
+  return matchesAny(text, [
+    /\b(powder|masala|spice|fenugreek|coriander powder|turmeric|chilli|chili|jeera|cumin|cardamom|pepper|clove|nutmeg|dry fruit|almond|cashew|raisin|pista|walnut|kaju|badam|dates|anjeer|salt\b|sugar\b|jaggery\b)\b/,
   ])
 }
 
@@ -234,6 +255,9 @@ function isPackagedFood(text: string): boolean {
 
 function isDairy(text: string, input: ClassifyInput): boolean {
   const sub = (input.subcategory ?? '').toLowerCase()
+  if (isAttaRiceOilDal(text) && !matchesAny(text, [/\b(bread|pav|bun|loaf|ghee)\b/])) {
+    return false
+  }
   if (
     sub === 'milk & paneer' ||
     sub === 'curd & yoghurt' ||
@@ -242,10 +266,52 @@ function isDairy(text: string, input: ClassifyInput): boolean {
   ) {
     return true
   }
-  if (input.storeType === 'DAIRY') return true
+  if (sub === 'eggs') return isEggProduct(text)
+  if (input.storeType === 'DAIRY' && isDairySourceCategory(input.subcategory)) return true
   return matchesAny(text, [
     /\b(milk|paneer|curd|yoghurt|yogurt|butter|cheese|ghee|bread|pav|bun|loaf|cream|lassi|buttermilk)\b/,
   ])
+}
+
+/** Dairy segment allowlist — only the five Zepto dairy source aisles (+ valid eggs). */
+export function isStrictDairyProduct(input: ClassifyInput): boolean {
+  const text = hay(input)
+  const sub = input.subcategory?.trim().toLowerCase() ?? ''
+
+  if (!isDairySourceCategory(input.subcategory)) return false
+  if (isAttaRiceOilDal(text) && !matchesAny(text, [/\b(bread|pav|bun|loaf)\b/])) return false
+  if (isMasalaDryFruit(text, input) || isRawMeatFish(text, input)) return false
+
+  if (sub === 'eggs') {
+    return (
+      isEggProduct(text) ||
+      matchesAny(text, [
+        /\b(milk|paneer|curd|yogurt|yoghurt|butter|cheese|bread|pav|bun|cream|lassi|buttermilk)\b/,
+      ])
+    )
+  }
+
+  return true
+}
+
+/** Masala segment allowlist — spices, dry fruits, dry herbs only (no fresh produce). */
+export function isStrictMasalaProduct(input: ClassifyInput): boolean {
+  const text = hay(input)
+  const sub = input.subcategory?.trim().toLowerCase() ?? ''
+
+  if (isFreshProduce(text, input)) return false
+  if (matchesAny(text, [/\b(yogurt|yoghurt|curd|cheese|butter|milk|bread|noodle|biscuit)\b/])) {
+    return false
+  }
+
+  if (sub === 'sugar, salt & spices' || sub === 'dry fruits & nuts') return true
+  if (sub === 'herbs & leafy greens') return isDrySpiceHerb(text, input)
+
+  if (!sub || !isMasalaSourceCategory(input.subcategory)) {
+    return isMasalaDryFruit(text, input) && !isFreshProduce(text, input)
+  }
+
+  return false
 }
 
 /** Infer segment — source category matrix first, then name-based overrides. */
@@ -261,8 +327,20 @@ export function resolveProductCatalogSegment(input: ClassifyInput): CatalogSegme
     if (sourceCategory?.toLowerCase() === 'eggs' && !isEggProduct(text) && !isDairy(text, input)) {
       return classifyByKeywords(text, input)
     }
-    // Fresh produce names must not stay in masala when source was wrong
+    // Fresh produce must not stay in masala
     if (fromMatrix === 'masala-dry-fruits' && isFreshProduce(text, input)) return 'veggies'
+    // Herbs & Leafy Greens: fresh leaves → veggies, dry spices → masala
+    if (sourceCategory?.toLowerCase() === 'herbs & leafy greens') {
+      if (isFreshProduce(text, input)) return 'veggies'
+      if (!isDrySpiceHerb(text, input)) return classifyByKeywords(text, input)
+    }
+    // Dairy sources only when product matches aisle intent
+    if (fromMatrix === 'dairy' && !isStrictDairyProduct(input)) {
+      return classifyByKeywords(text, input)
+    }
+    if (fromMatrix === 'masala-dry-fruits' && !isStrictMasalaProduct(input)) {
+      return classifyByKeywords(text, input)
+    }
     return fromMatrix
   }
 
@@ -282,15 +360,15 @@ function classifyByKeywords(text: string, input: ClassifyInput): CatalogSegmentS
   if (isMunchies(text)) return 'munchies'
   if (isSweet(text)) return 'sweet-cravings'
   if (isSpreadsDips(text)) return 'spreads-dips'
-  if (isDairy(text, input)) return 'dairy'
-  if (isMasalaDryFruit(text, input)) return 'masala-dry-fruits'
+  if (isDairy(text, input) && isStrictDairyProduct(input)) return 'dairy'
+  if (isMasalaDryFruit(text, input) && isStrictMasalaProduct(input)) return 'masala-dry-fruits'
   if (isAttaRiceOilDal(text)) return 'atta-rice-oil-dals'
   if (isFreshProduce(text, input)) return 'veggies'
   if (isBreakfastSauces(text)) return 'breakfast-sauces'
   if (isPackagedFood(text)) return 'packaged-food'
 
   if (input.storeType === 'VEGETABLE' && input.category === 'herbs-leafy-greens') {
-    return 'masala-dry-fruits'
+    return isDrySpiceHerb(text, input) ? 'masala-dry-fruits' : 'veggies'
   }
 
   return 'kirana'
@@ -329,7 +407,13 @@ export function filterProductsBySegment<
     )
   }
 
-  return browseable.filter((item) => resolveProductCatalogSegment(item) === segment)
+  return browseable.filter((item) => {
+    const resolved = resolveProductCatalogSegment(item)
+    if (resolved !== segment) return false
+    if (segment === 'dairy') return isStrictDairyProduct(item)
+    if (segment === 'masala-dry-fruits') return isStrictMasalaProduct(item)
+    return true
+  })
 }
 
 export function segmentLabel(slug: string): string {

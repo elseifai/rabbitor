@@ -14,14 +14,14 @@ export async function GET(request: Request) {
     const items = await prisma.masterCatalogItem.findMany({
       where: {
         isActive: true,
-        OR: [{ category: slug }, { subcategory: slug }],
+        OR: [{ segmentSlug: slug }, { subcategory: slug }],
       },
       select: {
         id: true,
         name: true,
         sku: true,
         storeType: true,
-        category: true,
+        segmentSlug: true,
         subcategory: true,
         basePrice: true,
         imageUrl: true,
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
         isAvailable: true,
         OR: [
           { category: slug },
-          { masterCatalogItem: { category: slug } },
+          { masterCatalogItem: { segmentSlug: slug } },
           { masterCatalogItem: { subcategory: slug } },
         ],
       },

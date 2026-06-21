@@ -23,13 +23,13 @@ export async function GET(request: Request) {
         where: {
           isActive: true,
           ...(storeType ? { storeType } : {}),
-          ...(category ? { category: { contains: category, mode: 'insensitive' } } : {}),
+          ...(category ? { segmentSlug: { contains: category, mode: 'insensitive' } } : {}),
           ...(q
             ? {
                 OR: [
                   { name: { contains: q, mode: 'insensitive' } },
                   { sku: { contains: q, mode: 'insensitive' } },
-                  { category: { contains: q, mode: 'insensitive' } },
+                  { segmentSlug: { contains: q, mode: 'insensitive' } },
                   { subcategory: { contains: q, mode: 'insensitive' } },
                 ],
               }
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
           name: item.name,
           description: item.description,
           itemType: item.itemType,
-          category: item.category,
+          category: item.segmentSlug,
           subcategory: item.subcategory,
           basePrice: item.basePrice,
           imageUrl: item.imageUrl,

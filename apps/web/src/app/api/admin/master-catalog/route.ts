@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         storeType: i.storeType,
         name: i.name,
         description: i.description,
-        category: i.category,
+        category: i.segmentSlug,
         defaultUnit: i.defaultUnit,
         basePrice: i.basePrice,
         imageUrl: i.imageUrl,
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       data: {
         name: body.name.trim(),
         storeType: body.storeType ?? 'GENERAL',
-        category: body.category?.trim() || 'general',
+        segmentSlug: body.category?.trim() || 'general',
         basePrice: body.basePrice,
         description: body.description?.trim() || null,
         defaultUnit: body.defaultUnit?.trim() || 'piece',

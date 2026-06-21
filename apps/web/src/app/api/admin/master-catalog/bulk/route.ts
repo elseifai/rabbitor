@@ -29,7 +29,7 @@ export async function POST(request: Request) {
           data: {
             name: item.name.trim(),
             storeType: item.storeType ?? 'GENERAL',
-            category: item.category?.trim() || 'general',
+            segmentSlug: item.category?.trim() || 'general',
             basePrice: item.basePrice,
             defaultUnit: item.defaultUnit?.trim() || 'piece',
             description: item.description?.trim() || null,

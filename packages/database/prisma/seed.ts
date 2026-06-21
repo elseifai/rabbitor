@@ -582,18 +582,18 @@ async function main() {
 
   console.log('📦 Creating master catalog templates…')
   const masterCatalogItems = [
-    { storeType: StoreType.KIRANA, name: 'Maggi 2-Minute Noodles', category: 'instant', basePrice: 14, defaultUnit: '70g pack' },
-    { storeType: StoreType.KIRANA, name: 'Tata Salt 1kg', category: 'staples', basePrice: 28, defaultUnit: '1 kg' },
-    { storeType: StoreType.KIRANA, name: 'Fortune Sunflower Oil 1L', category: 'oils', basePrice: 145, defaultUnit: '1 L' },
-    { storeType: StoreType.FISH, name: 'Surmai (Kingfish)', category: 'premium', basePrice: 650, defaultUnit: '500g' },
-    { storeType: StoreType.FISH, name: 'Jumbo Prawns', category: 'shellfish', basePrice: 480, defaultUnit: '500g' },
-    { storeType: StoreType.VEGETABLE, name: 'Tomato (Tamatar)', category: 'vegetables', basePrice: 40, defaultUnit: '1 kg' },
-    { storeType: StoreType.VEGETABLE, name: 'Onion (Pyaz)', category: 'vegetables', basePrice: 35, defaultUnit: '1 kg' },
-    { storeType: StoreType.PHARMACY, name: 'Paracetamol 500mg', category: 'otc', basePrice: 25, defaultUnit: 'strip of 15' },
-    { storeType: StoreType.BAKERY, name: 'Pav Bread', category: 'bread', basePrice: 30, defaultUnit: '6 pcs' },
-    { storeType: StoreType.DAIRY, name: 'Amul Taaza Milk', category: 'milk', basePrice: 58, defaultUnit: '1L pouch' },
-    { storeType: StoreType.MEAT, name: 'Chicken Curry Cut', category: 'poultry', basePrice: 220, defaultUnit: '1 kg' },
-    { storeType: StoreType.GENERAL, name: 'Bisleri Water', category: 'beverages', basePrice: 20, defaultUnit: '1L bottle' },
+    { storeType: StoreType.KIRANA, name: 'Maggi 2-Minute Noodles', segmentSlug: 'instant', basePrice: 14, defaultUnit: '70g pack' },
+    { storeType: StoreType.KIRANA, name: 'Tata Salt 1kg', segmentSlug: 'staples', basePrice: 28, defaultUnit: '1 kg' },
+    { storeType: StoreType.KIRANA, name: 'Fortune Sunflower Oil 1L', segmentSlug: 'oils', basePrice: 145, defaultUnit: '1 L' },
+    { storeType: StoreType.FISH, name: 'Surmai (Kingfish)', segmentSlug: 'premium', basePrice: 650, defaultUnit: '500g' },
+    { storeType: StoreType.FISH, name: 'Jumbo Prawns', segmentSlug: 'shellfish', basePrice: 480, defaultUnit: '500g' },
+    { storeType: StoreType.VEGETABLE, name: 'Tomato (Tamatar)', segmentSlug: 'vegetables', basePrice: 40, defaultUnit: '1 kg' },
+    { storeType: StoreType.VEGETABLE, name: 'Onion (Pyaz)', segmentSlug: 'vegetables', basePrice: 35, defaultUnit: '1 kg' },
+    { storeType: StoreType.PHARMACY, name: 'Paracetamol 500mg', segmentSlug: 'otc', basePrice: 25, defaultUnit: 'strip of 15' },
+    { storeType: StoreType.BAKERY, name: 'Pav Bread', segmentSlug: 'bread', basePrice: 30, defaultUnit: '6 pcs' },
+    { storeType: StoreType.DAIRY, name: 'Amul Taaza Milk', segmentSlug: 'milk', basePrice: 58, defaultUnit: '1L pouch' },
+    { storeType: StoreType.MEAT, name: 'Chicken Curry Cut', segmentSlug: 'poultry', basePrice: 220, defaultUnit: '1 kg' },
+    { storeType: StoreType.GENERAL, name: 'Bisleri Water', segmentSlug: 'beverages', basePrice: 20, defaultUnit: '1L bottle' },
   ]
   await prisma.masterCatalogItem.createMany({ data: masterCatalogItems })
 

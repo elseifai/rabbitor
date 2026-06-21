@@ -19,7 +19,7 @@ export async function getCatalogItems(req: Request, res: Response) {
         OR: [
           { name: { contains: q, mode: "insensitive" } },
           { sku: { contains: q, mode: "insensitive" } },
-          { category: { contains: q, mode: "insensitive" } },
+          { segmentSlug: { contains: q, mode: "insensitive" } },
         ],
       }),
       ...(storeType && { storeType: storeType as StoreType }),
@@ -33,7 +33,7 @@ export async function getCatalogItems(req: Request, res: Response) {
       name: true,
       description: true,
       itemType: true,
-      category: true,
+      segmentSlug: true,
       subcategory: true,
       basePrice: true,
       imageUrl: true,
@@ -98,7 +98,7 @@ export async function getCatalogStats(req: Request, res: Response) {
   const [totalItems, categoryGroups, storeTypeGroups, shopMappings] = await Promise.all([
     prisma.masterCatalogItem.count({ where: { isActive: true } }),
     prisma.masterCatalogItem.groupBy({
-      by: ["category"],
+      by: ["segmentSlug"],
       where: { isActive: true },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
@@ -118,7 +118,7 @@ export async function getCatalogStats(req: Request, res: Response) {
       totalItems,
       shopMappings,
       categoryBreakdown: categoryGroups.map((g) => ({
-        category: g.category,
+        category: g.segmentSlug,
         count: g._count.id,
       })),
       storeTypeBreakdown: storeTypeGroups.map((g) => ({
@@ -212,7 +212,7 @@ export async function bulkUpsertCatalog(req: Request, res: Response) {
           sku,
           name,
           storeType,
-          category: String(item.category ?? "general"),
+          segmentSlug: String(item.segmentSlug ?? item.category ?? "general"),
           subcategory: item.subcategory ? String(item.subcategory) : null,
           basePrice,
           defaultUnit: unit,
@@ -292,7 +292,7 @@ export async function autoPromoteToCatalog(req: Request, res: Response) {
         sku,
         name: product.name,
         storeType,
-        category: product.category ?? "general",
+        segmentSlug: product.category ?? "general",
         subcategory: null,
         basePrice: product.price,
         defaultUnit: product.unit ?? "1 unit",

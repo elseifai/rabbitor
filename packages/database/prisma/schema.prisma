@@ -43,7 +43,8 @@ model MasterCatalogItem {
   description  String?
   /// VEG | NON-VEG | EGG | SHORT-SHELF dietary / shelf-life classification
   itemType     CatalogItemType  @default(VEG)
-  category     String           @default("general")
+  /// Essentials home-feed segment slug (veggies, dairy, masala-dry-fruits, …)
+  segmentSlug  String           @default("general") @map("segment_slug")
   subcategory  String?
   defaultUnit  String           @default("piece")
   basePrice    Float
@@ -55,7 +56,7 @@ model MasterCatalogItem {
   shopProducts Product[]
 
   @@index([storeType, isActive])
-  @@index([category])
+  @@index([segmentSlug, isActive])
   @@index([name])
   @@index([itemType])
 }

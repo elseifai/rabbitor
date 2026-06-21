@@ -50,7 +50,7 @@ export async function POST(request: Request) {
             name: item.name,
             description: item.description,
             image: item.imageUrl,
-            category: item.category,
+            category: item.segmentSlug,
             unit: item.defaultUnit,
           },
         })
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
             stock,
             maxPurchaseQty,
             binLocation: body.binLocation?.trim() || null,
-            category: item.category,
+            category: item.segmentSlug,
             unit: item.defaultUnit,
             isAvailable: stock > 0,
           },

@@ -9,7 +9,7 @@ export async function bulkUpsertMasterCatalog(rows: CatalogCsvRow[]) {
       create: {
         sku: row.sku,
         name: row.name,
-        category: row.category,
+        segmentSlug: row.category,
         subcategory: row.subcategory,
         basePrice: row.basePrice,
         description: row.description,
@@ -21,7 +21,7 @@ export async function bulkUpsertMasterCatalog(rows: CatalogCsvRow[]) {
       },
       update: {
         name: row.name,
-        category: row.category,
+        segmentSlug: row.category,
         subcategory: row.subcategory,
         basePrice: row.basePrice,
         description: row.description,

@@ -101,7 +101,7 @@ export function buildEssentialsSegmentWhere(
       base,
       {
         OR: [
-          { category: segment },
+          { segmentSlug: segment },
           ...(subcategories.length > 0 ? [{ subcategory: { in: subcategories } }] : []),
         ],
       },
@@ -153,7 +153,7 @@ export function mapMasterItemToEssentialsProduct(item: {
   id: string
   name: string
   description: string | null
-  category: string
+  segmentSlug: string
   subcategory?: string | null
   basePrice: number
   defaultUnit: string
@@ -162,7 +162,7 @@ export function mapMasterItemToEssentialsProduct(item: {
 }): EssentialsCatalogProduct {
   const catalogSegment = resolveProductCatalogSegment({
     name: item.name,
-    category: item.category,
+    category: item.segmentSlug,
     subcategory: item.subcategory ?? null,
     storeType: item.storeType,
   })
@@ -171,7 +171,7 @@ export function mapMasterItemToEssentialsProduct(item: {
     id: item.id,
     name: item.name,
     description: item.description,
-    category: item.category,
+    category: item.segmentSlug,
     subcategory: item.subcategory ?? null,
     catalogSegment,
     price: item.basePrice,
