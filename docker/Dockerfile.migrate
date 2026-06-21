@@ -15,4 +15,4 @@ RUN pnpm db:generate
 
 ENV RUN_SEED=true
 
-CMD ["sh", "-c", "pnpm db:push && if [ \"$RUN_SEED\" = \"true\" ]; then pnpm db:seed; fi"]
+CMD ["sh", "-c", "pnpm db:deploy && if [ \"$RUN_SEED\" = \"true\" ]; then pnpm db:seed; fi"]
