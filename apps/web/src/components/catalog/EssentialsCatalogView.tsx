@@ -11,7 +11,7 @@ import {
 import {
   ESSENTIALS_STORE_ID,
   ESSENTIALS_STORE_NAME,
-  categorySlugToStoreType,
+  dedupeEssentialsCatalogProducts,
   type EssentialsCatalogProduct,
 } from '@/lib/essentials-catalog'
 import { essentialsCategoryLabel } from '@/lib/category-routing'
@@ -44,15 +44,17 @@ export function EssentialsCatalogView() {
   const title = useMemo(() => essentialsCategoryLabel(category), [category])
   const meta = PLATFORM_META.ESSENTIALS
 
+  const uniqueProducts = useMemo(
+    () => dedupeEssentialsCatalogProducts(products),
+    [products],
+  )
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
 
-    const params = new URLSearchParams({ limit: '100' })
-    params.set('category', category)
-    const storeType = categorySlugToStoreType(category)
-    if (storeType) params.set('storeType', storeType)
+    const params = new URLSearchParams({ limit: '100', category })
 
     fetch(`/api/catalog/essentials?${params}`)
       .then((r) => r.json())
@@ -119,7 +121,7 @@ export function EssentialsCatalogView() {
               Retry
             </button>
           </div>
-        ) : products.length === 0 ? (
+        ) : uniqueProducts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[#E0E0E0] bg-white py-16 text-center">
             <p className="text-sm font-semibold text-[#878787]">No products in this category yet.</p>
             <Link href="/" className="mt-3 inline-block text-sm font-bold text-[#FF6B35]">
@@ -129,14 +131,14 @@ export function EssentialsCatalogView() {
         ) : (
           <>
             <p className="mb-3 text-xs text-[#878787]">
-              {products.length} item{products.length !== 1 ? 's' : ''} · Delivered from nearest
-              dark store
+              {uniqueProducts.length} item{uniqueProducts.length !== 1 ? 's' : ''} · Delivered from
+              nearest dark store
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {products.map((p) => (
+              {uniqueProducts.map((product) => (
                 <UnifiedProductCard
-                  key={p.id}
-                  product={toUnifiedProduct(p)}
+                  key={product.id}
+                  product={toUnifiedProduct(product)}
                   variant="GROCERY"
                   eagerImage={false}
                 />

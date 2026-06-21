@@ -2,62 +2,42 @@
  * Public Essentials catalog — customer-facing global master catalog.
  *
  * GET /api/catalog/essentials
- *   ?category=groceries|pharmacy|vegetables|fresh-fish
- *   ?storeType=KIRANA
+ *   ?category=kirana|veggies|pharmacy|fish|meat|dairy
  *   ?q=search term
  *   ?limit=40
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import type { StoreType } from '@rabbit/database'
 import {
+  buildEssentialsCategoryWhere,
   categorySlugToStoreType,
-  essentialsStoreTypesList,
+  dedupeEssentialsCatalogProducts,
   mapMasterItemToEssentialsProduct,
 } from '@/lib/essentials-catalog'
+import { normalizeCategorySlug } from '@/lib/category-routing'
 
 export const dynamic = 'force-dynamic'
 
-const VALID_STORE_TYPES = new Set(essentialsStoreTypesList())
-
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = request.nextUrl
-    const category = searchParams.get('category')?.trim()
-    const storeTypeParam = searchParams.get('storeType')?.trim().toUpperCase()
-    const q = searchParams.get('q')?.trim()
-    const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') ?? 48) || 48))
+    const url = request.nextUrl
+    const category = url.searchParams.get('category')?.trim() ?? null
+    const q = url.searchParams.get('q')?.trim()
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 48) || 48))
 
-    let storeTypeFilter: StoreType | undefined
-    if (storeTypeParam && VALID_STORE_TYPES.has(storeTypeParam as StoreType)) {
-      storeTypeFilter = storeTypeParam as StoreType
-    } else if (category) {
-      storeTypeFilter = categorySlugToStoreType(category)
-    }
+    const where = buildEssentialsCategoryWhere(category, q)
 
     const items = await prisma.masterCatalogItem.findMany({
-      where: {
-        isActive: true,
-        storeType: storeTypeFilter
-          ? storeTypeFilter
-          : { in: essentialsStoreTypesList() },
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q, mode: 'insensitive' } },
-                { category: { contains: q, mode: 'insensitive' } },
-                { subcategory: { contains: q, mode: 'insensitive' } },
-                { sku: { contains: q, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ storeType: 'asc' }, { name: 'asc' }],
-      take: limit,
+      where,
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      take: limit * 2,
     })
 
-    const data = items.map(mapMasterItemToEssentialsProduct)
+    const mapped = items.map(mapMasterItemToEssentialsProduct)
+    const data = dedupeEssentialsCatalogProducts(mapped).slice(0, limit)
+
+    const categorySlug = category ? normalizeCategorySlug(category) : null
 
     return NextResponse.json({
       success: true,
@@ -65,7 +45,8 @@ export async function GET(request: NextRequest) {
       meta: {
         total: data.length,
         source: 'global-catalog',
-        storeType: storeTypeFilter ?? 'ALL_ESSENTIALS',
+        category: categorySlug ?? 'ALL_ESSENTIALS',
+        storeType: categorySlug ? (categorySlugToStoreType(categorySlug) ?? categorySlug) : 'ALL_ESSENTIALS',
       },
     })
   } catch (error) {
