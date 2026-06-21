@@ -14,7 +14,7 @@
     "build": "tsc",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
-    "deploy": "prisma migrate deploy",
+    "migrate:deploy": "prisma migrate deploy",
     "push": "prisma db push --accept-data-loss",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",

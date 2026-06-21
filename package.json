@@ -13,7 +13,7 @@
     "build": "pnpm -r build",
     "db:generate": "pnpm --filter @rabbit/database generate",
     "db:migrate": "pnpm --filter @rabbit/database migrate",
-    "db:deploy": "pnpm --filter @rabbit/database deploy",
+    "db:deploy": "pnpm --filter @rabbit/database migrate:deploy",
     "db:push": "pnpm --filter @rabbit/database push",
     "db:studio": "pnpm --filter @rabbit/database studio",
     "db:seed": "pnpm --filter @rabbit/database seed",
