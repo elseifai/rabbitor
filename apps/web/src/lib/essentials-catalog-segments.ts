@@ -119,6 +119,9 @@ function matchesAny(text: string, patterns: RegExp[]): boolean {
 }
 
 function isFreshProduce(text: string, input: ClassifyInput): boolean {
+  if (matchesAny(text, [/\b(yogurt|yoghurt|curd|cheese|milk|butter|bread|pav|bun)\b/])) {
+    return false
+  }
   if (input.category === 'fresh-fruits' || input.category === 'fresh-vegetables') return true
   const sub = (input.subcategory ?? '').toLowerCase()
   if (sub === 'fresh fruits' || sub === 'fresh vegetables') return true
@@ -156,12 +159,16 @@ function isRawMeatFish(text: string, input: ClassifyInput): boolean {
 }
 
 function isAttaRiceOilDal(text: string): boolean {
+  if (matchesAny(text, [/\b(bread|pav|bun|loaf|cheese|biscuit|cookie|yogurt|yoghurt)\b/])) {
+    return false
+  }
   return matchesAny(text, [
     /\b(atta|flour|wheat|multigrain|rice|basmati|sona masoori|poha|suji|rava|sooji|besan|dal|lentil|moong|urad|chana|toor|masoor|arhar|oil|sunflower|mustard oil|groundnut|soya refined|ghee|sugar|salt|jaggery)\b/,
   ])
 }
 
 function isMasalaDryFruit(text: string, input: ClassifyInput): boolean {
+  if (matchesAny(text, [/\b(cheese|butter|yogurt|yoghurt|bread|milk)\b/])) return false
   if (input.category === 'herbs-leafy-greens') return true
   return matchesAny(text, [
     /\b(powder|masala|spice|fenugreek|coriander powder|turmeric|chilli|chili|jeera|cumin|cardamom|pepper|clove|nutmeg|dry fruit|almond|cashew|raisin|pista|walnut|kaju|badam|dates|anjeer)\b/,
@@ -245,7 +252,7 @@ export function resolveProductCatalogSegment(input: ClassifyInput): CatalogSegme
 
   if (isEggProduct(text) || isRawMeatFish(text, input)) return 'meat-fish-eggs'
   if (isIceCream(text)) return 'ice-cream'
-  if (isFrozen(text)) return 'frozen-food'
+  if (isFrozen(text) && !isDairy(text, input)) return 'frozen-food'
   if (isTeaCoffee(text) && !isMasalaDryFruit(text, input)) return 'tea-coffee'
   if (isColdDrink(text)) return 'cold-drinks'
   if (isBiscuitsCookies(text)) return 'biscuits-cookies'
@@ -253,11 +260,10 @@ export function resolveProductCatalogSegment(input: ClassifyInput): CatalogSegme
   if (isMunchies(text)) return 'munchies'
   if (isSweet(text)) return 'sweet-cravings'
   if (isSpreadsDips(text)) return 'spreads-dips'
-
+  if (isDairy(text, input)) return 'dairy'
   if (isMasalaDryFruit(text, input)) return 'masala-dry-fruits'
   if (isAttaRiceOilDal(text)) return 'atta-rice-oil-dals'
   if (isFreshProduce(text, input)) return 'veggies'
-  if (isDairy(text, input)) return 'dairy'
   if (isBreakfastSauces(text)) return 'breakfast-sauces'
   if (isPackagedFood(text)) return 'packaged-food'
 
