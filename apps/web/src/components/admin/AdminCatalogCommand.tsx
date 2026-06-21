@@ -15,6 +15,7 @@ import {
   Search,
   Sparkles,
   Store,
+  Trash2,
   TrendingUp,
   UploadCloud,
   X,
@@ -128,6 +129,8 @@ export function AdminCatalogCommand() {
   const logRef = useRef<HTMLDivElement>(null)
 
   // ── Image Audit Mode state (handlers declared after `load` below) ──────────
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
   const [auditMode, setAuditMode] = useState(false)
   const [swapItem, setSwapItem] = useState<CatalogItem | null>(null)
   const [swapUrlInput, setSwapUrlInput] = useState('')
@@ -301,6 +304,22 @@ export function AdminCatalogCommand() {
   const openControl = (item: CatalogItem, tab: 'profile' | 'assortment' | 'feedback' = 'profile') => {
     setControlTab(tab)
     setControlItem(item)
+  }
+
+  const handleDelete = async (item: CatalogItem) => {
+    if (!confirm(`Remove "${item.name}" from the Global Catalog? This cannot be undone.`)) return
+    setDeletingId(item.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/catalog/${item.id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error ?? 'Delete failed')
+      void load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const bindToShop = async () => {
@@ -769,6 +788,18 @@ export function AdminCatalogCommand() {
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-orange-500 text-white"
                       >
                         <Plus className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Remove from catalog"
+                        disabled={deletingId === item.id}
+                        onClick={() => void handleDelete(item)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-200 text-red-400 transition hover:border-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                      >
+                        {deletingId === item.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Trash2 className="h-3.5 w-3.5" />
+                        }
                       </button>
                     </div>
                   </td>

@@ -174,3 +174,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ success: false, error: message }, { status: code })
   }
 }
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await requireSession(['ADMIN'])
+    const { id } = await params
+
+    // Detach any linked shop products first (set FK to null) so the delete succeeds
+    await prisma.product.updateMany({
+      where: { masterCatalogItemId: id },
+      data: { masterCatalogItemId: null },
+    })
+
+    await prisma.masterCatalogItem.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Delete failed'
+    const code = /log in|access denied/i.test(message) ? 401 : 500
+    return NextResponse.json({ success: false, error: message }, { status: code })
+  }
+}

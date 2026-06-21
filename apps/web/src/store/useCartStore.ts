@@ -16,6 +16,12 @@ export type CartItemInput = Omit<CartLineItem, 'quantity'>
 interface CartStore {
   items: CartLineItem[]
   pendingItem: { item: CartItemInput; qty: number } | null
+
+  /** Selected dark-store ID chosen via the fulfillment modal before payment. */
+  selectedFulfillmentStoreId: string | null
+  /** Whether the fulfillment store selection has been confirmed by the customer. */
+  fulfillmentConfirmed: boolean
+
   addItem: (item: CartItemInput, qty?: number) => void
   confirmSwitchShop: () => void
   cancelSwitchShop: () => void
@@ -28,6 +34,13 @@ interface CartStore {
   subtotalForShop: (shopId: string) => number
   total: () => number
   itemCount: () => number
+
+  /** Bind the customer-selected fulfillment store to the active checkout session. */
+  setFulfillmentStore: (storeId: string | null) => void
+  /** Mark that the customer has confirmed the fulfillment store choice. */
+  confirmFulfillmentStore: () => void
+  /** Reset fulfillment selection (called on cart clear or new items added). */
+  resetFulfillment: () => void
 }
 
 function appendItem(
@@ -49,6 +62,17 @@ export const useCartStore = create<CartStore>()(
     (set, get) => ({
       items: [],
       pendingItem: null,
+      selectedFulfillmentStoreId: null,
+      fulfillmentConfirmed: false,
+
+      setFulfillmentStore: (storeId) =>
+        set({ selectedFulfillmentStoreId: storeId, fulfillmentConfirmed: false }),
+
+      confirmFulfillmentStore: () =>
+        set({ fulfillmentConfirmed: true }),
+
+      resetFulfillment: () =>
+        set({ selectedFulfillmentStoreId: null, fulfillmentConfirmed: false }),
 
       addItem: (item, qty = 1) => {
         set((state) => {
@@ -92,7 +116,8 @@ export const useCartStore = create<CartStore>()(
           }
         }),
 
-      clearCart: () => set({ items: [], pendingItem: null }),
+      clearCart: () =>
+        set({ items: [], pendingItem: null, selectedFulfillmentStoreId: null, fulfillmentConfirmed: false }),
 
       itemsByShop: () => {
         const grouped: Record<string, CartLineItem[]> = {}

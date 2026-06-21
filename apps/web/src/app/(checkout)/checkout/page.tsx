@@ -18,6 +18,7 @@ import {
   Banknote,
   ChevronRight,
   Wallet,
+  WifiOff,
 } from 'lucide-react'
 import { getDeliveryQuote, getMultiShopDeliveryQuote } from '@/actions/shops'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
@@ -29,6 +30,7 @@ import {
 import { ConfirmDeliveryLocationModal } from '@/components/checkout/ConfirmDeliveryLocationModal'
 import { CompleteYourBasket } from '@/components/checkout/CompleteYourBasket'
 import { PaymentSheetDrawer } from '@/components/checkout/PaymentSheetDrawer'
+import { StoreFulfillmentModal } from '@/components/checkout/StoreFulfillmentModal'
 import { formatCustomerAddress } from '@/lib/customer-address'
 import { buildUpiPayUrl, getMerchantUpiVpa } from '@/lib/upi-deep-link'
 import { isDevSandboxClient } from '@/lib/dev-auth'
@@ -38,6 +40,8 @@ import { resolveAppApiUrl } from '@/lib/app-api'
 import { authFetch } from '@/lib/session'
 import { getSession as getClientSession } from '@/lib/session'
 import { AdBanner } from '@/components/ads/AdBanner'
+import { useCartStore } from '@/store/useCartStore'
+import type { FulfillmentStore } from '@/app/api/stores/fulfillment/route'
 
 const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
@@ -61,6 +65,10 @@ export default function DynamicCheckoutPage() {
   const sandbox = isDevSandboxClient()
   const pendingOnlineMode = useRef<OnlinePayMode>('card')
   const pendingUpiApp = useRef<'gpay' | 'phonepe' | 'paytm' | null>(null)
+
+  const setFulfillmentStore = useCartStore((s) => s.setFulfillmentStore)
+  const confirmFulfillmentStoreFn = useCartStore((s) => s.confirmFulfillmentStore)
+  const selectedFulfillmentStoreId = useCartStore((s) => s.selectedFulfillmentStoreId)
 
   const [selectedTip, setSelectedTip] = useState<number | null>(null)
   const [selectedInstruction, setSelectedInstruction] = useState<string | null>(null)
@@ -86,6 +94,13 @@ export default function DynamicCheckoutPage() {
   const [runtimeRazorpayKey, setRuntimeRazorpayKey] = useState('')
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
   const [billPulse, setBillPulse] = useState(0)
+
+  // ── Fulfillment check state ──────────────────────────────────────────────
+  const [fulfillmentStores, setFulfillmentStores] = useState<FulfillmentStore[]>([])
+  const [showFulfillmentModal, setShowFulfillmentModal] = useState(false)
+  const [fulfillmentChecking, setFulfillmentChecking] = useState(false)
+  const [fulfillmentError, setFulfillmentError] = useState<string | null>(null)
+  const [networkOffline, setNetworkOffline] = useState(false)
 
   const itemTotal = total()
   const partnerTip = selectedTip ?? 0
@@ -270,6 +285,91 @@ export default function DynamicCheckoutPage() {
     }
   }
 
+  // ── Network status listener ───────────────────────────────────────────────
+  useEffect(() => {
+    const onOnline = () => setNetworkOffline(false)
+    const onOffline = () => setNetworkOffline(true)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [])
+
+  /**
+   * Run the backend fulfillment check.
+   * Returns true if we can proceed directly to payment (no split detected),
+   * or false if the fulfillment modal should gate the payment.
+   */
+  const runFulfillmentCheck = useCallback(async (): Promise<boolean> => {
+    if (items.length === 0 || !selectedAddress) return false
+
+    setFulfillmentChecking(true)
+    setFulfillmentError(null)
+
+    try {
+      const payload = {
+        items: items.map((i) => ({ productId: i.id, quantity: i.quantity })),
+        lat: selectedAddress.latitude ?? lat,
+        lng: selectedAddress.longitude ?? lng,
+        radiusKm: 25,
+      }
+
+      const res = await fetch(resolveAppApiUrl('/api/stores/fulfillment'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const json = await res.json()
+
+      if (!json.success || !Array.isArray(json.data) || json.data.length === 0) {
+        // No stores available — let checkout proceed with existing cart store
+        return true
+      }
+
+      const stores: FulfillmentStore[] = json.data
+
+      const nearestStore = stores[0]!
+      const hasFullStore = stores.some((s: FulfillmentStore) => s.fulfillmentType === 'FULL')
+      const nearestIsFull = nearestStore.fulfillmentType === 'FULL'
+
+      // Auto-select if only one store or nearest already fulfils 100%
+      if (stores.length === 1 || nearestIsFull) {
+        setFulfillmentStore(nearestStore.storeId)
+        confirmFulfillmentStoreFn()
+        return true
+      }
+
+      // Inventory split: nearest = partial, further store = full
+      // → show fulfillment modal so customer can choose
+      if (!nearestIsFull && hasFullStore) {
+        setFulfillmentStores(stores.slice(0, 4)) // show up to 4 options
+        setShowFulfillmentModal(true)
+        return false
+      }
+
+      // Default: auto-select nearest
+      setFulfillmentStore(nearestStore.storeId)
+      confirmFulfillmentStoreFn()
+      return true
+    } catch {
+      // Network failure — proceed without fulfillment binding
+      setFulfillmentError(null)
+      return true
+    } finally {
+      setFulfillmentChecking(false)
+    }
+  }, [items, selectedAddress, lat, lng, setFulfillmentStore, confirmFulfillmentStoreFn])
+
+  const handleFulfillmentConfirm = (storeId: string, _storeName: string) => {
+    setFulfillmentStore(storeId)
+    confirmFulfillmentStoreFn()
+    setShowFulfillmentModal(false)
+    setShowPaymentSheet(true)
+  }
+
   const checkoutPayload = {
     riderTip: partnerTip,
     address: deliveryAddress,
@@ -277,6 +377,7 @@ export default function DynamicCheckoutPage() {
     destLatitude: lat,
     destLongitude: lng,
     couponCode: appliedCoupon ?? undefined,
+    ...(selectedFulfillmentStoreId ? { fulfillmentStoreId: selectedFulfillmentStoreId } : {}),
     shops: shopIds.map((shopId) => ({
       shopId,
       items: (itemsByShop[shopId] ?? []).map((item) => ({
@@ -505,7 +606,7 @@ export default function DynamicCheckoutPage() {
     }
   }
 
-  const requestPlaceOrder = () => {
+  const requestPlaceOrder = async () => {
     if (!selectedAddress || !deliveryAddress.trim()) {
       setError('Please add and select a delivery address.')
       return
@@ -514,7 +615,15 @@ export default function DynamicCheckoutPage() {
       setError('No payment methods are available right now.')
       return
     }
+    if (networkOffline) {
+      setError('You appear to be offline. Please check your connection and try again.')
+      return
+    }
     setError(null)
+
+    const canProceed = await runFulfillmentCheck()
+    if (!canProceed) return  // fulfillment modal is now open, waiting for store selection
+
     setShowPaymentSheet(true)
   }
 
@@ -843,8 +952,8 @@ export default function DynamicCheckoutPage() {
         <AdBanner placement="CHECKOUT_PAGE" className="mb-3 h-20 w-full" />
         <button
           type="button"
-          onClick={requestPlaceOrder}
-          disabled={isPlacing || !canPlaceOrder}
+          onClick={() => void requestPlaceOrder()}
+          disabled={isPlacing || fulfillmentChecking || !canPlaceOrder}
           className="flex w-full items-center justify-between rounded-2xl bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl shadow-orange-300/40 disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
         >
           <motion.span
@@ -861,6 +970,11 @@ export default function DynamicCheckoutPage() {
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Processing...
+              </>
+            ) : fulfillmentChecking ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Checking stores...
               </>
             ) : (
               <>
@@ -896,6 +1010,23 @@ export default function DynamicCheckoutPage() {
         onChangeAddress={() => setShowConfirmLocation(false)}
         onClose={() => !isPlacing && setShowConfirmLocation(false)}
       />
+
+      {/* Multi-store fulfillment modal — appears above the payment sheet */}
+      <StoreFulfillmentModal
+        open={showFulfillmentModal}
+        stores={fulfillmentStores}
+        totalItems={items.reduce((sum, i) => sum + i.quantity, 0)}
+        onConfirm={handleFulfillmentConfirm}
+        onClose={() => setShowFulfillmentModal(false)}
+      />
+
+      {/* Offline banner */}
+      {networkOffline && (
+        <div className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-2 bg-slate-900 px-4 py-2.5 text-xs font-bold text-white">
+          <WifiOff className="h-3.5 w-3.5" />
+          No internet connection — please reconnect before placing your order
+        </div>
+      )}
     </div>
   )
 }
