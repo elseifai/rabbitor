@@ -1,9 +1,14 @@
 /**
  * Essentials catalog segments — maps home-feed tiles and URL slugs to products.
- * Products are classified by subcategory, DB category, and product name keywords.
+ * Primary classifier: source category matrix (essentials-source-category-map.ts).
+ * Fallback: product name keywords when DB tags are wrong.
  */
 
 import type { StoreType } from '@rabbit/database'
+import {
+  isNonEssentialsSourceCategory,
+  lookupSourceCategorySegment,
+} from '@/lib/essentials-source-category-map'
 
 export type CatalogSegmentSlug =
   | 'veggies'
@@ -243,11 +248,28 @@ function isDairy(text: string, input: ClassifyInput): boolean {
   ])
 }
 
-/** Infer the best segment for a master catalog row (name-first when DB category is wrong). */
+/** Infer segment — source category matrix first, then name-based overrides. */
 export function resolveProductCatalogSegment(input: ClassifyInput): CatalogSegmentSlug {
   const text = hay(input)
+  const sourceCategory = input.subcategory?.trim() || null
 
-  if (input.storeType === 'PHARMACY') return 'pharmacy'
+  if (isNonEssentialsSourceCategory(sourceCategory)) return 'kirana'
+
+  const fromMatrix = lookupSourceCategorySegment(sourceCategory)
+  if (fromMatrix) {
+    // Eggs category in CSV includes mis-tagged non-egg items (e.g. chapati)
+    if (sourceCategory?.toLowerCase() === 'eggs' && !isEggProduct(text) && !isDairy(text, input)) {
+      return classifyByKeywords(text, input)
+    }
+    // Fresh produce names must not stay in masala when source was wrong
+    if (fromMatrix === 'masala-dry-fruits' && isFreshProduce(text, input)) return 'veggies'
+    return fromMatrix
+  }
+
+  return classifyByKeywords(text, input)
+}
+
+function classifyByKeywords(text: string, input: ClassifyInput): CatalogSegmentSlug {
   if (isPharmacy(text)) return 'pharmacy'
 
   if (isEggProduct(text) || isRawMeatFish(text, input)) return 'meat-fish-eggs'
@@ -283,6 +305,10 @@ function isPharmacy(text: string): boolean {
 export function filterProductsBySegment<
   T extends ClassifyInput & { id: string; unit?: string },
 >(items: T[], segment: CatalogSegmentSlug): T[] {
+  const browseable = items.filter(
+    (item) => !isNonEssentialsSourceCategory(item.subcategory),
+  )
+
   if (segment === 'kirana') {
     const kiranaSegments: CatalogSegmentSlug[] = [
       'atta-rice-oil-dals',
@@ -298,10 +324,12 @@ export function filterProductsBySegment<
       'spreads-dips',
       'sweet-cravings',
     ]
-    return items.filter((item) => kiranaSegments.includes(resolveProductCatalogSegment(item)))
+    return browseable.filter((item) =>
+      kiranaSegments.includes(resolveProductCatalogSegment(item)),
+    )
   }
 
-  return items.filter((item) => resolveProductCatalogSegment(item) === segment)
+  return browseable.filter((item) => resolveProductCatalogSegment(item) === segment)
 }
 
 export function segmentLabel(slug: string): string {
