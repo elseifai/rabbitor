@@ -9,6 +9,7 @@ import {
   type UnifiedProductData,
 } from '@/components/products/UnifiedProductCard'
 import { RotatingSearchBar } from '@/components/navigation/RotatingSearchBar'
+import { StorefrontProfileButton } from '@/components/layout/StorefrontProfileButton'
 
 type ShopHit = {
   id: string
@@ -69,12 +70,16 @@ function SearchResults() {
           <h1 className="text-base font-black text-gray-900">Search</h1>
         </div>
         <form
+          className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             handleSubmit(query)
           }}
         >
-          <RotatingSearchBar value={query} onChange={setQuery} onSubmit={handleSubmit} />
+          <StorefrontProfileButton />
+          <div className="min-w-0 flex-1">
+            <RotatingSearchBar value={query} onChange={setQuery} onSubmit={handleSubmit} />
+          </div>
         </form>
       </div>
 

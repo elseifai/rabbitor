@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronUp, Percent } from 'lucide-react'
 import { RotatingSearchBar } from '@/components/navigation/RotatingSearchBar'
+import { StorefrontProfileButton } from '@/components/layout/StorefrontProfileButton'
 import { SubPlatformTabs } from '@/components/navigation/SubPlatformTabs'
 import {
   UnifiedProductCard,
@@ -622,8 +623,9 @@ export function HomeFeed() {
       {/* SECTION A: Top search bar */}
       <div className="sticky top-0 z-50 border-b border-[#F0F0F0] bg-white px-4 py-3">
         <div className="flex items-center gap-2">
+          <StorefrontProfileButton />
           <form
-            className="w-[60%]"
+            className="min-w-0 flex-1"
             onSubmit={(e) => {
               e.preventDefault()
               const q = searchQuery.trim()
@@ -658,7 +660,7 @@ export function HomeFeed() {
 
           <div
             className={cn(
-              'flex h-10 w-[40%] items-center justify-center rounded-lg px-2 py-1 transition-colors duration-300',
+              'flex h-10 w-[88px] shrink-0 items-center justify-center rounded-lg px-2 py-1 transition-colors duration-300',
               platformConfig.etaTone,
             )}
           >
