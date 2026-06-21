@@ -41,6 +41,8 @@ export const ESSENTIALS_CATEGORY_SLUGS = new Set([
   'fish',
   'meat',
   'dairy',
+  'kirana',
+  'veggies',
 ])
 
 export const ESSENTIALS_DISPLAY_CATEGORIES = [
@@ -69,6 +71,8 @@ export const MARKETPLACE_CATEGORY_SLUGS = new Set([
   'clothes',
   'footwear',
   'shoes',
+  'bakery',
+  'general',
 ])
 
 export const MARKETPLACE_DISPLAY_CATEGORIES = [
@@ -84,7 +88,9 @@ export const MARKETPLACE_DISPLAY_CATEGORIES = [
 export function getPlatformModel(categoryOrStoreType: string): PlatformModel {
   const lower = categoryOrStoreType.toLowerCase()
   if (ESSENTIALS_CATEGORY_SLUGS.has(lower)) return 'ESSENTIALS'
+  if (MARKETPLACE_CATEGORY_SLUGS.has(lower)) return 'MARKETPLACE'
   if (ESSENTIALS_STORE_TYPES.has(categoryOrStoreType.toUpperCase())) return 'ESSENTIALS'
+  if (MARKETPLACE_STORE_TYPES.has(categoryOrStoreType.toUpperCase())) return 'MARKETPLACE'
   return 'MARKETPLACE'
 }
 

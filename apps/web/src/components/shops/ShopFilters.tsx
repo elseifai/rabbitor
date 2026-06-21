@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { HOME_CATEGORIES } from '@/lib/constants'
+import { resolveCategoryHref } from '@/lib/category-routing'
 
 const SORT_OPTIONS = [
   { id: 'distance', label: 'Nearest' },
@@ -18,6 +19,10 @@ export function ShopFilters() {
   const openOnly = params.get('open') !== 'false'
 
   const setParam = (key: string, value: string | null) => {
+    if (key === 'category' && value) {
+      router.push(resolveCategoryHref(value))
+      return
+    }
     const next = new URLSearchParams(params.toString())
     if (value) next.set(key, value)
     else next.delete(key)

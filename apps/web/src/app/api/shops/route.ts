@@ -5,6 +5,7 @@ import type { StoreType } from '@rabbit/database'
 import { isRestaurantShop } from '@/lib/home-feed-config'
 import { getActivePromoShopIds } from '@/lib/ad-subscription'
 import { searchWeightFromDistance } from '@/lib/search-weight'
+import { isMarketplaceStoreType } from '@/lib/platform-categories'
 
 const VALID_STORE_TYPES = new Set([
   'KIRANA',
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const storeTypeParam = searchParams.get('storeType')
     const vertical = searchParams.get('vertical')
+    const model = searchParams.get('model')
 
     const where: { isActive: boolean; storeType?: StoreType; category?: string } = {
       isActive: true,
@@ -57,7 +59,12 @@ export async function GET(request: NextRequest) {
         ? shops.filter((s) =>
             isRestaurantShop({ name: s.name, category: s.category, storeType: s.storeType }),
           )
-        : shops
+        : model === 'marketplace'
+          ? shops.filter((s) => {
+              const shop = { name: s.name, category: s.category, storeType: s.storeType }
+              return isRestaurantShop(shop) || isMarketplaceStoreType(s.storeType)
+            })
+          : shops
 
     // Apply +50 search weight boost for stores with active ad subscriptions
     const promoIds = await getActivePromoShopIds(filtered.map((s) => s.id))

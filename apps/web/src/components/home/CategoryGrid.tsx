@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { HOME_CATEGORIES } from '@/lib/constants'
+import { resolveCategoryHref } from '@/lib/category-routing'
 
 export function CategoryGrid() {
   return (
@@ -29,7 +30,7 @@ export function CategoryGrid() {
           return (
             <Link
               key={cat.id}
-              href={`/shops?category=${cat.id}`}
+              href={resolveCategoryHref(cat.id)}
               className={`group flex flex-col items-center rounded-2xl border border-transparent p-4 text-center transition-all duration-200 ${cat.bg} hover:border-gray-200 hover:shadow-card-hover sm:p-5`}
             >
               <span

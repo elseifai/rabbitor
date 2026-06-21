@@ -12,6 +12,14 @@ export const HOME_CATEGORY_TABS = [
 
 export type HomeCategoryId = (typeof HOME_CATEGORY_TABS)[number]['id']
 
+/** Category tabs shown on the dedicated Stores (marketplace) grid. */
+export const MARKETPLACE_CATEGORY_TABS = HOME_CATEGORY_TABS.filter(
+  (t) =>
+    t.id === 'all' ||
+    t.id === 'bakery' ||
+    t.id === 'general',
+)
+
 export const STORE_TYPE_LINK: Record<string, string> = {
   KIRANA: 'kirana',
   FISH: 'fish',

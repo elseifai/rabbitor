@@ -2,9 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useCartStore } from '@/store'
-import { HOME_CATEGORY_TABS } from '@/lib/categories'
+import { MARKETPLACE_CATEGORY_TABS } from '@/lib/categories'
+import {
+  isEssentialsCategorySlug,
+  resolveCategoryHref,
+} from '@/lib/category-routing'
 import { cn, formatCurrency } from '@/lib/utils'
 
 type ApiShop = {
@@ -68,9 +72,11 @@ function ShopSkeletonCard() {
 }
 
 export function ShopsListing() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const categoryParam = searchParams.get('category')
-  const initialCategory = HOME_CATEGORY_TABS.some((t) => t.id === categoryParam)
+
+  const initialCategory = MARKETPLACE_CATEGORY_TABS.some((t) => t.id === categoryParam)
     ? (categoryParam as string)
     : 'all'
 
@@ -78,17 +84,25 @@ export function ShopsListing() {
   const [shops, setShops] = useState<ApiShop[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Keep filter in sync if the URL category changes (e.g. navigating between tabs)
+  // Essentials categories belong on /essentials — never on the Stores grid
   useEffect(() => {
-    if (HOME_CATEGORY_TABS.some((t) => t.id === categoryParam)) {
+    if (categoryParam && isEssentialsCategorySlug(categoryParam)) {
+      router.replace(resolveCategoryHref(categoryParam))
+    }
+  }, [categoryParam, router])
+
+  useEffect(() => {
+    if (categoryParam && MARKETPLACE_CATEGORY_TABS.some((t) => t.id === categoryParam)) {
       setActiveCategory(categoryParam as string)
+    } else if (!categoryParam) {
+      setActiveCategory('all')
     }
   }, [categoryParam])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch('/api/shops')
+    fetch('/api/shops?model=marketplace')
       .then((r) => r.json())
       .then((json) => {
         if (!cancelled && json.success) setShops(json.data ?? [])
@@ -106,20 +120,22 @@ export function ShopsListing() {
 
   const filtered = useMemo(() => {
     if (activeCategory === 'all') return shops
-    const tab = HOME_CATEGORY_TABS.find((t) => t.id === activeCategory)
+    const tab = MARKETPLACE_CATEGORY_TABS.find((t) => t.id === activeCategory)
     if (!tab?.storeType) return shops
     return shops.filter((s) => s.storeType === tab.storeType)
   }, [shops, activeCategory])
 
+  const cartTotal = useCartStore((s) => s.total())
+
   return (
-    <div className="mx-auto max-w-[480px] px-4 py-4">
-      <h1 className="text-lg font-bold text-[#1C1C1C]">Shops near you</h1>
+    <div className="mx-auto max-w-[480px] px-4 py-4 pb-24">
+      <h1 className="text-lg font-bold text-[#1C1C1C]">Stores near you</h1>
       <p className="text-xs text-[#878787]">
-        {loading ? 'Loading…' : `${filtered.length} shops found`}
+        Marketplace merchants · {loading ? 'Loading…' : `${filtered.length} stores`}
       </p>
 
       <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-hide">
-        {HOME_CATEGORY_TABS.map((cat) => (
+        {MARKETPLACE_CATEGORY_TABS.map((cat) => (
           <button
             key={cat.id}
             type="button"
@@ -145,7 +161,7 @@ export function ShopsListing() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="mt-12 rounded-2xl border border-dashed border-[#F0F0F0] py-16 text-center">
-          <p className="text-[#878787]">No shops found in this category</p>
+          <p className="text-[#878787]">No marketplace stores nearby yet</p>
           <Link href="/" className="mt-2 inline-block text-sm text-[#FF6B35]">
             Back to home
           </Link>
@@ -156,6 +172,12 @@ export function ShopsListing() {
             <ShopGridCard key={shop.id} shop={shop} />
           ))}
         </div>
+      )}
+
+      {cartTotal > 0 && (
+        <p className="mt-6 text-center text-xs text-[#878787]">
+          Cart total · {formatCurrency(cartTotal)}
+        </p>
       )}
     </div>
   )

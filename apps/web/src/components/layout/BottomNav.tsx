@@ -10,7 +10,7 @@ const HIDDEN_PREFIXES = ['/track', '/checkout', '/merchant', '/admin']
 
 const TABS = [
   { href: '/', label: 'Home', icon: Home },
-  { href: '/shops', label: 'Shops', icon: Store },
+  { href: '/shops', label: 'Stores', icon: Store },
   { href: '/cart', label: 'Cart', icon: ShoppingBag, badge: true },
   { href: '/orders', label: 'Orders', icon: ClipboardList },
   { href: '/profile', label: 'Profile', icon: User },

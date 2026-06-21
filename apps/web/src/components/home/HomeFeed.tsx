@@ -26,12 +26,15 @@ import { cn, formatCurrency } from '@/lib/utils'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { RestaurantsHomeSection } from '@/components/home/RestaurantsHomeSection'
 import { PromoDealsModal } from '@/components/home/PromoDealsModal'
+import { HomeCategoryTile } from '@/components/home/HomeCategoryTile'
+import { STORE_TYPE_LINK } from '@/lib/categories'
 import {
   ESSENTIALS_STORE_ID,
   ESSENTIALS_STORE_NAME,
   ESSENTIALS_STORE_SLUG,
 } from '@/lib/essentials-catalog'
 import { ESSENTIALS_STORE_TYPES } from '@/lib/platform-categories'
+import { resolveCategoryHref } from '@/lib/category-routing'
 
 type DealProduct = {
   id: string
@@ -137,55 +140,6 @@ function shuffle<T>(arr: T[]): T[] {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
-}
-
-
-function CategoryCard({
-  label,
-  image,
-  category,
-  tall,
-}: {
-  label: string
-  image: string
-  category: string
-  tall?: boolean
-}) {
-  const [failed, setFailed] = useState(false)
-  const src = resolveImageSrc(image, '')
-  const showImage = Boolean(src) && !failed
-
-  useEffect(() => {
-    setFailed(false)
-  }, [src])
-
-  return (
-    <Link
-      href={`/shops?category=${category}`}
-      className="overflow-hidden rounded-xl bg-[#F8F8F8]"
-    >
-      {showImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          onError={() => setFailed(true)}
-          className={cn('w-full object-cover', tall ? 'h-[120px]' : 'h-[90px]')}
-        />
-      ) : (
-        <div
-          className={cn(
-            'flex w-full items-center justify-center bg-gradient-to-br from-[#FFF7ED] to-[#FFEDD5]',
-            tall ? 'h-[120px]' : 'h-[90px]',
-          )}
-        >
-          <span className="text-3xl opacity-80">🛒</span>
-        </div>
-      )}
-      <p className="p-2 text-sm font-bold leading-tight text-[#1C1C1C]">{label}</p>
-    </Link>
-  )
 }
 
 function ShopSkeleton() {
@@ -336,9 +290,6 @@ export function HomeFeed() {
 
   const dealsRef = useRef<HTMLDivElement>(null)
   const couponsRef = useRef<HTMLDivElement>(null)
-  const categoryFocusRef = useRef<HTMLDivElement>(null)
-
-  const categoryFilterActive = activeCategory !== 'all'
 
   const lat = coordinates?.lat ?? SAVED_LOCATIONS[0].latitude
   const lng = coordinates?.lng ?? SAVED_LOCATIONS[0].longitude
@@ -383,6 +334,12 @@ export function HomeFeed() {
   }, [searchParams])
 
   useEffect(() => {
+    if (!isMarketplaceSubPlatform(subPlatform)) {
+      setShops([])
+      setLoadingShops(false)
+      return
+    }
+
     let cancelled = false
     setLoadingShops(true)
 
@@ -393,7 +350,7 @@ export function HomeFeed() {
         radiusKm: 15,
         storeType,
         openOnly: true,
-        sortBy: categoryFilterActive ? 'rating' : 'distance',
+        sortBy: 'distance',
       })
 
       if (cancelled) return
@@ -449,7 +406,7 @@ export function HomeFeed() {
     return () => {
       cancelled = true
     }
-  }, [lat, lng, storeType, categoryFilterActive])
+  }, [lat, lng, storeType, subPlatform])
 
   useEffect(() => {
     let cancelled = false
@@ -492,7 +449,7 @@ export function HomeFeed() {
               })
             }
           }
-          const filtered = pickHomeDeals(all, categoryFilterActive)
+          const filtered = pickHomeDeals(all, false)
           if (!cancelled) {
             setDeals(filtered)
             writeCachedDeals(filtered)
@@ -515,7 +472,7 @@ export function HomeFeed() {
           return
         }
         const mapped = (json.data ?? []).map(mapEssentialsToDeal)
-        const filtered = pickHomeDeals(mapped, categoryFilterActive)
+        const filtered = pickHomeDeals(mapped, false)
         setDeals(filtered)
         writeCachedDeals(filtered)
       } catch {
@@ -532,7 +489,7 @@ export function HomeFeed() {
     return () => {
       cancelled = true
     }
-  }, [storeType, categoryFilterActive, subPlatform])
+  }, [storeType, subPlatform])
 
   const bannerProducts = useMemo(() => deals.slice(0, 4), [deals])
 
@@ -571,38 +528,36 @@ export function HomeFeed() {
         (d) => !d.storeType || platformConfig.storeTypes!.includes(d.storeType),
       )
     }
-    if (categoryFilterActive) {
-      const ratings = new Map(list.map((d) => [d.shopId, d.shopRating ?? 0]))
-      list = filterTopRatedDeals(list, ratings, true)
-    }
     if (subPlatform === 'fashion') {
       return list
     }
     return list
-  }, [deals, platformConfig.storeTypes, subPlatform, categoryFilterActive])
+  }, [deals, platformConfig.storeTypes, subPlatform])
 
-  const handleCategorySelect = useCallback((categoryId: string) => {
-    setActiveCategory(categoryId)
-    if (categoryId !== 'all') {
-      window.setTimeout(() => {
-        categoryFocusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 80)
-    }
-  }, [])
+  const showMarketplaceStores = isMarketplaceSubPlatform(subPlatform)
 
-  const storesSection = (
+  const handleCategorySelect = useCallback(
+    (categoryId: string) => {
+      if (categoryId === 'all') {
+        setActiveCategory('all')
+        return
+      }
+      const tab = categoryTabs.find((t) => t.id === categoryId)
+      const slug = tab?.storeType
+        ? (STORE_TYPE_LINK[tab.storeType] ?? categoryId)
+        : categoryId
+      router.push(resolveCategoryHref(slug))
+    },
+    [router, categoryTabs],
+  )
+
+  const storesSection = showMarketplaceStores ? (
     <section className="mb-2 bg-white p-4">
-      <h2 className="text-lg font-bold text-[#1C1C1C]">
-        {categoryFilterActive
-          ? `Top ${tab?.label ?? 'category'} stores`
-          : feedConfig.storesSection.title}
-      </h2>
+      <h2 className="text-lg font-bold text-[#1C1C1C]">{feedConfig.storesSection.title}</h2>
       <p className="text-xs text-[#878787]">
-        {categoryFilterActive
-          ? 'Highest-rated stores near you'
-          : subPlatform === 'fashion'
-            ? feedConfig.storesSection.subtitleFashion
-            : feedConfig.storesSection.subtitleGrocery}
+        {subPlatform === 'fashion'
+          ? feedConfig.storesSection.subtitleFashion
+          : feedConfig.storesSection.subtitleGrocery}
       </p>
       <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
         {loadingShops ? (
@@ -612,35 +567,27 @@ export function HomeFeed() {
             <ShopSkeleton />
           </>
         ) : shops.length === 0 ? (
-          <p className="text-sm text-[#878787]">
-            {categoryFilterActive
-              ? `No ${tab?.label?.toLowerCase() ?? 'category'} stores nearby yet.`
-              : 'No stores nearby.'}
-          </p>
+          <p className="text-sm text-[#878787]">No stores nearby.</p>
         ) : (
           shops.map((shop) => <HomeShopCard key={shop.id} shop={shop} />)
         )}
       </div>
     </section>
-  )
+  ) : null
 
   const flashDealsSection = toggles.flashDeals ? (
     <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
       <h2 className="text-lg font-bold text-[#1C1C1C]">
         {subPlatform === 'fashion'
           ? feedConfig.dealsSection.fashionTitle
-          : categoryFilterActive
-            ? `${tab?.label} — Top Picks`
-            : feedConfig.dealsSection.title}
+          : feedConfig.dealsSection.title}
       </h2>
       <p className="text-xs text-[#878787]">
         {subPlatform === 'fashion'
           ? feedConfig.dealsSection.fashionSubtitle
-          : categoryFilterActive
-            ? 'Top-rated products from verified stores'
-            : catalogSource === 'global'
-              ? 'Live from Rabbit Global Catalog · nearest dark store fulfills'
-              : feedConfig.dealsSection.subtitle}
+          : catalogSource === 'global'
+            ? 'Live from Rabbit Global Catalog · nearest dark store fulfills'
+            : feedConfig.dealsSection.subtitle}
       </p>
       {loadingDeals ? (
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -654,11 +601,7 @@ export function HomeFeed() {
           <p className="mt-1 text-xs text-red-500">Check your connection and try again.</p>
         </div>
       ) : platformDeals.length === 0 ? (
-        <p className="mt-4 text-sm text-[#878787]">
-          {categoryFilterActive
-            ? 'No top-rated items in this category yet.'
-            : 'No items available in this category yet.'}
-        </p>
+        <p className="mt-4 text-sm text-[#878787]">No items available in this category yet.</p>
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-2">
           {platformDeals.map((p) => (
@@ -761,31 +704,8 @@ export function HomeFeed() {
 
       {/* SECTION C: Main scrollable content */}
       <div className="py-2">
-        {/* Active category banner — shown when a specific category is selected */}
-        {activeCategory !== 'all' && (
-          <section className="mb-2 bg-white px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#1C1C1C]">{tab?.label}</h2>
-                <p className="text-xs text-[#878787]">
-                  {loadingShops
-                    ? 'Finding stores near you…'
-                    : `${shops.length} store${shops.length !== 1 ? 's' : ''} · ${deals.length} item${deals.length !== 1 ? 's' : ''}`}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveCategory('all')}
-                className="rounded-full border border-[#F0F0F0] px-3 py-1 text-xs font-semibold text-[#878787]"
-              >
-                Clear ✕
-              </button>
-            </div>
-          </section>
-        )}
-
         {/* Fashion deals scroller */}
-        {platformConfig.showFashionDeals && activeCategory === 'all' && (
+        {platformConfig.showFashionDeals && (
           <section className="mb-2 bg-white p-4">
             <h2 className="text-lg font-bold text-[#1C1C1C]">
               {feedConfig.dealsSection.fashionTitle}
@@ -809,63 +729,61 @@ export function HomeFeed() {
         )}
 
         {/* Restaurants / Cafés — inline when tab selected */}
-        {subPlatform === 'restaurants' && activeCategory === 'all' && (
+        {subPlatform === 'restaurants' && (
           <RestaurantsHomeSection />
         )}
 
         {/* Grocery & Kitchen */}
-        {toggles.grocerySection && platformConfig.showGroceryLayouts && activeCategory === 'all' && subPlatform !== 'restaurants' && (
+        {toggles.grocerySection && platformConfig.showGroceryLayouts && subPlatform !== 'restaurants' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">{feedConfig.groceryKitchen.title}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {feedConfig.groceryKitchen.row1.map((item) => (
-              <CategoryCard key={item.label} {...item} tall />
+              <HomeCategoryTile key={item.label} {...item} tall />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {feedConfig.groceryKitchen.row2.map((item) => (
-              <CategoryCard key={item.label} {...item} />
+              <HomeCategoryTile key={item.label} {...item} />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {feedConfig.groceryKitchen.row3.map((item) => (
-              <CategoryCard key={item.label} {...item} />
+              <HomeCategoryTile key={item.label} {...item} />
             ))}
           </div>
         </section>
         )}
 
         {/* Snacks & Drinks */}
-        {toggles.snacksSection && platformConfig.showGroceryLayouts && activeCategory === 'all' && subPlatform !== 'restaurants' && (
+        {toggles.snacksSection && platformConfig.showGroceryLayouts && subPlatform !== 'restaurants' && (
         <section className="mb-2 bg-white p-4">
           <h2 className="text-lg font-bold text-[#1C1C1C]">{feedConfig.snacksDrinks.title}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {feedConfig.snacksDrinks.row1.map((item) => (
-              <CategoryCard key={item.label} {...item} tall />
+              <HomeCategoryTile key={item.label} {...item} tall />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {feedConfig.snacksDrinks.row2.map((item) => (
-              <CategoryCard key={item.label} {...item} />
+              <HomeCategoryTile key={item.label} {...item} />
             ))}
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {feedConfig.snacksDrinks.row3.map((item) => (
-              <CategoryCard key={item.label} {...item} />
+              <HomeCategoryTile key={item.label} {...item} />
             ))}
           </div>
         </section>
         )}
 
         {/* Promo banner ad */}
-        {!categoryFilterActive && (
         <section className="mb-2 px-4">
           <AdBanner placement="HOME_BANNER" className="h-36 w-full" />
         </section>
-        )}
 
         {/* Deals Banner — opens exclusive offers modal */}
-        {!categoryFilterActive && toggles.promoBanner && (
+        {toggles.promoBanner && (
         <section className="mb-2 px-4">
           <button
             type="button"
@@ -927,14 +845,7 @@ export function HomeFeed() {
           headline={feedConfig.promoBanner.headline ?? 'Products Starting from Just ₹1!'}
         />
 
-        {categoryFilterActive ? (
-          <div ref={categoryFocusRef} className="scroll-mt-28">
-            {storesSection}
-            {flashDealsSection}
-          </div>
-        ) : (
-          <>
-            {flashDealsSection}
+        {flashDealsSection}
 
         {/* Coupons */}
         {toggles.coupons && (
@@ -1007,12 +918,9 @@ export function HomeFeed() {
             </div>
           </section>
         )}
-          </>
-        )}
       </div>
 
       {/* Offers floating button */}
-      {!categoryFilterActive && (
       <button
         type="button"
         onClick={scrollToCoupons}
@@ -1020,7 +928,6 @@ export function HomeFeed() {
       >
         Offers ∧
       </button>
-      )}
 
       <ViewCartBar />
 

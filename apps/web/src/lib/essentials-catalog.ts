@@ -32,11 +32,13 @@ export type EssentialsCatalogProduct = {
 /** Map URL / feed category slugs to Prisma storeType filters. */
 export function categorySlugToStoreType(slug: string): StoreType | undefined {
   const map: Record<string, StoreType> = {
+    kirana: 'KIRANA',
     groceries: 'KIRANA',
     grocery: 'KIRANA',
     pharmacy: 'PHARMACY',
     vegetables: 'VEGETABLE',
     vegetable: 'VEGETABLE',
+    veggies: 'VEGETABLE',
     'fresh-fish': 'FISH',
     fish: 'FISH',
     meat: 'MEAT',
