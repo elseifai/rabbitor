@@ -183,34 +183,34 @@ export const DEFAULT_HOME_FEED_CONFIG: HomeFeedConfig = {
       {
         label: 'Atta, Rice, Oil & Dals',
         image: 'https://images.unsplash.com/photo-1586201375761-83865001bb31?w=300&q=80',
-        category: 'kirana',
+        category: 'atta-rice-oil-dals',
       },
       {
         label: 'Meat, Fish & Eggs',
         image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=300&q=80',
-        category: 'fish',
+        category: 'meat-fish-eggs',
       },
       {
         label: 'Masala & Dry Fruits',
         image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=300&q=80',
-        category: 'kirana',
+        category: 'masala-dry-fruits',
       },
     ],
     row3: [
       {
         label: 'Breakfast & Sauces',
         image: 'https://images.unsplash.com/photo-1533089860890-a1b1f0a111f2?w=300&q=80',
-        category: 'kirana',
+        category: 'breakfast-sauces',
       },
       {
         label: 'Packaged Food',
         image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=300&q=80',
-        category: 'kirana',
+        category: 'packaged-food',
       },
       {
         label: 'Frozen Food',
         image: 'https://images.unsplash.com/photo-1574484993793-17bb9792c2a0?w=300&q=80',
-        category: 'kirana',
+        category: 'frozen-food',
       },
     ],
   },
@@ -220,46 +220,46 @@ export const DEFAULT_HOME_FEED_CONFIG: HomeFeedConfig = {
       {
         label: 'Tea, Coffee & More',
         image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&q=80',
-        category: 'kirana',
+        category: 'tea-coffee',
       },
       {
         label: 'Ice Creams & More',
         image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=400&q=80',
-        category: 'dairy',
+        category: 'ice-cream',
       },
     ],
     row2: [
       {
         label: 'Sweet Cravings',
         image: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=300&q=80',
-        category: 'bakery',
+        category: 'sweet-cravings',
       },
       {
         label: 'Cold Drinks & Juices',
         image: 'https://images.unsplash.com/photo-1625772262779-944d945891bf?w=300&q=80',
-        category: 'kirana',
+        category: 'cold-drinks',
       },
       {
         label: 'Munchies',
         image: 'https://images.unsplash.com/photo-1613919113640-25732ed5d960?w=300&q=80',
-        category: 'kirana',
+        category: 'munchies',
       },
     ],
     row3: [
       {
         label: 'Biscuits & Cookies',
         image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=300&q=80',
-        category: 'kirana',
+        category: 'biscuits-cookies',
       },
       {
         label: 'Noodles & Pasta',
         image: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=300&q=80',
-        category: 'kirana',
+        category: 'noodles-pasta',
       },
       {
         label: 'Spreads & Dips',
         image: 'https://images.unsplash.com/photo-1623428187425-1379a2a2a18?w=300&q=80',
-        category: 'kirana',
+        category: 'spreads-dips',
       },
     ],
   },

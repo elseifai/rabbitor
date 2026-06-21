@@ -4,13 +4,13 @@
 
 import type { StoreType } from '@rabbit/database'
 import { normalizeCategorySlug } from '@/lib/category-routing'
+import {
+  filterProductsBySegment,
+  normalizeCatalogSegmentSlug,
+  resolveProductCatalogSegment,
+  type CatalogSegmentSlug,
+} from '@/lib/essentials-catalog-segments'
 import { ESSENTIALS_STORE_TYPES } from '@/lib/platform-categories'
-
-/** MasterCatalogItem.category slugs for fresh produce (Fruits & Vegetables tab). */
-export const FRESH_PRODUCE_CATEGORY_SLUGS = ['fresh-vegetables', 'fresh-fruits'] as const
-
-/** Pantry / dry-goods slugs (spices, powders) — belong under kirana, not veggies. */
-export const PANTRY_CATEGORY_SLUGS = ['herbs-leafy-greens'] as const
 
 /** Virtual store id used in cart for global-catalog Essentials items. */
 export const ESSENTIALS_STORE_ID = 'global-essentials'
@@ -25,6 +25,7 @@ export type EssentialsCatalogProduct = {
   description: string | null
   category: string
   subcategory: string | null
+  catalogSegment: CatalogSegmentSlug
   price: number
   mrp: number | null
   unit: string
@@ -63,15 +64,9 @@ export function essentialsStoreTypesList(): StoreType[] {
 }
 
 /**
- * Strict Prisma filter for GET /api/catalog/essentials?category=…
- * Maps URL category slugs to MasterCatalogItem.category / storeType rules.
+ * Broad Prisma filter — segment matching happens in memory via product name logic.
  */
-export function buildEssentialsCategoryWhere(
-  categorySlug: string | null | undefined,
-  q?: string,
-) {
-  const slug = categorySlug ? normalizeCategorySlug(categorySlug) : ''
-
+export function buildEssentialsBroadWhere(q?: string) {
   const searchFilter = q
     ? {
         OR: [
@@ -83,42 +78,37 @@ export function buildEssentialsCategoryWhere(
       }
     : undefined
 
-  const withSearch = (clause: Record<string, unknown>) =>
-    searchFilter ? { AND: [clause, searchFilter] } : clause
-
-  if (!slug || slug === 'all') {
-    return withSearch({
-      isActive: true,
-      storeType: { in: essentialsStoreTypesList() },
-    })
+  const base = {
+    isActive: true,
+    storeType: { in: essentialsStoreTypesList() },
   }
 
-  switch (slug) {
-    case 'veggies':
-    case 'vegetables':
-    case 'vegetable':
-      return withSearch({
-        isActive: true,
-        category: { in: [...FRESH_PRODUCE_CATEGORY_SLUGS] },
-      })
+  return searchFilter ? { AND: [base, searchFilter] } : base
+}
 
-    case 'kirana':
-    case 'groceries':
-    case 'grocery':
-      return withSearch({
-        isActive: true,
-        category: { notIn: [...FRESH_PRODUCE_CATEGORY_SLUGS] },
-        OR: [{ storeType: 'KIRANA' }, { category: { in: [...PANTRY_CATEGORY_SLUGS] } }],
-      })
+/** @deprecated Use buildEssentialsBroadWhere + filterProductsBySegment */
+export function buildEssentialsCategoryWhere(
+  categorySlug: string | null | undefined,
+  q?: string,
+) {
+  return buildEssentialsBroadWhere(q)
+}
 
-    default: {
-      const storeType = categorySlugToStoreType(slug)
-      if (storeType) {
-        return withSearch({ isActive: true, storeType })
-      }
-      return withSearch({ isActive: true, category: slug })
-    }
-  }
+export function filterEssentialsByCategorySlug<
+  T extends {
+    id: string
+    name: string
+    category: string
+    subcategory: string | null
+    storeType: StoreType
+    unit?: string
+  },
+>(items: T[], categorySlug: string | null | undefined): T[] {
+  if (!categorySlug) return items
+  const normalized = normalizeCategorySlug(categorySlug)
+  const segment = normalizeCatalogSegmentSlug(normalized)
+  if (!segment) return items
+  return filterProductsBySegment(items, segment)
 }
 
 /** Collapse duplicate catalog rows (same name/unit) to a single card. */
@@ -147,12 +137,20 @@ export function mapMasterItemToEssentialsProduct(item: {
   imageUrl: string | null
   storeType: StoreType
 }): EssentialsCatalogProduct {
+  const catalogSegment = resolveProductCatalogSegment({
+    name: item.name,
+    category: item.category,
+    subcategory: item.subcategory ?? null,
+    storeType: item.storeType,
+  })
+
   return {
     id: item.id,
     name: item.name,
     description: item.description,
     category: item.category,
     subcategory: item.subcategory ?? null,
+    catalogSegment,
     price: item.basePrice,
     mrp: null,
     unit: item.defaultUnit,

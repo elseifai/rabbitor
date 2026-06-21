@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { resolveCategoryHref } from '@/lib/category-routing'
+import { resolveSegmentFromTile } from '@/lib/essentials-catalog-segments'
 import { resolveImageSrc } from '@/lib/image-url'
 import { cn } from '@/lib/utils'
 
@@ -22,7 +23,7 @@ export function HomeCategoryTile({ label, image, category, tall }: HomeCategoryT
   const [failed, setFailed] = useState(false)
   const src = resolveImageSrc(image, '')
   const showImage = Boolean(src) && !failed
-  const href = resolveCategoryHref(category)
+  const href = resolveCategoryHref(resolveSegmentFromTile(label, category))
 
   useEffect(() => {
     setFailed(false)

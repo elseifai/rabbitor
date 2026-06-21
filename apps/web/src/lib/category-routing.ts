@@ -9,6 +9,10 @@ import {
   MARKETPLACE_CATEGORY_SLUGS,
   MARKETPLACE_STORE_TYPES,
 } from '@/lib/platform-categories'
+import {
+  isCatalogSegmentSlug,
+  segmentLabel,
+} from '@/lib/essentials-catalog-segments'
 import { STORE_TYPE_LINK } from '@/lib/categories'
 
 /** Normalize home-feed / CMS category values to URL slugs (e.g. KIRANA → kirana). */
@@ -50,6 +54,8 @@ export function getPlatformModelForCategory(slug: string): PlatformModel {
 }
 
 export function isEssentialsCategorySlug(slug: string): boolean {
+  const lower = slug.toLowerCase()
+  if (isCatalogSegmentSlug(lower)) return true
   return getPlatformModelForCategory(slug) === 'ESSENTIALS'
 }
 
@@ -87,5 +93,7 @@ export const ESSENTIALS_CATEGORY_LABELS: Record<string, string> = {
 }
 
 export function essentialsCategoryLabel(slug: string): string {
-  return ESSENTIALS_CATEGORY_LABELS[slug.toLowerCase()] ?? slug
+  const lower = slug.toLowerCase()
+  if (isCatalogSegmentSlug(lower)) return segmentLabel(lower)
+  return ESSENTIALS_CATEGORY_LABELS[lower] ?? slug
 }
