@@ -22,8 +22,46 @@ import {
   getSegmentNavItems,
   navItemsWithCounts,
   type SegmentNavItem,
+  type SegmentNavItemWithCount,
 } from '@/lib/essentials-segment-nav'
+import { resolveImageSrc } from '@/lib/image-url'
 import { cn } from '@/lib/utils'
+
+function SegmentNavThumb({
+  item,
+  isActive,
+}: {
+  item: SegmentNavItemWithCount
+  isActive: boolean
+}) {
+  const [failed, setFailed] = useState(false)
+  const src = resolveImageSrc(item.thumbSrc, '')
+  const showImage = Boolean(src) && !failed
+
+  return (
+    <div
+      className={cn(
+        'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06)]',
+        isActive ? 'border-[#DDD6FE]' : 'border-[#E8E8E8]',
+      )}
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="text-xl leading-none" aria-hidden>
+          🛒
+        </span>
+      )}
+    </div>
+  )
+}
 
 function toUnifiedProduct(item: EssentialsCatalogProduct): UnifiedProductData {
   return {
@@ -144,7 +182,7 @@ export function EssentialsCatalogView() {
       <div className="flex min-h-0 flex-1">
         {/* Zepto-style left sub-category rail */}
         <nav
-          className="w-[24%] min-w-[76px] max-w-[112px] shrink-0 overflow-y-auto border-r border-[#EBEBEB] bg-[#F7F7F7] scrollbar-hide"
+          className="w-[88px] shrink-0 overflow-y-auto border-r border-[#EBEBEB] bg-[#F7F7F7] py-1 scrollbar-hide"
           aria-label="Sub-categories"
         >
           {visibleNavItems.map((item) => {
@@ -155,22 +193,21 @@ export function EssentialsCatalogView() {
                 type="button"
                 onClick={() => setActiveNavId(item.id)}
                 className={cn(
-                  'relative flex w-full items-center px-2 py-3.5 text-left transition-colors',
-                  isActive
-                    ? 'bg-white text-[#0C831F]'
-                    : 'text-[#5C5C5C] hover:bg-white/70',
+                  'relative flex w-full touch-manipulation select-none flex-col items-center gap-1.5 px-1 py-3 transition-colors',
+                  isActive ? 'bg-[#F3EEFF]' : 'hover:bg-white/70 active:bg-white/90',
                 )}
               >
                 {isActive && (
                   <span
-                    className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[#0C831F]"
+                    className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-[#7C3AED]"
                     aria-hidden
                   />
                 )}
+                <SegmentNavThumb item={item} isActive={isActive} />
                 <span
                   className={cn(
-                    'text-[11px] leading-[1.25] tracking-tight',
-                    isActive ? 'font-bold' : 'font-medium',
+                    'w-full px-0.5 text-center text-[10px] leading-[1.25] tracking-tight',
+                    isActive ? 'font-bold text-[#7C3AED]' : 'font-medium text-[#424242]',
                   )}
                 >
                   {item.label}
