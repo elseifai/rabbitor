@@ -11,6 +11,8 @@ export type FulfillmentStore = {
   storeName: string
   storeSlug: string
   storeType: string
+  imageUrl: string | null
+  ratingAvg: number
   distanceKm: number
   etaMinutes: number
   availableCount: number
@@ -48,6 +50,8 @@ export async function rankFulfillmentStores(params: {
       name: true,
       slug: true,
       storeType: true,
+      image: true,
+      ratingAvg: true,
       latitude: true,
       longitude: true,
       avgPrepMinutes: true,
@@ -106,6 +110,8 @@ export async function rankFulfillmentStores(params: {
       storeName: store.name,
       storeSlug: store.slug,
       storeType: store.storeType,
+      imageUrl: store.image,
+      ratingAvg: store.ratingAvg > 0 ? store.ratingAvg : 4.2,
       distanceKm: Math.round(dist * 10) / 10,
       etaMinutes: estimateDeliveryMinutes(dist, store.avgPrepMinutes),
       availableCount,

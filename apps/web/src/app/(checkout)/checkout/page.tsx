@@ -31,7 +31,7 @@ import { addressLabelDisplay, formatAddressShort } from '@/lib/customer-address'
 import { ConfirmDeliveryLocationModal } from '@/components/checkout/ConfirmDeliveryLocationModal'
 import { CompleteYourBasket } from '@/components/checkout/CompleteYourBasket'
 import { PaymentSheetDrawer } from '@/components/checkout/PaymentSheetDrawer'
-import { StoreFulfillmentModal } from '@/components/checkout/StoreFulfillmentModal'
+import { AlternativeStoreSwitcherSheet } from '@/components/checkout/AlternativeStoreSwitcherSheet'
 import { formatCustomerAddress } from '@/lib/customer-address'
 import { buildUpiPayUrl, getMerchantUpiVpa } from '@/lib/upi-deep-link'
 import { isDevSandboxClient } from '@/lib/dev-auth'
@@ -45,7 +45,7 @@ import { fetchCurrentAuth } from '@/lib/client-auth'
 import { isEssentialsStoreId } from '@/lib/essentials-catalog'
 import { AdBanner } from '@/components/ads/AdBanner'
 import { useCartStore } from '@/store/useCartStore'
-import type { FulfillmentStore } from '@/app/api/stores/fulfillment/route'
+import type { FulfillmentStore } from '@/lib/store-fulfillment'
 
 const TIP_OPTIONS = [20, 30, 50, 70]
 const DEFAULT_DELIVERY_FEE = 35
@@ -61,6 +61,12 @@ function instructionLabel(key: string | null): string | undefined {
   if (key === 'gate') return 'Leave at Gate'
   if (key === 'bell') return "Don't Ring Bell"
   return undefined
+}
+
+function isStockExceptionMessage(message: string): boolean {
+  return /item unavailable|insufficient stock|unserviceable|no longer available|not stocked/i.test(
+    message,
+  )
 }
 
 export default function DynamicCheckoutPage() {
@@ -101,9 +107,11 @@ export default function DynamicCheckoutPage() {
   const [showPaymentSheet, setShowPaymentSheet] = useState(false)
   const [billPulse, setBillPulse] = useState(0)
 
-  // ── Fulfillment check state ──────────────────────────────────────────────
-  const [fulfillmentStores, setFulfillmentStores] = useState<FulfillmentStore[]>([])
-  const [showFulfillmentModal, setShowFulfillmentModal] = useState(false)
+  // ── Alternative store switcher (stock exception flow) ─────────────────────
+  const [showStoreSwitcher, setShowStoreSwitcher] = useState(false)
+  const [alternativeStores, setAlternativeStores] = useState<FulfillmentStore[]>([])
+  const [switcherInitialStoreId, setSwitcherInitialStoreId] = useState<string | null>(null)
+  const [pendingPaymentAfterSwitch, setPendingPaymentAfterSwitch] = useState(false)
   const [fulfillmentChecking, setFulfillmentChecking] = useState(false)
   const [fulfillmentError, setFulfillmentError] = useState<string | null>(null)
   const [networkOffline, setNetworkOffline] = useState(false)
@@ -332,9 +340,68 @@ export default function DynamicCheckoutPage() {
   }, [])
 
   /**
+   * Fetch ranked alternative stores that can fulfill (some or all) cart items.
+   */
+  const fetchAlternativeStores = useCallback(async (): Promise<FulfillmentStore[]> => {
+    if (items.length === 0 || !selectedAddress) return []
+
+    const payload = {
+      items: items.map((i) => ({ productId: i.id, quantity: i.quantity })),
+      lat: selectedAddress.latitude ?? lat,
+      lng: selectedAddress.longitude ?? lng,
+      radiusKm: 25,
+    }
+
+    const res = await fetch(resolveAppApiUrl('/api/stores/fulfillment'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const json = await res.json()
+    if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+      return json.data as FulfillmentStore[]
+    }
+
+    const wideRes = await fetch(resolveAppApiUrl('/api/stores/fulfillment'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, radiusKm: 80 }),
+    })
+    const wideJson = await wideRes.json()
+    if (wideJson.success && Array.isArray(wideJson.data)) {
+      return wideJson.data as FulfillmentStore[]
+    }
+    return []
+  }, [items, selectedAddress, lat, lng])
+
+  const openStoreSwitcher = useCallback(
+    async (stores?: FulfillmentStore[], preferStoreId?: string | null) => {
+      setError(null)
+      const list = stores ?? (await fetchAlternativeStores())
+      if (list.length === 0) {
+        setError('No alternative stores can fulfill your order right now.')
+        return false
+      }
+
+      const ranked = list.slice(0, 6)
+      const preferredId =
+        preferStoreId ??
+        ranked.find((s) => s.fulfillmentType === 'FULL')?.storeId ??
+        ranked[0]?.storeId ??
+        null
+
+      setAlternativeStores(ranked)
+      setSwitcherInitialStoreId(preferredId)
+      setShowStoreSwitcher(true)
+      return true
+    },
+    [fetchAlternativeStores],
+  )
+
+  /**
    * Run the backend fulfillment check.
    * Returns true if we can proceed directly to payment (no split detected),
-   * or false if the fulfillment modal should gate the payment.
+   * or false if the store switcher should gate the payment.
    */
   const runFulfillmentCheck = useCallback(async (): Promise<boolean> => {
     if (items.length === 0 || !selectedAddress) return false
@@ -400,15 +467,18 @@ export default function DynamicCheckoutPage() {
         return true
       }
 
-      // Inventory split: nearest = partial, further store = full
-      // → show fulfillment modal so customer can choose
-      if (!nearestIsFull && hasFullStore) {
-        setFulfillmentStores(stores.slice(0, 4)) // show up to 4 options
-        setShowFulfillmentModal(true)
+      // Inventory split or partial-only options → show store switcher
+      if (!nearestIsFull && (hasFullStore || stores.length > 1)) {
+        await openStoreSwitcher(stores, hasFullStore ? undefined : nearestStore.storeId)
         return false
       }
 
-      // Default: auto-select nearest
+      if (!nearestIsFull) {
+        await openStoreSwitcher(stores, nearestStore.storeId)
+        return false
+      }
+
+      // Default: auto-select nearest full store
       setFulfillmentStore(nearestStore.storeId)
       confirmFulfillmentStoreFn()
       return true
@@ -419,14 +489,35 @@ export default function DynamicCheckoutPage() {
     } finally {
       setFulfillmentChecking(false)
     }
-  }, [items, selectedAddress, lat, lng, setFulfillmentStore, confirmFulfillmentStoreFn])
+  }, [items, selectedAddress, lat, lng, setFulfillmentStore, confirmFulfillmentStoreFn, openStoreSwitcher])
 
-  const handleFulfillmentConfirm = (storeId: string, _storeName: string) => {
+  const handleStoreSwitcherProceed = (storeId: string, _storeName: string) => {
     setFulfillmentStore(storeId)
     confirmFulfillmentStoreFn()
-    setShowFulfillmentModal(false)
+    setShowStoreSwitcher(false)
+    setError(null)
+
+    if (pendingPaymentAfterSwitch) {
+      setPendingPaymentAfterSwitch(false)
+      if (paymentMethod === 'cod') {
+        void handlePlaceCodOrder()
+      } else {
+        void runOnlinePayment(pendingOnlineMode.current, pendingUpiApp.current)
+      }
+      return
+    }
+
     setShowPaymentSheet(true)
   }
+
+  const handleStockException = useCallback(
+    async (duringPayment = false) => {
+      if (duringPayment) setPendingPaymentAfterSwitch(true)
+      const currentId = useCartStore.getState().selectedFulfillmentStoreId
+      await openStoreSwitcher(undefined, currentId)
+    },
+    [openStoreSwitcher],
+  )
 
   const ensureFulfillmentForCheckout = useCallback(async (): Promise<boolean> => {
     if (!cartHasEssentials) return true
@@ -476,6 +567,19 @@ export default function DynamicCheckoutPage() {
     if (cartHasEssentials && !useCartStore.getState().selectedFulfillmentStoreId) {
       const ready = await ensureFulfillmentForCheckout()
       if (!ready) return
+    }
+
+    if (cartHasEssentials) {
+      const storeId = useCartStore.getState().selectedFulfillmentStoreId
+      if (storeId) {
+        const stores = await fetchAlternativeStores()
+        const current = stores.find((s) => s.storeId === storeId)
+        if (current && current.fulfillmentType !== 'FULL') {
+          setPendingPaymentAfterSwitch(true)
+          await openStoreSwitcher(stores, storeId)
+          return
+        }
+      }
     }
 
     if (paymentMethod === 'cod') {
@@ -545,6 +649,10 @@ export default function DynamicCheckoutPage() {
             return
           }
           redirectToCheckoutLogin()
+          return
+        }
+        if (isStockExceptionMessage(intentJson.error ?? '')) {
+          await handleStockException(true)
           return
         }
         setError(intentJson.error ?? 'Could not start payment. Please try again.')
@@ -718,6 +826,10 @@ export default function DynamicCheckoutPage() {
             return
           }
           redirectToCheckoutLogin()
+          return
+        }
+        if (isStockExceptionMessage(json.error ?? '')) {
+          await handleStockException(true)
           return
         }
         setError(json.error ?? 'Could not place order. Please try again.')
@@ -1217,13 +1329,16 @@ export default function DynamicCheckoutPage() {
         onClose={() => !isPlacing && setShowConfirmLocation(false)}
       />
 
-      {/* Multi-store fulfillment modal — appears above the payment sheet */}
-      <StoreFulfillmentModal
-        open={showFulfillmentModal}
-        stores={fulfillmentStores}
-        totalItems={items.reduce((sum, i) => sum + i.quantity, 0)}
-        onConfirm={handleFulfillmentConfirm}
-        onClose={() => setShowFulfillmentModal(false)}
+      {/* Alternative store switcher — stock exception / split inventory */}
+      <AlternativeStoreSwitcherSheet
+        open={showStoreSwitcher}
+        stores={alternativeStores}
+        initialStoreId={switcherInitialStoreId}
+        onProceed={handleStoreSwitcherProceed}
+        onClose={() => {
+          setShowStoreSwitcher(false)
+          setPendingPaymentAfterSwitch(false)
+        }}
       />
 
       {/* Offline banner */}
