@@ -13,6 +13,7 @@
     "@rabbit/database": "workspace:*",
     "clsx": "^2.1.1",
     "firebase": "^12.14.0",
+    "html5-qrcode": "^2.3.8",
     "jose": "^5.9.6",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",

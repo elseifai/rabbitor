@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Package, ShoppingCart, BarChart3, Settings } from 'lucide-react'
+import { LayoutDashboard, Package, ShoppingCart, BarChart3, Settings, Warehouse } from 'lucide-react'
 
 const NAV = [
   { href: '/merchant', label: 'Stock', icon: LayoutDashboard },
+  { href: '/merchant/inventory', label: 'Inventory', icon: Warehouse },
   { href: '/merchant/products', label: 'Products', icon: Package },
   { href: '/merchant/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/merchant/analytics', label: 'Analytics', icon: BarChart3 },
@@ -41,7 +42,11 @@ export function MerchantLayoutShell({ children }: { children: React.ReactNode })
             <Link
               key={href}
               href={href}
-              className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-white hover:text-rabbit-700 hover:shadow-sm"
+              className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-white hover:shadow-sm ${
+                pathname === href || pathname.startsWith(`${href}/`)
+                  ? 'bg-white text-rabbit-700 shadow-sm ring-1 ring-rabbit-100'
+                  : 'text-gray-600 hover:text-rabbit-700'
+              }`}
             >
               <Icon className="h-4 w-4" />
               {label}
