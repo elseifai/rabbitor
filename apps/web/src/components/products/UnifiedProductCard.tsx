@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { Minus, Plus } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useCartStore } from '@/store'
 import { ProductImage } from '@/components/products/ProductImage'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -238,49 +239,77 @@ export function UnifiedProductCard({
         )}
 
         {/* Zepto-style floating ADD / quantity control */}
-        {!outOfStock &&
-          (inCart ? (
-            <div className="absolute -bottom-2 -right-1 z-10 flex items-center gap-0.5 rounded-xl border border-pink-200 bg-white px-1 py-1 shadow-md">
-              <button
+        {!outOfStock && (
+          <AnimatePresence mode="popLayout" initial={false}>
+            {inCart ? (
+              <motion.div
+                key="stepper"
+                layout
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                className="absolute -bottom-2 -right-1 z-10 flex items-center gap-0.5 rounded-xl border border-pink-200 bg-white px-1 py-1 shadow-md"
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    updateQuantity(product.id, inCart.quantity - 1)
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[#E42575] transition active:scale-90"
+                  aria-label="Decrease quantity"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="relative flex min-w-[18px] justify-center overflow-hidden text-sm font-bold text-[#E42575]">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                      key={inCart.quantity}
+                      initial={{ y: 12, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: -12, opacity: 0 }}
+                      transition={{ type: 'spring', stiffness: 600, damping: 32 }}
+                    >
+                      {inCart.quantity}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    updateQuantity(product.id, inCart.quantity + 1)
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E42575] text-white transition active:scale-90"
+                  aria-label="Increase quantity"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </motion.div>
+            ) : (
+              <motion.button
+                key="add"
                 type="button"
+                layout
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={(e) => {
                   e.stopPropagation()
-                  updateQuantity(product.id, inCart.quantity - 1)
+                  handleAdd()
                 }}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-[#E42575] transition active:scale-95"
-                aria-label="Decrease quantity"
+                className="absolute -bottom-2 -right-1 z-10 flex items-center justify-center gap-1 rounded-xl border border-pink-200 bg-white px-4 py-1.5 text-sm font-bold text-[#E42575] shadow-md transition-colors hover:bg-pink-50"
+                aria-label={`Add ${product.name} to cart`}
               >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="min-w-[18px] text-center text-sm font-bold text-[#E42575]">
-                {inCart.quantity}
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  updateQuantity(product.id, inCart.quantity + 1)
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#E42575] text-white transition active:scale-95"
-                aria-label="Increase quantity"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleAdd()
-              }}
-              className="absolute -bottom-2 -right-1 z-10 flex items-center justify-center gap-1 rounded-xl border border-pink-200 bg-white px-4 py-1.5 text-sm font-bold text-[#E42575] shadow-md transition-all hover:bg-pink-50 active:scale-95"
-              aria-label={`Add ${product.name} to cart`}
-            >
-              <span>ADD</span>
-              <span className="text-lg font-normal leading-none">+</span>
-            </button>
-          ))}
+                <span>ADD</span>
+                <span className="text-lg font-normal leading-none">+</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Product info */}
