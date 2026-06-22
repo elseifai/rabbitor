@@ -121,6 +121,20 @@ Or via browser:
 ---
 
 ## Notes / gotchas
+
+- **NativeWind v4 + Reanimated 3 (fixed in commit after `caa5b2c`).** NativeWind's
+  default Babel preset (`react-native-css-interop`) unconditionally loads
+  `react-native-worklets/plugin` (Reanimated 4), but this app uses Reanimated
+  **3.17**. First `pnpm start` fails to bundle. Fix applied:
+  - `babel.config.js` inlines the css-interop Babel plugin + JSX transform
+    (`importSource: 'react-native-css-interop'`) and keeps
+    `react-native-reanimated/plugin`, **without** the worklets plugin.
+  - `react-native-css-interop@0.2.5` added as a direct dependency (so Metro can
+    resolve its jsx-runtime).
+  - `@types/react` pinned to `^19.0.14` (Expo SDK 53 compatible).
+  If you later upgrade to Reanimated 4, revert to the standard
+  `presets: [['babel-preset-expo', { jsxImportSource: 'nativewind' }], 'nativewind/babel']`.
+
 - There is a `git stash` entry on the sso branch holding linter reverts that are
   **not wanted** — safe to drop: `git stash drop`.
 - Mobile app uses **phone OTP** (its own `apps/api` `/auth/otp/*` endpoints),
