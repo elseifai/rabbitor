@@ -83,6 +83,15 @@ enum Locale {
   bn
 }
 
+enum StockAdjustmentType {
+  RESTOCK
+  SALE
+  DAMAGE
+  RETURN
+  CORRECTION
+  INITIAL
+}
+
 enum AdPlacement {
   HOME_BANNER
   HOME_STRIP
@@ -211,11 +220,70 @@ model Product {
   unit        String  @default("piece")
   stock       Int     @default(10)
 
-  orderItems OrderItem[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  /// Merchant inventory fields
+  sku               String?
+  barcode           String?
+  brand             String?
+  productCategory   String?
+  costPrice         Float?
+  lowStockThreshold Int     @default(5)
+  taxRate           Float?
+  hsnCode           String?
 
+  variants         ProductVariant[]
+  stockAdjustments StockAdjustment[]
+  orderItems       OrderItem[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([shopId, sku])
+  @@unique([shopId, barcode])
   @@index([shopId, isAvailable])
+  @@index([shopId, barcode])
+  @@index([shopId, sku])
+}
+
+model ProductVariant {
+  id          String  @id @default(uuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name        String
+  sku         String?
+  barcode     String?
+  price       Float
+  mrp         Float?
+  stock       Int     @default(0)
+  isAvailable Boolean @default(true)
+  /// e.g. { "size": "500g", "color": "Red" }
+  attributes  Json?
+  stockAdjustments StockAdjustment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([productId, sku])
+  @@unique([productId, barcode])
+  @@index([productId])
+  @@index([barcode])
+}
+
+model StockAdjustment {
+  id             String              @id @default(uuid())
+  shopId         String
+  productId      String
+  product        Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  type           StockAdjustmentType
+  quantityDelta  Int
+  quantityBefore Int
+  quantityAfter  Int
+  note           String?
+  reference      String?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([productId])
 }
 
 model Review {

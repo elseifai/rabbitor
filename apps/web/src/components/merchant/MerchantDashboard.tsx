@@ -11,6 +11,9 @@ import {
   Edit2,
   Check,
   RefreshCw,
+  ScanLine,
+  Warehouse,
+  ShoppingCart,
 } from 'lucide-react'
 import { getMerchantOrdersAction } from '@/actions/orders'
 import { getMerchantShopAction, toggleShopOpenAction } from '@/actions/merchant'
@@ -312,6 +315,42 @@ export function MerchantDashboard() {
           live={analyticsLive}
         />
 
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Link
+            href="/merchant/inventory"
+            className="col-span-2 flex items-center gap-3 rounded-2xl border border-[#FF6B35]/20 bg-gradient-to-br from-[#FFF3EE] to-white p-4 shadow-sm transition hover:border-[#FF6B35]/40 sm:col-span-2"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF6B35] text-white">
+              <Warehouse className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-slate-900">Inventory</p>
+              <p className="text-[10px] font-semibold text-slate-500">
+                Scan barcodes · stock · variants
+              </p>
+            </div>
+            <ScanLine className="ml-auto h-5 w-5 text-[#FF6B35]" />
+          </Link>
+          <Link
+            href="/merchant/products"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-slate-100 bg-white p-3 text-center shadow-sm"
+          >
+            <Package className="h-5 w-5 text-slate-600" />
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              Products
+            </span>
+          </Link>
+          <Link
+            href="/merchant/orders"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-slate-100 bg-white p-3 text-center shadow-sm"
+          >
+            <ShoppingCart className="h-5 w-5 text-slate-600" />
+            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              Orders
+            </span>
+          </Link>
+        </div>
+
         <div className="space-y-3">
           <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-slate-400">
             <Layers className="h-3.5 w-3.5 text-[#FF6B35]" /> Active Direct Dispatches
@@ -364,9 +403,17 @@ export function MerchantDashboard() {
         </div>
 
         <div className="space-y-4">
-          <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-slate-400">
-            <Package className="h-3.5 w-3.5 text-[#FF6B35]" /> Core Operational Grid
-          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-slate-400">
+              <Package className="h-3.5 w-3.5 text-[#FF6B35]" /> Core Operational Grid
+            </h3>
+            <Link
+              href="/merchant/inventory"
+              className="text-[10px] font-black uppercase tracking-wider text-[#FF6B35] hover:underline"
+            >
+              Full inventory →
+            </Link>
+          </div>
 
           {inventory.length === 0 ? (
             <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center">
@@ -378,10 +425,10 @@ export function MerchantDashboard() {
               </p>
               {hasShop && (
                 <Link
-                  href="/merchant/products"
+                  href="/merchant/inventory"
                   className="mt-3 inline-block rounded-lg bg-[#FF6B35] px-4 py-1.5 text-xs font-bold text-white"
                 >
-                  Add product →
+                  Open inventory & scan →
                 </Link>
               )}
             </div>
