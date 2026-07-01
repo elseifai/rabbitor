@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronUp, Percent } from 'lucide-react'
+import { ChevronDown, ChevronUp, Percent } from 'lucide-react'
 import { RotatingSearchBar } from '@/components/navigation/RotatingSearchBar'
 import { StorefrontProfileButton } from '@/components/layout/StorefrontProfileButton'
 import { SubPlatformTabs } from '@/components/navigation/SubPlatformTabs'
@@ -51,6 +51,15 @@ type DealProduct = {
   stock?: number
   shopRating?: number
 }
+
+const HOME_FILTER_CHIPS = [
+  { id: 'all', label: 'All', emoji: '🏠' },
+  { id: 'veggies', label: 'Fresh', emoji: '🥬' },
+  { id: 'dairy', label: 'Dairy', emoji: '🥛' },
+  { id: 'kirana', label: 'Fruits', emoji: '🍎' },
+  { id: 'bakery', label: 'Bakery', emoji: '🥖' },
+  { id: 'pharmacy', label: 'Pharmacy', emoji: '💊' },
+] as const
 
 const TOP_RATED_MIN = 4
 const TOP_SHOP_LIMIT = 5
@@ -272,6 +281,7 @@ export function HomeFeed() {
   const searchParams = useSearchParams()
   const { config: feedConfig } = useHomeFeedConfig()
   const coordinates = useLocationStore((s) => s.coordinates)
+  const formattedAddress = useLocationStore((s) => s.formattedAddress)
   const cartTotal = useCartStore((s) => s.total())
 
   const [subPlatform, setSubPlatform] = useState<SubPlatformId>(() =>
@@ -537,6 +547,76 @@ export function HomeFeed() {
 
   const showMarketplaceStores = isMarketplaceSubPlatform(subPlatform)
 
+  const locationArea = formattedAddress ?? SAVED_LOCATIONS[0].area
+  const deliveryHeaderLabel =
+    subPlatform === 'all' || subPlatform === 'grocery'
+      ? '⚡ 10 Minutes'
+      : platformConfig.etaLabel
+
+  const promoBannerSection =
+    toggles.promoBanner ? (
+      <section className="mb-2 px-5">
+        <button
+          type="button"
+          onClick={() => setPromoModalOpen(true)}
+          className={cn(
+            'relative flex h-[180px] w-full cursor-pointer items-center overflow-hidden rounded-[22px] px-6 text-left transition active:scale-[0.99]',
+            !feedConfig.promoBanner.image &&
+              'bg-gradient-to-br from-[#FF6B35] via-[#FF7043] to-[#FFB74D] shadow-[0_8px_32px_rgba(255,107,53,0.25)]',
+          )}
+        >
+          {feedConfig.promoBanner.image ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={feedConfig.promoBanner.image}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/45" />
+            </>
+          ) : null}
+          <div className="relative z-10 max-w-[52%]">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/80">
+              {feedConfig.promoBanner.badge}
+            </p>
+            <p className="mt-1 text-3xl font-bold leading-tight text-white">
+              {feedConfig.promoBanner.headline ?? 'Products Starting from Just ₹1!'}
+            </p>
+            <p className="mt-2 text-sm text-white/90">
+              {lowestDealPrice != null
+                ? `From ${formatCurrency(lowestDealPrice)} · Tap to explore`
+                : feedConfig.promoBanner.subtitle}
+            </p>
+            <span className="mt-4 inline-block rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#FF6B35] shadow-md">
+              Shop Now
+            </span>
+          </div>
+          <div className="absolute -right-1 bottom-0 top-0 flex items-center pr-2">
+            <div className="grid grid-cols-2 gap-2">
+              {bannerProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="relative overflow-hidden rounded-xl border-2 border-white/30 bg-white/20 shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={resolveImageSrc(p.image)}
+                    alt=""
+                    loading="eager"
+                    className="h-[72px] w-[72px] object-cover"
+                  />
+                  <span className="absolute bottom-0 left-0 right-0 bg-[#0C831F] py-0.5 text-center text-[9px] font-bold text-white">
+                    {formatCurrency(p.price)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </button>
+      </section>
+    ) : null
+
   const handleCategorySelect = useCallback(
     (categoryId: string) => {
       if (categoryId === 'all') {
@@ -619,13 +699,24 @@ export function HomeFeed() {
   ) : null
 
   return (
-    <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F0F0F0] font-sans shadow-xl">
-      {/* SECTION A: Top search bar */}
-      <div className="sticky top-0 z-50 border-b border-[#F0F0F0] bg-white px-4 py-3">
-        <div className="flex items-center gap-2">
-          <StorefrontProfileButton />
+    <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F5F5F5] font-sans shadow-xl">
+      {/* Premium header + search */}
+      <div className="sticky top-0 z-50 bg-[#F5F5F5]">
+        <header className="bg-gradient-to-b from-[#E8F5E9] to-[#F1F8E9] px-5 pt-4 pb-6">
+          <div className="flex min-h-[72px] items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[26px] font-bold leading-none text-black">{deliveryHeaderLabel}</p>
+              <p className="mt-1 text-sm font-medium leading-tight text-[#878787]">
+                Home • {locationArea}{' '}
+                <ChevronDown className="mb-0.5 inline h-3.5 w-3.5" />
+              </p>
+            </div>
+            <StorefrontProfileButton />
+          </div>
+        </header>
+
+        <div className="relative z-10 -mt-3 px-5 pb-3">
           <form
-            className="min-w-0 flex-1"
             onSubmit={(e) => {
               e.preventDefault()
               const q = searchQuery.trim()
@@ -633,6 +724,7 @@ export function HomeFeed() {
             }}
           >
             <RotatingSearchBar
+              variant="premium"
               value={searchQuery}
               onChange={setSearchQuery}
               onSubmit={(term) => {
@@ -645,7 +737,7 @@ export function HomeFeed() {
                       <Link
                         key={s.id}
                         href={`/shops/${s.slug}`}
-                        className="block border-t border-[#F0F0F0] px-3 py-2.5 text-sm hover:bg-[#F8F8F8]"
+                        className="block border-t border-[#F0F0F0] px-4 py-3 text-sm hover:bg-[#F8F8F8]"
                         onClick={() => setSearchQuery('')}
                       >
                         <span className="font-semibold text-[#1C1C1C]">{s.name}</span>
@@ -657,54 +749,49 @@ export function HomeFeed() {
               }
             />
           </form>
-
-          <div
-            className={cn(
-              'flex h-10 w-[88px] shrink-0 items-center justify-center rounded-lg px-2 py-1 transition-colors duration-300',
-              platformConfig.etaTone,
-            )}
-          >
-            <p className="text-center text-[11px] font-bold leading-tight">
-              {platformConfig.etaLabel}
-            </p>
-          </div>
         </div>
+      </div>
 
+      {/* Service tabs */}
+      <section className="mt-4 px-5">
         <SubPlatformTabs
+          variant="cards"
           activeTab={subPlatform}
           onChange={handleSubPlatformChange}
           labelOverrides={subPlatformLabelOverrides}
-          className="px-0 pb-0 pt-2"
         />
-      </div>
+      </section>
 
-      {/* SECTION B: Category tabs */}
+      {/* Filter chips */}
       {toggles.categoryBar && (
-      <div className="sticky top-[116px] z-40 border-b border-[#F0F0F0] bg-white">
-        <div className="flex overflow-x-auto px-4 scrollbar-hide">
-          {categoryTabs.map((cat) => {
-            const active = activeCategory === cat.id
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => handleCategorySelect(cat.id)}
-                className={cn(
-                  'shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap transition-colors',
-                  active
-                    ? 'border-[#FF6B35] text-[#FF6B35]'
-                    : 'border-transparent text-[#878787]',
-                )}
-              >
-                {cat.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+        <section className="mt-6 px-5">
+          <div className="flex gap-4 overflow-x-auto scrollbar-hide py-1">
+            {HOME_FILTER_CHIPS.map((chip) => {
+              const active = activeCategory === chip.id
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => handleCategorySelect(chip.id)}
+                  className={cn(
+                    'shrink-0 border-b-[3px] px-5 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                    active
+                      ? 'border-[#FF6B35] text-[#FF6B35]'
+                      : 'border-transparent text-[#878787]',
+                  )}
+                >
+                  {chip.emoji} {chip.label}
+                </button>
+              )
+            })}
+          </div>
+        </section>
       )}
 
-      {/* SECTION C: Main scrollable content */}
+      {/* Promotional banner */}
+      <div className="mt-6">{promoBannerSection}</div>
+
+      {/* Main scrollable content */}
       <div className="py-2">
         {/* Fashion deals scroller */}
         {platformConfig.showFashionDeals && (
@@ -783,62 +870,6 @@ export function HomeFeed() {
         <section className="mb-2 px-4">
           <AdBanner placement="HOME_BANNER" className="h-36 w-full" />
         </section>
-
-        {/* Deals Banner — opens exclusive offers modal */}
-        {toggles.promoBanner && (
-        <section className="mb-2 px-4">
-          <button
-            type="button"
-            onClick={() => setPromoModalOpen(true)}
-            className={cn(
-              'relative flex w-full cursor-pointer items-center justify-between overflow-hidden rounded-xl p-4 text-left transition active:scale-[0.99]',
-              !feedConfig.promoBanner.image &&
-                'bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] shadow-lg shadow-orange-200/40',
-            )}
-          >
-            {feedConfig.promoBanner.image ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={feedConfig.promoBanner.image}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/45" />
-              </>
-            ) : null}
-            <div className="relative min-w-0 flex-1 pr-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/75">
-                {feedConfig.promoBanner.badge}
-              </p>
-              <p className="mt-1 text-lg font-black leading-snug text-white sm:text-xl">
-                {feedConfig.promoBanner.headline ?? 'Products Starting from Just ₹1!'}
-              </p>
-              <p className="mt-1 text-xs text-white/85">
-                {lowestDealPrice != null
-                  ? `From ${formatCurrency(lowestDealPrice)} · Tap to explore`
-                  : feedConfig.promoBanner.subtitle}
-              </p>
-            </div>
-            <div className="relative grid shrink-0 grid-cols-2 gap-1.5">
-              {bannerProducts.map((p) => (
-                <div key={p.id} className="relative overflow-hidden rounded-lg bg-white/20 ring-1 ring-white/30">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={resolveImageSrc(p.image)}
-                    alt=""
-                    loading="eager"
-                    className="h-[60px] w-[60px] object-cover"
-                  />
-                  <span className="absolute bottom-0 left-0 right-0 bg-[#0C831F] py-0.5 text-center text-[9px] font-bold text-white">
-                    {formatCurrency(p.price)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </button>
-        </section>
-        )}
 
         <PromoDealsModal
           open={promoModalOpen}

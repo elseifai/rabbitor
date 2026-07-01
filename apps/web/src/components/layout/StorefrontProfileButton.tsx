@@ -14,14 +14,12 @@ export function StorefrontProfileButton({ className }: { className?: string }) {
       href="/profile"
       aria-label="Profile"
       className={cn(
-        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors',
-        active
-          ? 'border-[#FF6B35]/30 bg-[#FFF5F2] text-[#FF6B35]'
-          : 'border-[#F0F0F0] bg-white text-[#878787] hover:border-[#FF6B35]/20 hover:text-[#FF6B35]',
+        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[#1C1C1C] shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-colors',
+        active && 'ring-2 ring-[#FF6B35]/30',
         className,
       )}
     >
-      <User className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+      <User className="h-6 w-6" strokeWidth={active ? 2.5 : 2} />
     </Link>
   )
 }

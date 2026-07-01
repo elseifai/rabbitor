@@ -9,6 +9,7 @@ type SubPlatformTabsProps = {
   onChange: (tab: SubPlatformId) => void
   className?: string
   labelOverrides?: Partial<Record<SubPlatformId, string>>
+  variant?: 'pill' | 'cards'
 }
 
 export function SubPlatformTabs({
@@ -16,6 +17,7 @@ export function SubPlatformTabs({
   onChange,
   className,
   labelOverrides,
+  variant = 'pill',
 }: SubPlatformTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Record<SubPlatformId, HTMLButtonElement | null>>({
@@ -50,6 +52,51 @@ export function SubPlatformTabs({
   }, [measureIndicator])
 
   const activeTheme = SUB_PLATFORM_TABS.find((t) => t.id === activeTab) ?? SUB_PLATFORM_TABS[0]
+
+  const displayLabel = (tab: (typeof SUB_PLATFORM_TABS)[number]) => {
+    const override = labelOverrides?.[tab.id]
+    if (override) {
+      if (tab.id === 'restaurants') return 'Restaurants'
+      if (tab.id === 'fashion') return 'Boutique'
+      return override
+    }
+    if (tab.id === 'restaurants') return 'Restaurants'
+    if (tab.id === 'fashion') return 'Boutique'
+    return tab.label
+  }
+
+  if (variant === 'cards') {
+    return (
+      <div className={cn('py-1', className)}>
+        <div
+          className="flex gap-4 overflow-x-auto scrollbar-hide"
+          role="tablist"
+          aria-label="Sub-platform navigation"
+        >
+          {SUB_PLATFORM_TABS.map((tab) => {
+            const selected = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => onChange(tab.id)}
+                className={cn(
+                  'flex h-12 shrink-0 items-center rounded-[24px] px-6 text-sm font-semibold shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-colors',
+                  selected
+                    ? 'bg-[#FF6B35] text-white'
+                    : 'bg-white text-[#1C1C1C]',
+                )}
+              >
+                {displayLabel(tab)}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={cn('px-4 py-2.5', className)}>

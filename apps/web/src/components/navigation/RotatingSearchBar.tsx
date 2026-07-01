@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Flame, Search } from 'lucide-react'
+import { Flame, Mic, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const ROTATING_KEYWORDS = [
@@ -33,6 +33,7 @@ export type RotatingSearchBarProps = {
   onSubmit?: (value: string) => void
   onTrendingSelect?: (term: string) => void
   className?: string
+  variant?: 'default' | 'premium'
   /** Shop or product matches rendered below the trending panel */
   results?: ReactNode
 }
@@ -43,6 +44,7 @@ export function RotatingSearchBar({
   onSubmit,
   onTrendingSelect,
   className,
+  variant = 'default',
   results,
 }: RotatingSearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -100,12 +102,16 @@ export function RotatingSearchBar({
   }, [value, onSubmit])
 
   const activeKeyword = ROTATING_KEYWORDS[keywordIndex]
+  const isPremium = variant === 'premium'
 
   return (
     <div className={cn('relative w-full', className)}>
-      <div className="relative h-11 w-full">
+      <div className={cn('relative w-full', isPremium ? 'h-14' : 'h-11')}>
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-[#878787]"
+          className={cn(
+            'pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 text-[#878787]',
+            isPremium ? 'left-4 h-5 w-5' : 'left-3 h-4 w-4',
+          )}
           aria-hidden
         />
 
@@ -124,21 +130,34 @@ export function RotatingSearchBar({
           }}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="relative z-[1] h-11 w-full rounded-xl border border-transparent bg-[#F0F0F0] pl-10 pr-10 text-[13px] text-[#1C1C1C] outline-none ring-[#FF6B35]/30 transition-[box-shadow,background-color,border-color] focus:border-[#FF6B35]/25 focus:bg-white focus:shadow-sm focus:ring-2"
+          placeholder={isPremium ? 'Search for "Milk, Fruits, Atta"' : undefined}
+          className={cn(
+            'relative z-[1] w-full text-[#1C1C1C] outline-none transition-[box-shadow,background-color,border-color]',
+            isPremium
+              ? 'h-14 rounded-[28px] bg-white pl-12 pr-12 text-base shadow-[0_4px_20px_rgba(0,0,0,0.08)] placeholder:text-[#878787] focus:shadow-[0_6px_24px_rgba(0,0,0,0.1)]'
+              : 'h-11 rounded-xl border border-transparent bg-[#F0F0F0] pl-10 pr-10 text-[13px] ring-[#FF6B35]/30 focus:border-[#FF6B35]/25 focus:bg-white focus:shadow-sm focus:ring-2',
+          )}
           autoComplete="off"
           spellCheck={false}
         />
 
-        <button
-          type="button"
-          onClick={handleSubmitSearch}
-          className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#878787] hover:bg-white hover:text-[#FF6B35]"
-          aria-label="Search"
-        >
-          <Search className="h-4 w-4" />
-        </button>
+        {isPremium ? (
+          <Mic
+            className="pointer-events-none absolute right-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-[#878787]"
+            aria-hidden
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmitSearch}
+            className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#878787] hover:bg-white hover:text-[#FF6B35]"
+            aria-label="Search"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+        )}
 
-        {showRotatingPlaceholder && (
+        {!isPremium && showRotatingPlaceholder && (
           <div
             className="pointer-events-none absolute inset-y-0 left-10 right-3 z-[2] flex items-center overflow-hidden text-[13px]"
             aria-hidden
