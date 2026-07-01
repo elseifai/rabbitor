@@ -23,8 +23,8 @@ export function BottomNav() {
   if (HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null
 
   return (
-    <nav className="fixed bottom-4 left-0 right-0 z-50 px-5 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex h-[72px] max-w-[440px] items-center justify-around rounded-[24px] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[#F0F0F0] bg-white pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex h-14 max-w-[480px] items-center justify-around">
         {TABS.map((tab) => {
           const { href, label, icon: Icon } = tab
           const showBadge = 'badge' in tab && tab.badge
@@ -35,13 +35,13 @@ export function BottomNav() {
               key={href}
               href={href}
               className={cn(
-                'relative flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold',
+                'relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-semibold',
                 color,
               )}
             >
               <span className="relative">
                 <Icon
-                  className={cn('h-6 w-6', active && href === '/' && 'fill-[#FF6B35]')}
+                  className={cn('h-5 w-5', active && href === '/' && 'fill-[#FF6B35]')}
                   strokeWidth={active ? 2.5 : 2}
                 />
                 {showBadge && itemCount > 0 && (
