@@ -7,7 +7,7 @@ export default function StorefrontLayout({
 }) {
   return (
     <div className="min-h-screen bg-white">
-      <main className="pb-[70px]">{children}</main>
+      <main className="pb-[100px]">{children}</main>
       <BottomNav />
     </div>
   )

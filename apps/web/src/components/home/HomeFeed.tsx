@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, ChevronUp, Minus, Plus, Percent } from 'lucide-react'
+import { Search, ChevronUp, Minus, Plus, Percent, User, Mic, ChevronDown } from 'lucide-react'
 import { useLocationStore, useCartStore } from '@/store'
 import { SAVED_LOCATIONS } from '@/lib/constants'
 import { HOME_CATEGORY_TABS } from '@/lib/categories'
@@ -45,10 +45,59 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-const ROTATING_PROMOS = [
-  { text: '🍦 ICE CREAM CARNIVAL', emoji: '🍦' },
-  { text: '🐰 RABBIT FAST DEALS', emoji: '🐰' },
-  { text: '🐟 FRESH FISH TODAY', emoji: '🐟' },
+const SERVICE_TABS = [
+  { id: 'rabbit', label: 'Rabbit' },
+  { id: 'supermart', label: 'Super Mart' },
+  { id: 'restaurants', label: 'Restaurants' },
+  { id: 'boutique', label: 'Boutique' },
+] as const
+
+const FILTER_CHIPS = [
+  { categoryId: 'all', label: 'All', emoji: '🏠' },
+  { categoryId: 'veggies', label: 'Fresh', emoji: '🥬' },
+  { categoryId: 'dairy', label: 'Dairy', emoji: '🥛' },
+  { categoryId: 'kirana', label: 'Fruits', emoji: '🍎' },
+  { categoryId: 'bakery', label: 'Bakery', emoji: '🥖' },
+  { categoryId: 'pharmacy', label: 'Pharmacy', emoji: '💊' },
+] as const
+
+const SHOP_BY_CATEGORY = [
+  {
+    label: 'Fruits & Vegetables',
+    subtitle: 'Farm-fresh daily',
+    image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400',
+    category: 'veggies',
+  },
+  {
+    label: 'Dairy, Bread & Eggs',
+    subtitle: 'Morning essentials',
+    image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400',
+    category: 'dairy',
+  },
+  {
+    label: 'Atta, Rice & Dals',
+    subtitle: 'Pantry staples',
+    image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400',
+    category: 'kirana',
+  },
+  {
+    label: 'Meat, Fish & Eggs',
+    subtitle: 'Protein picks',
+    image: 'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=400',
+    category: 'fish',
+  },
+  {
+    label: 'Snacks & Beverages',
+    subtitle: 'Quick bites & sips',
+    image: 'https://images.unsplash.com/photo-1527960471264-932f39eb5846?w=400',
+    category: 'kirana',
+  },
+  {
+    label: 'Bakery & Sweets',
+    subtitle: 'Freshly baked',
+    image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=400',
+    category: 'bakery',
+  },
 ]
 
 const COUPONS = [
@@ -57,137 +106,68 @@ const COUPONS = [
   { title: 'FLAT ₹100 OFF', sub: 'above ₹400', cashback: 'Get ₹100 off on fish' },
 ]
 
-const GROCERY_KITCHEN = {
-  row1: [
-    {
-      label: 'Fruits & Vegetables',
-      image: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=300',
-      category: 'veggies',
-    },
-    {
-      label: 'Dairy, Bread & Eggs',
-      image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=300',
-      category: 'dairy',
-    },
-  ],
-  row2: [
-    {
-      label: 'Atta, Rice, Oil & Dals',
-      image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Meat, Fish & Eggs',
-      image: 'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=200',
-      category: 'fish',
-    },
-    {
-      label: 'Masala & Dry Fruits',
-      image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=200',
-      category: 'kirana',
-    },
-  ],
-  row3: [
-    {
-      label: 'Breakfast & Sauces',
-      image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Packaged Food',
-      image: 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Frozen Food',
-      image: 'https://images.unsplash.com/photo-1581088654672-8f1e3a8c9d72?w=200',
-      category: 'kirana',
-    },
-  ],
-}
+const CARD_SHADOW = 'shadow-[0_8px_32px_rgba(0,0,0,0.1)]'
+const CARD_SHADOW_HOVER = 'hover:shadow-[0_12px_40px_rgba(0,0,0,0.14)]'
+const CARD_RADIUS = 'rounded-3xl'
+const SEARCH_SHADOW = 'shadow-[0_8px_28px_rgba(0,0,0,0.12)]'
 
-const SNACKS_DRINKS = {
-  row1: [
-    {
-      label: 'Tea, Coffee & More',
-      image: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300',
-      category: 'kirana',
-    },
-    {
-      label: 'Ice Creams & More',
-      image: 'https://images.unsplash.com/photo-1567206563114-c179706a56c8?w=300',
-      category: 'dairy',
-    },
-  ],
-  row2: [
-    {
-      label: 'Sweet Cravings',
-      image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?w=200',
-      category: 'bakery',
-    },
-    {
-      label: 'Cold Drinks & Juices',
-      image: 'https://images.unsplash.com/photo-1527960471264-932f39eb5846?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Munchies',
-      image: 'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=200',
-      category: 'kirana',
-    },
-  ],
-  row3: [
-    {
-      label: 'Biscuits & Cookies',
-      image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Noodles & Pasta',
-      image: 'https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=200',
-      category: 'kirana',
-    },
-    {
-      label: 'Spreads & Dips',
-      image: 'https://images.unsplash.com/photo-1588165171080-c89acfa5ee83?w=200',
-      category: 'kirana',
-    },
-  ],
+const HERO_GROCERY_IMAGES = [
+  'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200',
+  'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=200',
+  'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=200',
+  'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=200',
+]
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div>
+      <h2 className="text-2xl font-bold text-[#1C1C1C]">{title}</h2>
+      {subtitle && <p className="mt-1 text-sm text-[#878787]">{subtitle}</p>}
+    </div>
+  )
 }
 
 function CategoryCard({
   label,
+  subtitle,
   image,
   category,
-  tall,
 }: {
   label: string
+  subtitle: string
   image: string
   category: string
-  tall?: boolean
 }) {
   return (
     <Link
       href={`/shops?category=${category}`}
-      className="overflow-hidden rounded-xl bg-[#F8F8F8]"
+      className={cn(
+        'overflow-hidden bg-white transition-shadow',
+        CARD_RADIUS,
+        CARD_SHADOW,
+        CARD_SHADOW_HOVER,
+      )}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image}
         alt=""
         loading="lazy"
-        className={cn('w-full object-cover', tall ? 'h-[120px]' : 'h-[90px]')}
+        className="h-[152px] w-full object-cover"
       />
-      <p className="p-2 text-sm font-bold leading-tight text-[#1C1C1C]">{label}</p>
+      <div className="p-4">
+        <p className="text-lg font-semibold leading-tight text-[#1C1C1C]">{label}</p>
+        <p className="mt-1 text-sm text-[#878787]">{subtitle}</p>
+      </div>
     </Link>
   )
 }
 
 function ShopSkeleton() {
   return (
-    <div className="w-[160px] shrink-0 animate-pulse overflow-hidden rounded-lg bg-white">
+    <div className={cn('w-[168px] shrink-0 animate-pulse overflow-hidden bg-white', CARD_RADIUS, CARD_SHADOW)}>
       <div className="h-[100px] bg-[#F0F0F0]" />
-      <div className="space-y-2 p-2">
+      <div className="space-y-2 p-3">
         <div className="h-3 w-3/4 rounded bg-[#F0F0F0]" />
         <div className="h-2 w-1/2 rounded bg-[#F0F0F0]" />
       </div>
@@ -207,8 +187,8 @@ function ProductDealCard({ product }: { product: DealProduct }) {
   const placeholder = STORE_PLACEHOLDERS[product.storeType ?? ''] ?? { emoji: '📦', bg: 'bg-gray-100' }
 
   return (
-    <div className="relative rounded-xl border border-[#F0F0F0] bg-white p-2">
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-[#F8F8F8]">
+    <div className={cn('relative bg-white p-3', CARD_RADIUS, CARD_SHADOW)}>
+      <div className="relative aspect-square overflow-hidden rounded-2xl bg-[#F8F8F8]">
         {product.image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={product.image} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -229,14 +209,14 @@ function ProductDealCard({ product }: { product: DealProduct }) {
         )}
       </div>
 
-      <p className="mt-2 line-clamp-2 text-[13px] font-semibold leading-snug text-[#1C1C1C]">
+      <p className="mt-2 line-clamp-2 text-base font-medium leading-snug text-[#1C1C1C]">
         {product.name}
       </p>
-      <p className="text-[11px] text-[#878787]">{product.unit}</p>
+      <p className="text-sm text-[#878787]">{product.unit}</p>
 
       <div className="mt-2 flex items-end justify-between">
         <div className="flex items-baseline gap-1">
-          <span className="text-sm font-bold text-[#1C1C1C]">{formatCurrency(product.price)}</span>
+          <span className="text-lg font-bold text-[#1C1C1C]">{formatCurrency(product.price)}</span>
           {original && (
             <span className="text-xs text-[#878787] line-through">{formatCurrency(original)}</span>
           )}
@@ -301,7 +281,7 @@ function ViewCartBar() {
     <button
       type="button"
       onClick={() => router.push('/cart')}
-      className="fixed bottom-14 left-0 right-0 z-50 mx-auto flex h-14 max-w-[480px] translate-y-0 items-center justify-between bg-[#FF3F6C] px-4 text-white transition-transform duration-300"
+      className="fixed bottom-[88px] left-0 right-0 z-50 mx-auto flex h-14 max-w-[480px] translate-y-0 items-center justify-between rounded-2xl bg-[#FF3F6C] px-5 text-white shadow-[0_4px_20px_rgba(255,63,108,0.3)] transition-transform duration-300"
     >
       <span className="flex items-center gap-2 text-sm font-bold">
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-bold text-[#FF3F6C]">
@@ -316,7 +296,10 @@ function ViewCartBar() {
 
 function HomeShopCard({ shop }: { shop: ShopListItem }) {
   return (
-    <Link href={`/shops/${shop.slug}`} className="w-[160px] shrink-0 overflow-hidden rounded-lg bg-white">
+    <Link
+      href={`/shops/${shop.slug}`}
+      className={cn('w-[168px] shrink-0 overflow-hidden bg-white', CARD_RADIUS, CARD_SHADOW, CARD_SHADOW_HOVER)}
+    >
       <div className="relative h-[100px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -353,7 +336,7 @@ export function HomeFeed() {
   const cartTotal = useCartStore((s) => s.total())
 
   const [activeCategory, setActiveCategory] = useState('all')
-  const [promoIdx, setPromoIdx] = useState(0)
+  const [activeService, setActiveService] = useState('rabbit')
   const [searchQuery, setSearchQuery] = useState('')
   const [shops, setShops] = useState<ShopListItem[]>([])
   const [deals, setDeals] = useState<DealProduct[]>([])
@@ -363,6 +346,9 @@ export function HomeFeed() {
 
   const dealsRef = useRef<HTMLDivElement>(null)
   const couponsRef = useRef<HTMLDivElement>(null)
+  const heroRef = useRef<HTMLDivElement>(null)
+
+  const [heroPassed, setHeroPassed] = useState(false)
 
   const lat = location?.latitude ?? SAVED_LOCATIONS[0].latitude
   const lng = location?.longitude ?? SAVED_LOCATIONS[0].longitude
@@ -370,10 +356,8 @@ export function HomeFeed() {
   const tab = HOME_CATEGORY_TABS.find((t) => t.id === activeCategory)
   const storeType = tab?.storeType
 
-  useEffect(() => {
-    const t = setInterval(() => setPromoIdx((i) => (i + 1) % ROTATING_PROMOS.length), 3000)
-    return () => clearInterval(t)
-  }, [])
+  const locationLabel = location?.label ?? 'Home'
+  const locationArea = location?.area ?? SAVED_LOCATIONS[0].area
 
   useEffect(() => {
     let cancelled = false
@@ -472,7 +456,33 @@ export function HomeFeed() {
     getSessionAction().then((s) => setLoggedIn(!!s))
   }, [])
 
+  useEffect(() => {
+    const el = heroRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeroPassed(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '0px 0px -72px 0px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   const bannerProducts = useMemo(() => deals.slice(0, 4), [deals])
+  const heroDisplayImages = useMemo(() => {
+    const fromDeals = bannerProducts.map((p) => ({
+      src: p.image ?? HERO_GROCERY_IMAGES[0],
+      price: p.price,
+    }))
+    if (fromDeals.length >= 4) return fromDeals
+    const fallbacks = HERO_GROCERY_IMAGES.map((src, i) => ({
+      src,
+      price: fromDeals[i]?.price,
+    }))
+    return [...fromDeals, ...fallbacks].slice(0, 4)
+  }, [bannerProducts])
+  const trendingProducts = useMemo(() => deals.slice(0, 4), [deals])
+  const flashSaleProducts = useMemo(() => deals.slice(0, 8), [deals])
+  const bestSellers = useMemo(() => [...deals].reverse().slice(0, 6), [deals])
   const cartItems = useCartStore((s) => s.items)
   const showFreeDeliveryBar = cartTotal < 99 && cartItems.length === 0
   const remainingForFree = Math.max(0, 99 - cartTotal)
@@ -496,25 +506,49 @@ export function HomeFeed() {
   }, [searchQuery, shops])
 
   return (
-    <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F0F0F0] font-sans shadow-xl">
-      {/* SECTION A: Top search bar */}
-      <div className="sticky top-0 z-50 border-b border-[#F0F0F0] bg-white px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="relative w-[60%]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#878787]" />
+    <div className="mx-auto min-h-screen max-w-[480px] scroll-smooth bg-[#F5F5F5] font-sans shadow-xl">
+      {/* Compact sticky header + search */}
+      <div className="sticky top-0 z-50 bg-[#F5F5F5]">
+        <header className="bg-gradient-to-b from-[#E8F5E9] to-[#F1F8E9] px-5 pt-3 pb-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[28px] font-bold leading-none text-black">⚡ 10 Minutes</p>
+              <p className="mt-1 truncate text-sm font-medium leading-tight text-[#878787]">
+                {locationLabel} • {locationArea}{' '}
+                <ChevronDown className="mb-0.5 inline h-3.5 w-3.5" />
+              </p>
+            </div>
+            <Link
+              href="/profile"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_4px_16px_rgba(0,0,0,0.1)]"
+              aria-label="Profile"
+            >
+              <User className="h-5 w-5 text-[#1C1C1C]" />
+            </Link>
+          </div>
+        </header>
+
+        <div className="relative z-10 -mt-[11px] px-5 pb-2">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#878787]" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder='Search "atta", "fish", "vegetables"...'
-              className="h-10 w-full rounded-lg bg-[#F0F0F0] pl-9 pr-3 text-[13px] text-[#1C1C1C] outline-none placeholder:text-[#878787]"
+              placeholder='Search for "Milk, Fruits, Atta"'
+              className={cn(
+                'h-14 w-full bg-white pl-12 pr-12 text-base text-[#1C1C1C] outline-none placeholder:text-[#878787]',
+                CARD_RADIUS,
+                SEARCH_SHADOW,
+              )}
             />
+            <Mic className="absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#878787]" />
             {searchResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-lg border border-[#F0F0F0] bg-white shadow-lg">
+              <div className={cn('absolute left-0 right-0 top-full z-50 mt-2 max-h-48 overflow-y-auto border border-[#F0F0F0] bg-white', CARD_RADIUS, SEARCH_SHADOW)}>
                 {searchResults.map((s) => (
                   <Link
                     key={s.id}
                     href={`/shops/${s.slug}`}
-                    className="block border-b border-[#F0F0F0] px-3 py-2.5 text-sm last:border-0 hover:bg-[#F8F8F8]"
+                    className="block border-b border-[#F0F0F0] px-4 py-3 text-sm last:border-0 hover:bg-[#F8F8F8]"
                     onClick={() => setSearchQuery('')}
                   >
                     <span className="font-semibold text-[#1C1C1C]">{s.name}</span>
@@ -524,277 +558,305 @@ export function HomeFeed() {
               </div>
             )}
           </div>
-
-          <div className="flex w-[40%] items-center justify-between rounded-lg bg-[#FFF3E0] px-2 py-1 h-10">
-            <p
-              key={promoIdx}
-              className="animate-in fade-in text-[11px] font-bold uppercase leading-tight text-[#D4380D] duration-500"
-            >
-              {ROTATING_PROMOS[promoIdx].text}
-            </p>
-            <span className="text-lg">{ROTATING_PROMOS[promoIdx].emoji}</span>
-          </div>
         </div>
       </div>
 
-      {/* SECTION B: Category tabs */}
-      <div className="sticky top-[64px] z-40 border-b border-[#F0F0F0] bg-white">
-        <div className="flex overflow-x-auto px-4 scrollbar-hide">
-          {HOME_CATEGORY_TABS.map((cat) => {
-            const active = activeCategory === cat.id
+      {/* Service tabs */}
+      <section className="mt-4 px-5">
+        <div className="flex gap-5 overflow-x-auto scrollbar-hide py-1">
+          {SERVICE_TABS.map((svc) => {
+            const active = activeService === svc.id
             return (
               <button
-                key={cat.id}
+                key={svc.id}
                 type="button"
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => setActiveService(svc.id)}
                 className={cn(
-                  'shrink-0 border-b-2 px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap transition-colors',
+                  'flex h-14 shrink-0 items-center rounded-[24px] border-0 px-7 text-base font-semibold outline-none transition-all',
                   active
-                    ? 'border-[#FF6B35] text-[#FF6B35]'
-                    : 'border-transparent text-[#878787]',
+                    ? 'bg-[#FFE8DE] text-[#E85D2C] shadow-[0_4px_14px_rgba(0,0,0,0.1)]'
+                    : cn('bg-white text-[#1C1C1C]', CARD_SHADOW),
                 )}
               >
-                {cat.label}
+                {svc.label}
               </button>
             )
           })}
         </div>
-      </div>
+      </section>
 
-      {/* SECTION C: Main scrollable content */}
-      <div className="py-2">
-        {/* Active category banner — shown when a specific category is selected */}
-        {activeCategory !== 'all' && (
-          <section className="mb-2 bg-white px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-[#1C1C1C]">{tab?.label}</h2>
-                <p className="text-xs text-[#878787]">
-                  {loadingShops
-                    ? 'Finding stores near you…'
-                    : `${shops.length} store${shops.length !== 1 ? 's' : ''} · ${deals.length} item${deals.length !== 1 ? 's' : ''}`}
-                </p>
-              </div>
+      {/* Filter chips */}
+      <section className="mt-6 px-5">
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide py-1">
+          {FILTER_CHIPS.map((chip) => {
+            const active = activeCategory === chip.categoryId
+            return (
+              <button
+                key={`${chip.categoryId}-${chip.label}`}
+                type="button"
+                onClick={() => setActiveCategory(chip.categoryId)}
+                className={cn(
+                  'shrink-0 rounded-2xl px-6 py-3 text-base font-semibold whitespace-nowrap transition-all',
+                  active
+                    ? 'border-b-[3px] border-[#FF6B35] bg-white text-[#FF6B35] shadow-[0_4px_14px_rgba(0,0,0,0.08)]'
+                    : cn('bg-white text-[#878787]', CARD_SHADOW),
+                )}
+              >
+                {chip.emoji} {chip.label}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Main scrollable content */}
+      <div className="mt-6 space-y-6 pb-6">
+        {/* Hero promotional banner */}
+        <section ref={heroRef} className="px-5">
+          <div className="relative flex h-[190px] items-center overflow-hidden rounded-3xl bg-gradient-to-br from-[#FF6B35] via-[#FF7043] to-[#FFB74D] px-6 shadow-[0_10px_36px_rgba(255,107,53,0.22)]">
+            <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
+            <div className="absolute -bottom-6 right-20 h-24 w-24 rounded-full bg-white/10" />
+            <div className="relative z-10 max-w-[52%]">
+              <p className="text-xs font-bold uppercase tracking-widest text-white/80">
+                Limited time offer
+              </p>
+              <p className="mt-1 text-3xl font-bold leading-tight text-white">
+                Deals from ₹9
+              </p>
+              <p className="mt-2 text-sm leading-snug text-white/90">
+                Fresh groceries delivered in 10 minutes
+              </p>
               <button
                 type="button"
-                onClick={() => setActiveCategory('all')}
-                className="rounded-full border border-[#F0F0F0] px-3 py-1 text-xs font-semibold text-[#878787]"
+                onClick={scrollToDeals}
+                className="mt-4 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[#FF6B35] shadow-[0_4px_16px_rgba(0,0,0,0.15)] active:scale-95"
               >
-                Clear ✕
+                Shop Now
               </button>
+            </div>
+            <div className="absolute -right-1 bottom-0 top-0 flex items-center pr-2">
+              <div className="grid grid-cols-2 gap-2">
+                {heroDisplayImages.map((item, idx) => (
+                  <div
+                    key={`hero-img-${idx}`}
+                    className={cn(
+                      'relative overflow-hidden rounded-2xl border-2 border-white/30 bg-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.12)]',
+                      idx % 2 === 0 ? 'rotate-[-2deg]' : 'rotate-[2deg]',
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.src}
+                      alt=""
+                      className="h-[80px] w-[80px] object-cover"
+                    />
+                    {item.price != null && (
+                      <span className="absolute bottom-0 left-0 right-0 bg-[#0C831F] py-0.5 text-center text-[9px] font-bold text-white">
+                        {formatCurrency(item.price)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Shop by Category */}
+        {activeCategory === 'all' && (
+          <section className="px-5">
+            <SectionHeader title="Shop by Category" subtitle="Everything delivered in minutes." />
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              {SHOP_BY_CATEGORY.map((item) => (
+                <CategoryCard key={item.label} {...item} />
+              ))}
             </div>
           </section>
         )}
 
-        {/* Grocery & Kitchen (only on All) */}
-        {activeCategory === 'all' && (
-        <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Grocery & Kitchen</h2>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {GROCERY_KITCHEN.row1.map((item) => (
-              <CategoryCard key={item.label} {...item} tall />
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {GROCERY_KITCHEN.row2.map((item) => (
-              <CategoryCard key={item.label} {...item} />
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {GROCERY_KITCHEN.row3.map((item) => (
-              <CategoryCard key={item.label} {...item} />
-            ))}
-          </div>
-        </section>
+        {/* Trending Products */}
+        {trendingProducts.length > 0 && (
+          <section className="px-5">
+            <SectionHeader title="Trending Products" subtitle="Popular picks near you" />
+            <div className="mt-4 flex gap-4 overflow-x-auto scrollbar-hide pb-1">
+              {trendingProducts.map((p) => (
+                <div key={`trending-${p.id}`} className="w-[152px] shrink-0">
+                  <ProductDealCard product={p} />
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* Snacks & Drinks (only on All) */}
-        {activeCategory === 'all' && (
-        <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Snacks & Drinks</h2>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {SNACKS_DRINKS.row1.map((item) => (
-              <CategoryCard key={item.label} {...item} tall />
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {SNACKS_DRINKS.row2.map((item) => (
-              <CategoryCard key={item.label} {...item} />
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            {SNACKS_DRINKS.row3.map((item) => (
-              <CategoryCard key={item.label} {...item} />
-            ))}
+        {/* Flash Sale */}
+        <section ref={dealsRef} className="scroll-mt-40 px-5">
+          <div className={cn('bg-white p-5', CARD_RADIUS, CARD_SHADOW)}>
+            <SectionHeader
+              title="Flash Sale"
+              subtitle={
+                activeCategory === 'all'
+                  ? 'Grab them before they are gone'
+                  : `${tab?.label} — limited time deals`
+              }
+            />
+            {flashSaleProducts.length === 0 ? (
+              <p className="mt-6 text-base text-[#878787]">
+                No items available in this category yet.
+              </p>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                {flashSaleProducts.map((p) => (
+                  <ProductDealCard key={`flash-${p.id}`} product={p} />
+                ))}
+              </div>
+            )}
           </div>
         </section>
+
+        {/* Best Sellers */}
+        {bestSellers.length > 0 && (
+          <section className="px-5">
+            <SectionHeader title="Best Sellers" subtitle="Top rated by customers" />
+            <div className="mt-4 flex gap-4 overflow-x-auto scrollbar-hide pb-1">
+              {bestSellers.map((p) => (
+                <div key={`bestseller-${p.id}`} className="w-[152px] shrink-0">
+                  <ProductDealCard product={p} />
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Promo banner ad */}
-        <section className="mb-2 px-4">
-          <AdBanner placement="HOME_BANNER" className="h-36 w-full" />
-        </section>
-
-        {/* Deals Banner */}
-        <section className="mb-2 px-4">
-          <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-[#FF6B35] to-[#FF8C61] p-4">
-            <div>
-              <p className="text-[11px] font-bold uppercase text-white/70">DEALS STARTING AT</p>
-              <p className="text-5xl font-black text-white">₹9</p>
-              <p className="text-xs text-white/80">Add Any 10 Items</p>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {bannerProducts.map((p) => (
-                <div key={p.id} className="relative overflow-hidden rounded-lg bg-white/20">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={
-                      p.image ??
-                      'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=100'
-                    }
-                    alt=""
-                    className="h-[60px] w-[60px] object-cover"
-                  />
-                  <span className="absolute bottom-0 left-0 right-0 bg-[#0C831F] py-0.5 text-center text-[9px] font-bold text-white">
-                    {formatCurrency(p.price)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Flash Deals */}
-        <section ref={dealsRef} className="mb-2 scroll-mt-28 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">
-            {activeCategory === 'all' ? 'Flash Deals: All Time Low' : `${tab?.label} — Top Picks`}
-          </h2>
-          <p className="text-xs text-[#878787]">Fresh Essentials Every Day</p>
-          {deals.length === 0 ? (
-            <p className="mt-4 text-sm text-[#878787]">
-              No items available in this category yet.
-            </p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {deals.map((p) => (
-                <ProductDealCard key={p.id} product={p} />
-              ))}
-            </div>
-          )}
+        <section className="px-5">
+          <AdBanner placement="HOME_BANNER" className="h-[190px] w-full rounded-3xl" />
         </section>
 
         {/* Coupons */}
-        <section ref={couponsRef} className="mb-2 scroll-mt-28 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Coupons & offers</h2>
-          <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
-            {COUPONS.map((c) => (
-              <div
-                key={c.title}
-                className="min-w-[140px] shrink-0 rounded-xl border-[1.5px] border-[#0C831F] bg-white p-3"
-              >
-                <div className="mb-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#0C831F]">
-                  <Percent className="h-3 w-3 text-white" />
+        <section ref={couponsRef} className="scroll-mt-40 px-5">
+          <div className={cn('bg-white p-5', CARD_RADIUS, CARD_SHADOW)}>
+            <SectionHeader title="Coupons & offers" />
+            <div className="mt-4 flex gap-4 overflow-x-auto scrollbar-hide">
+              {COUPONS.map((c) => (
+                <div
+                  key={c.title}
+                  className={cn(
+                    'min-w-[160px] shrink-0 border-[1.5px] border-[#0C831F] bg-white p-4',
+                    CARD_RADIUS,
+                    CARD_SHADOW,
+                  )}
+                >
+                  <div className="mb-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#0C831F]">
+                    <Percent className="h-4 w-4 text-white" />
+                  </div>
+                  <p className="text-base font-bold text-[#1C1C1C]">{c.title}</p>
+                  <p className="text-xs text-[#878787]">{c.sub}</p>
+                  <p className="mt-2 text-[11px] text-[#878787]">{c.cashback}</p>
                 </div>
-                <p className="text-base font-bold text-[#1C1C1C]">{c.title}</p>
-                <p className="text-[11px] text-[#878787]">{c.sub}</p>
-                <p className="mt-2 text-[10px] text-[#878787]">{c.cashback}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
         {/* Nearby Shops */}
-        <section className="mb-2 bg-white p-4">
-          <h2 className="text-lg font-bold text-[#1C1C1C]">Stores near you</h2>
-          <p className="text-xs text-[#878787]">Delivering in 15-30 mins</p>
-          <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
-            {loadingShops ? (
-              <>
-                <ShopSkeleton />
-                <ShopSkeleton />
-                <ShopSkeleton />
-              </>
-            ) : shops.length === 0 ? (
-              <p className="text-sm text-[#878787]">No stores nearby.</p>
-            ) : (
-              shops.map((shop) => <HomeShopCard key={shop.id} shop={shop} />)
-            )}
+        <section className="px-5">
+          <div className={cn('bg-white p-5', CARD_RADIUS, CARD_SHADOW)}>
+            <SectionHeader title="Stores near you" subtitle="Delivering in 15-30 mins" />
+            <div className="mt-4 flex gap-4 overflow-x-auto scrollbar-hide">
+              {loadingShops ? (
+                <>
+                  <ShopSkeleton />
+                  <ShopSkeleton />
+                  <ShopSkeleton />
+                </>
+              ) : shops.length === 0 ? (
+                <p className="text-base text-[#878787]">No stores nearby.</p>
+              ) : (
+                shops.map((shop) => <HomeShopCard key={shop.id} shop={shop} />)
+              )}
+            </div>
           </div>
         </section>
 
         {/* Buy Again */}
         {loggedIn && (
-          <section className="mb-2 bg-white p-4">
-            <h2 className="text-lg font-bold text-[#1C1C1C]">Buy Again</h2>
-            <div className="mt-2 flex gap-2">
-              {['all', 'kirana', 'fish'].map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setBuyAgainTab(tab)}
-                  className={cn(
-                    'rounded-full px-3 py-1 text-xs font-semibold capitalize',
-                    buyAgainTab === tab
-                      ? 'bg-[#FF3F6C] text-white'
-                      : 'border border-[#F0F0F0] text-[#878787]',
-                  )}
-                >
-                  {tab === 'all' ? 'All Items' : tab}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 flex gap-3 overflow-x-auto scrollbar-hide">
-              {deals.slice(0, 6).map((p) => (
-                <Link key={p.id} href={`/shops/${p.shopSlug}`} className="w-[88px] shrink-0">
-                  <div className="h-20 w-20 overflow-hidden rounded-lg bg-[#F8F8F8]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={
-                        p.image ??
-                        'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=200'
-                      }
-                      alt=""
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-[10px] font-semibold text-[#1C1C1C]">
-                    {p.name}
-                  </p>
-                </Link>
-              ))}
+          <section className="px-5">
+            <div className={cn('bg-white p-5', CARD_RADIUS, CARD_SHADOW)}>
+              <SectionHeader title="Buy Again" />
+              <div className="mt-4 flex gap-3">
+                {['all', 'kirana', 'fish'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setBuyAgainTab(t)}
+                    className={cn(
+                      'rounded-full px-4 py-2 text-sm font-semibold capitalize',
+                      buyAgainTab === t
+                        ? 'bg-[#FF3F6C] text-white shadow-[0_4px_16px_rgba(255,63,108,0.3)]'
+                        : cn('border border-[#F0F0F0] bg-white text-[#878787]', CARD_SHADOW),
+                    )}
+                  >
+                    {t === 'all' ? 'All Items' : t}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-4 flex gap-4 overflow-x-auto scrollbar-hide">
+                {deals.slice(0, 6).map((p) => (
+                  <Link key={p.id} href={`/shops/${p.shopSlug}`} className="w-[88px] shrink-0">
+                    <div className={cn('h-20 w-20 overflow-hidden bg-[#F8F8F8]', CARD_RADIUS, CARD_SHADOW)}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={
+                          p.image ??
+                          'https://images.unsplash.com/photo-1604719312566-8912e9c8a213?w=200'
+                        }
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-xs font-medium text-[#1C1C1C]">
+                      {p.name}
+                    </p>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
         )}
       </div>
 
-      {/* Offers floating button */}
-      <button
-        type="button"
-        onClick={scrollToCoupons}
-        className="fixed bottom-[118px] left-1/2 z-40 -translate-x-1/2 rounded-[20px] border border-[#E0E0E0] bg-white px-4 py-1.5 text-[13px] font-bold text-[#1C1C1C] shadow-md"
-      >
-        Offers ∧
-      </button>
+      {/* Offers floating button — only after hero scrolls away */}
+      {heroPassed && (
+        <button
+          type="button"
+          onClick={scrollToCoupons}
+          className="fixed bottom-[156px] left-1/2 z-40 -translate-x-1/2 rounded-[20px] border border-[#E0E0E0] bg-white px-5 py-2 text-sm font-bold text-[#1C1C1C] shadow-[0_4px_20px_rgba(0,0,0,0.1)]"
+        >
+          Offers ∧
+        </button>
+      )}
 
       <ViewCartBar />
 
-      {/* Free delivery floating bar */}
-      {showFreeDeliveryBar && (
+      {/* Free delivery floating card — docked above bottom nav, hidden while hero is visible */}
+      {showFreeDeliveryBar && heroPassed && (
         <button
           type="button"
           onClick={scrollToDeals}
-          className="fixed bottom-14 left-0 right-0 z-40 mx-auto flex h-12 max-w-[480px] items-center justify-between bg-black/85 px-4 backdrop-blur-sm"
+          className="fixed bottom-[92px] left-5 right-5 z-40 mx-auto flex h-10 max-w-[440px] items-center justify-between rounded-2xl bg-gradient-to-r from-[#FF6B35] to-[#FF8F6B] px-4 shadow-[0_6px_24px_rgba(255,107,53,0.28)]"
         >
           <div className="text-left">
             <p className="flex items-center gap-1.5 text-[13px] font-bold text-white">
               <span>🐰</span> Unlock free delivery
             </p>
-            <p className="text-[11px] text-white/70">
+            <p className="text-[10px] text-white/85">
               Shop for ₹{remainingForFree} more
             </p>
           </div>
-          <ChevronUp className="h-5 w-5 text-white" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20">
+            <ChevronUp className="h-4 w-4 text-white" />
+          </span>
         </button>
       )}
     </div>
