@@ -3,6 +3,23 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import {
+  ArrowLeft,
+  ChevronRight,
+  CreditCard,
+  FileText,
+  Gift,
+  LogOut,
+  MapPin,
+  MessageCircle,
+  Package,
+  Pencil,
+  Rabbit,
+  Sparkles,
+  Tag,
+  type LucideIcon,
+} from 'lucide-react'
 import { DevRoleLoginPanel } from '@/components/auth/DevRoleLoginPanel'
 import { GeoLocationPanel } from '@/components/location/GeoLocationPanel'
 import { SupportChatDrawer } from '@/components/support/SupportChatDrawer'
@@ -22,11 +39,11 @@ type Props = {
 }
 
 type MenuItem = {
-  icon: string
+  icon: LucideIcon
   label: string
+  subtitle: string
   href?: string
   onClick?: () => void
-  muted?: boolean
 }
 
 function maskPhone(phone: string | null | undefined) {
@@ -44,31 +61,89 @@ function roleLabel(role?: string | null) {
   return 'Customer'
 }
 
-function MenuSection({
+function initialsFor(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return 'R'
+  if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase()
+  return `${parts[0]!.slice(0, 1)}${parts[parts.length - 1]!.slice(0, 1)}`.toUpperCase()
+}
+
+function QuickAction({
+  icon: Icon,
+  tone,
   title,
-  items,
+  subtitle,
+  href,
+  onClick,
 }: {
+  icon: LucideIcon
+  tone: 'orange' | 'green'
   title: string
-  items: MenuItem[]
+  subtitle: string
+  href?: string
+  onClick?: () => void
 }) {
+  const toneClasses =
+    tone === 'orange' ? 'bg-[#FFF4EE] text-[#FF6A3D]' : 'bg-[#F2FAF4] text-[#2FAF5A]'
+
+  const content = (
+    <motion.div
+      whileTap={{ scale: 0.96 }}
+      className="flex h-full flex-col gap-2 rounded-[18px] bg-white p-3.5 shadow-[0_2px_16px_rgba(0,0,0,0.05)] transition-shadow hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
+    >
+      <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', toneClasses)}>
+        <Icon size={18} strokeWidth={2.25} />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[14px] font-medium text-[#1E1E1E]">{title}</p>
+        <p className="truncate text-[11px] text-[#7A7A7A]">{subtitle}</p>
+      </div>
+    </motion.div>
+  )
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    )
+  }
+
+  return (
+    <button type="button" onClick={onClick} className="block w-full text-left">
+      {content}
+    </button>
+  )
+}
+
+function MenuSection({ title, items }: { title: string; items: MenuItem[] }) {
   return (
     <div>
-      <h3 className="mb-2 pl-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+      <h3 className="mb-2.5 pl-1 text-[13px] font-semibold uppercase tracking-wide text-[#7A7A7A]">
         {title}
       </h3>
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-[22px] bg-white shadow-[0_2px_16px_rgba(0,0,0,0.05)]">
         {items.map((item, idx) => {
+          const tone = idx % 2 === 0 ? 'orange' : 'green'
+          const toneClasses =
+            tone === 'orange' ? 'bg-[#FFF4EE] text-[#FF6A3D]' : 'bg-[#F2FAF4] text-[#2FAF5A]'
+          const Icon = item.icon
+
           const rowClass = cn(
-            'flex cursor-pointer items-center justify-between p-3.5 transition-colors hover:bg-slate-50',
-            idx !== items.length - 1 && 'border-b border-slate-100',
+            'flex min-h-[72px] w-full cursor-pointer items-center gap-3.5 px-4 py-3 text-left transition-colors active:bg-[#F8FAFC]',
+            idx !== items.length - 1 && 'border-b border-[#EEF1F4]',
           )
+
           const inner = (
             <>
-              <div className="flex items-center gap-3.5">
-                <span className="text-base text-[#FF6B35]">{item.icon}</span>
-                <span className="text-sm font-semibold text-slate-800">{item.label}</span>
+              <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', toneClasses)}>
+                <Icon size={19} strokeWidth={2.25} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[16px] font-medium text-[#1E1E1E]">{item.label}</p>
+                <p className="truncate text-[13px] text-[#7A7A7A]">{item.subtitle}</p>
               </div>
-              <span className="text-xs font-bold text-slate-400">❯</span>
+              <ChevronRight size={18} className="shrink-0 text-[#7A7A7A]" />
             </>
           )
 
@@ -81,29 +156,8 @@ function MenuSection({
           }
 
           return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={item.onClick}
-              className={cn('w-full text-left', rowClass, item.muted && 'hover:bg-[#FFF5F2] group')}
-            >
-              {item.muted ? (
-                <>
-                  <div className="flex items-center gap-3.5">
-                    <span className="text-base text-gray-400 transition-colors group-hover:text-[#FF6B35]">
-                      {item.icon}
-                    </span>
-                    <span className="text-sm font-bold text-slate-700 transition-colors group-hover:text-[#FF6B35]">
-                      {item.label}
-                    </span>
-                  </div>
-                  <span className="text-xs font-bold text-slate-400 transition-colors group-hover:text-[#FF6B35]">
-                    ❯
-                  </span>
-                </>
-              ) : (
-                inner
-              )}
+            <button key={item.label} type="button" onClick={item.onClick} className={rowClass}>
+              {inner}
             </button>
           )
         })}
@@ -145,7 +199,7 @@ export function ProfileClient({ user: serverUser }: Props) {
   if (!isLoggedIn || !user) {
     if (sandbox) {
       return (
-        <div className="mx-auto min-h-screen max-w-md border-x border-gray-100 bg-slate-50 px-4 py-6">
+        <div className="mx-auto min-h-screen max-w-md border-x border-gray-100 bg-[#F8FAFC] px-4 py-6">
           <DevRoleLoginPanel
             mode="page"
             redirectOnSuccess={false}
@@ -156,114 +210,145 @@ export function ProfileClient({ user: serverUser }: Props) {
     }
 
     return (
-      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center border-x border-gray-100 bg-slate-50 px-4 py-20 text-sm font-semibold text-slate-400">
+      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center border-x border-gray-100 bg-[#F8FAFC] px-4 py-20 text-sm font-medium text-[#7A7A7A]">
         {redirecting ? 'Opening sign in…' : 'Loading profile…'}
       </div>
     )
   }
 
   const displayName = user.displayName ?? user.name ?? 'Customer'
-  const contactLine = maskPhone(user.phone) || user.email || ''
+  const contactLine = maskPhone(user.phone)
 
   const accountItems: MenuItem[] = [
-    { icon: '📦', label: 'Orders & Refunds', href: '/orders' },
-    { icon: '📍', label: 'Addresses', onClick: () => setAddressesOpen((v) => !v) },
-    { icon: '💳', label: 'Saved Payments', href: '/checkout' },
-  ]
-
-  const rewardsItems: MenuItem[] = [
-    { icon: '🏷️', label: 'Coupons', href: '/checkout' },
-    { icon: '🎁', label: 'Refer & Earn', onClick: () => setSupportOpen(true) },
+    { icon: CreditCard, label: 'Saved Payments', subtitle: 'Cards & UPI', href: '/checkout' },
+    { icon: Tag, label: 'Coupons', subtitle: 'Offers you can use', href: '/checkout' },
+    { icon: Gift, label: 'Refer & Earn', subtitle: 'Invite friends & earn', onClick: () => setSupportOpen(true) },
   ]
 
   const helpItems: MenuItem[] = [
-    { icon: '💬', label: 'Customer Support', onClick: () => setSupportOpen(true) },
-    { icon: '📄', label: 'Terms & Conditions', href: '/auth' },
+    { icon: MessageCircle, label: 'Customer Support', subtitle: 'Chat with our team', onClick: () => setSupportOpen(true) },
+    { icon: FileText, label: 'Terms & Conditions', subtitle: 'Legal & policies', href: '/auth' },
+    { icon: LogOut, label: 'Log Out', subtitle: 'Sign out of your account', onClick: () => void handleLogout() },
   ]
 
   return (
-    <div className="mx-auto min-h-screen max-w-md border-x border-gray-100 bg-slate-50 pb-12 font-sans">
-      {/* Header */}
-      <div className="sticky top-0 z-10 flex items-center gap-4 border-b border-slate-100 bg-white px-4 py-4">
+    <div className="mx-auto min-h-screen max-w-md border-x border-gray-100 bg-[#F8FAFC] pb-12 font-sans">
+      {/* App bar */}
+      <div className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-[#EEF1F4] bg-white px-5">
         <button
           type="button"
           onClick={() => router.back()}
-          className="text-lg font-bold text-gray-800 transition-colors hover:text-[#FF6B35]"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#1E1E1E] transition-colors hover:bg-[#F8FAFC]"
           aria-label="Go back"
         >
-          ←
+          <ArrowLeft size={20} strokeWidth={2.25} />
         </button>
-        <h1 className="text-base font-bold tracking-tight text-slate-900">My Profile</h1>
+        <h1 className="text-[22px] font-semibold tracking-tight text-[#1E1E1E]">My Profile</h1>
       </div>
 
-      {/* User card */}
-      <div className="p-4">
-        <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#FFF5F2] text-xl font-bold text-[#FF6B35]">
-              👤
+      <div className="flex flex-col gap-6 px-5 pt-5">
+        {/* Profile card */}
+        <motion.div
+          whileTap={{ scale: 0.995 }}
+          className="relative overflow-hidden rounded-[24px] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)]"
+        >
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#F2FAF4] via-white to-white" />
+          <div className="relative flex items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#F2FAF4] text-xl font-bold text-[#2FAF5A]">
+              {initialsFor(displayName)}
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">{displayName}</h2>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <h2 className="truncate text-[20px] font-bold text-[#1E1E1E]">{displayName}</h2>
               {contactLine && (
-                <p className="mt-0.5 text-xs text-slate-500">{contactLine}</p>
+                <p className="mt-1 text-[15px] font-medium text-[#1E1E1E]/80">{contactLine}</p>
               )}
-              {sandbox && (
-                <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-                  {roleLabel(user.role)} · Sandbox
-                </p>
+              {user.email && (
+                <p className="mt-0.5 truncate text-[14px] text-[#7A7A7A]">{user.email}</p>
               )}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#F2FAF4] px-2.5 py-1 text-[11px] font-semibold text-[#2FAF5A]">
+                  <Sparkles size={12} strokeWidth={2.5} />
+                  Rabbit Member
+                </span>
+                {sandbox && (
+                  <span className="inline-flex items-center rounded-full bg-[#FFF4EE] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#FF6A3D]">
+                    {roleLabel(user.role)} · Sandbox
+                  </span>
+                )}
+              </div>
+            </div>
+            <Link
+              href="/auth?role=customer&redirect=/profile"
+              aria-label="Edit profile"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#FFF4EE] text-[#FF6A3D] transition-transform active:scale-95"
+            >
+              <Pencil size={18} strokeWidth={2.25} />
+            </Link>
+          </div>
+        </motion.div>
+
+        {/* Quick actions */}
+        <div className="grid grid-cols-3 gap-3">
+          <QuickAction
+            icon={Package}
+            tone="orange"
+            title="Orders"
+            subtitle="View all orders"
+            href="/orders"
+          />
+          <QuickAction
+            icon={MapPin}
+            tone="green"
+            title="Addresses"
+            subtitle="Manage addresses"
+            onClick={() => setAddressesOpen((v) => !v)}
+          />
+          <QuickAction
+            icon={CreditCard}
+            tone="orange"
+            title="Payments"
+            subtitle="Cards & UPI"
+            href="/checkout"
+          />
+        </div>
+
+        {/* Addresses panel (toggle) */}
+        {addressesOpen && (
+          <div className="rounded-[22px] bg-white p-4 shadow-[0_2px_16px_rgba(0,0,0,0.05)]">
+            <GeoLocationPanel />
+          </div>
+        )}
+
+        {/* Menu sections */}
+        <MenuSection title="Offers & Account" items={accountItems} />
+        <MenuSection title="Help & Legal" items={helpItems} />
+
+        {/* Promotional card */}
+        <div className="relative flex h-[110px] items-center justify-between overflow-hidden rounded-[24px] bg-gradient-to-r from-[#F2FAF4] to-[#E3F5E9] px-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/70 text-[#2FAF5A]">
+              <Rabbit size={26} strokeWidth={2} />
+            </span>
+            <div className="max-w-[130px]">
+              <p className="text-[14px] font-semibold text-[#1E1E1E]">Get Free Delivery</p>
+              <p className="mt-0.5 text-[12px] leading-tight text-[#7A7A7A]">
+                Shop ₹99 more to unlock free delivery
+              </p>
             </div>
           </div>
           <Link
-            href="/auth?role=customer&redirect=/profile"
-            className="rounded-lg bg-[#FFF5F2] px-3 py-1.5 text-xs font-bold tracking-wide text-[#FF6B35] transition-colors hover:bg-[#FFEAE2]"
+            href="/"
+            className="shrink-0 rounded-full bg-[#FF6A3D] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-transform active:scale-95"
           >
-            EDIT
+            Shop Now
           </Link>
-        </div>
-      </div>
-
-      {/* Addresses panel (toggle) */}
-      {addressesOpen && (
-        <div className="px-4 pb-2">
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-            <GeoLocationPanel />
-          </div>
-        </div>
-      )}
-
-      {/* Menu sections */}
-      <div className="flex flex-col gap-5 px-4">
-        <MenuSection title="Your Account" items={accountItems} />
-        <MenuSection title="Offers & Rewards" items={rewardsItems} />
-        <MenuSection title="Help & Legal" items={helpItems} />
-
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            className="group flex w-full cursor-pointer items-center justify-between p-3.5 transition-colors hover:bg-[#FFF5F2]"
-          >
-            <div className="flex items-center gap-3.5">
-              <span className="text-base text-gray-400 transition-colors group-hover:text-[#FF6B35]">
-                🚪
-              </span>
-              <span className="text-sm font-bold text-slate-700 transition-colors group-hover:text-[#FF6B35]">
-                Log Out
-              </span>
-            </div>
-            <span className="text-xs font-bold text-slate-400 transition-colors group-hover:text-[#FF6B35]">
-              ❯
-            </span>
-          </button>
         </div>
       </div>
 
       {/* Footer */}
       <div className="mt-10 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-300">rabbitor</p>
-        <p className="mt-0.5 text-[9px] font-medium text-slate-400">v0.1.0</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#7A7A7A]/60">rabbitor</p>
+        <p className="mt-0.5 text-[9px] font-medium text-[#7A7A7A]/50">v0.1.0</p>
       </div>
 
       <SupportChatDrawer open={supportOpen} onClose={() => setSupportOpen(false)} />
