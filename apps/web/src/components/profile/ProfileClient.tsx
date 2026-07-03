@@ -3,8 +3,19 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, Loader2, Phone } from 'lucide-react'
+import {
+  ArrowLeft,
+  ChevronRight,
+  Loader2,
+  LogOut,
+  MessageCircle,
+  Package,
+  Phone,
+  Rabbit,
+  Sparkles,
+} from 'lucide-react'
 import { requestOtpAction, verifyOtpAction, logoutAction } from '@/actions/auth'
+import { cn } from '@/lib/utils'
 
 type Props = {
   user: { name: string | null; phone: string; displayName: string | null } | null
@@ -136,39 +147,111 @@ export function ProfileClient({ user: serverUser }: Props) {
     .toUpperCase()
 
   const menu = [
-    { label: 'My Orders', href: '/orders' },
-    { label: 'Help & Support', href: '#' },
+    { label: 'My Orders', subtitle: 'View all orders', href: '/orders', icon: Package },
+    { label: 'Help & Support', subtitle: 'Get help with your account', href: '#', icon: MessageCircle },
   ]
 
   return (
-    <div className="mx-auto max-w-[480px] px-4 py-8">
-      <div className="flex flex-col items-center text-center">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#FFF0EA] text-2xl font-black text-[#FF6B35]">
-          {initials}
-        </div>
-        <h1 className="mt-3 text-lg font-bold">{user.displayName ?? user.name}</h1>
-        <p className="text-sm text-gray-500">{maskPhone(user.phone)}</p>
-      </div>
-
-      <div className="mt-8 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white">
-        {menu.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            className="flex items-center justify-between px-4 py-4 text-sm font-semibold text-gray-800"
-          >
-            {item.label}
-            <ChevronRight className="h-4 w-4 text-gray-400" />
-          </Link>
-        ))}
+    <div className="mx-auto min-h-screen max-w-md border-x border-gray-100 bg-[#F8FAFC] pb-12 font-sans">
+      {/* App bar */}
+      <div className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-[#EEF1F4] bg-white px-5">
         <button
           type="button"
-          onClick={logout}
-          className="flex w-full items-center justify-between px-4 py-4 text-sm font-semibold text-red-500"
+          onClick={() => router.back()}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-[#1E1E1E] transition-colors hover:bg-[#F8FAFC]"
+          aria-label="Go back"
         >
-          Logout
-          <ChevronRight className="h-4 w-4 text-red-300" />
+          <ArrowLeft size={20} strokeWidth={2.25} />
         </button>
+        <h1 className="text-[22px] font-semibold tracking-tight text-[#1E1E1E]">My Profile</h1>
+      </div>
+
+      <div className="flex flex-col gap-6 px-5 pt-5">
+        {/* Profile card */}
+        <div className="relative overflow-hidden rounded-[24px] bg-white p-5 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#F2FAF4] via-white to-white" />
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#F2FAF4] text-xl font-bold text-[#2FAF5A]">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[20px] font-bold text-[#1E1E1E]">
+                {user.displayName ?? user.name}
+              </h2>
+              <p className="mt-1 text-[15px] font-medium text-[#1E1E1E]/80">{maskPhone(user.phone)}</p>
+              <span className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-[#F2FAF4] px-2.5 py-1 text-[11px] font-semibold text-[#2FAF5A]">
+                <Sparkles size={12} strokeWidth={2.5} />
+                Rabbit Member
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Account menu */}
+        <div>
+          <h3 className="mb-2.5 pl-1 text-[13px] font-semibold uppercase tracking-wide text-[#7A7A7A]">
+            Account
+          </h3>
+          <div className="overflow-hidden rounded-[22px] bg-white shadow-[0_2px_16px_rgba(0,0,0,0.05)]">
+            {menu.map((item, idx) => {
+              const tone = idx % 2 === 0 ? 'orange' : 'green'
+              const toneClasses =
+                tone === 'orange' ? 'bg-[#FFF4EE] text-[#FF6A3D]' : 'bg-[#F2FAF4] text-[#2FAF5A]'
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="flex min-h-[72px] items-center gap-3.5 border-b border-[#EEF1F4] px-4 py-3 transition-colors active:bg-[#F8FAFC]"
+                >
+                  <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', toneClasses)}>
+                    <Icon size={19} strokeWidth={2.25} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[16px] font-medium text-[#1E1E1E]">{item.label}</p>
+                    <p className="truncate text-[13px] text-[#7A7A7A]">{item.subtitle}</p>
+                  </div>
+                  <ChevronRight size={18} className="shrink-0 text-[#7A7A7A]" />
+                </Link>
+              )
+            })}
+            <button
+              type="button"
+              onClick={logout}
+              className="flex min-h-[72px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors active:bg-[#F8FAFC]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#FFF4EE] text-[#FF6A3D]">
+                <LogOut size={19} strokeWidth={2.25} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[16px] font-medium text-[#1E1E1E]">Log Out</p>
+                <p className="truncate text-[13px] text-[#7A7A7A]">Sign out of your account</p>
+              </div>
+              <ChevronRight size={18} className="shrink-0 text-[#7A7A7A]" />
+            </button>
+          </div>
+        </div>
+
+        {/* Promotional card */}
+        <div className="relative flex h-[110px] items-center justify-between overflow-hidden rounded-[24px] bg-gradient-to-r from-[#F2FAF4] to-[#E3F5E9] px-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/70 text-[#2FAF5A]">
+              <Rabbit size={26} strokeWidth={2} />
+            </span>
+            <div className="max-w-[130px]">
+              <p className="text-[14px] font-semibold text-[#1E1E1E]">Get Free Delivery</p>
+              <p className="mt-0.5 text-[12px] leading-tight text-[#7A7A7A]">
+                Shop ₹99 more to unlock free delivery
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/"
+            className="shrink-0 rounded-full bg-[#FF6A3D] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-transform active:scale-95"
+          >
+            Shop Now
+          </Link>
+        </div>
       </div>
     </div>
   )
